@@ -16,7 +16,9 @@ sub run_once {
         my $chat_id = $message->{chat}{id};
         my $sender  = $message->{from}{username} // 'unknown';
 
-        print "NEW TG [$chat_id] $sender: $text\n";
+        ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
+
+        print "NEW TG [$chat_id] $sender: $safe_text\n";
     }
 
     return ( $updates, $next_offset );

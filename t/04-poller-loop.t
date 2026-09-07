@@ -76,6 +76,26 @@ sub capture_stdout {
     my $tg = Fake::Telegram->new(
         [
             {
+                update_id => 60,
+                message   => { chat => { id => 1 }, from => { username => 'eve' }, text => "line one\nline two" },
+            },
+        ],
+    );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef );
+    } );
+
+    is( ( split /\n/, $out ), 1,
+        'a message containing a newline still produces exactly one stdout line' );
+    like( $out, qr/line one.*line two/,
+        'the embedded newline is escaped/replaced rather than splitting the line' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            {
                 update_id => 1,
                 message   => { chat => { id => 1 }, from => { username => 'x' } },   # no text - e.g. a sticker
             },

@@ -34,9 +34,9 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 =head1 DESCRIPTION
 
 Calls L<D2TG::Config>'s startup guard first and refuses to proceed
-(non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. The
-actual Telegram long-poll loop is not implemented yet (TGIG-002) - this
-entrypoint currently only proves the guard is wired in and prints a
-startup confirmation.
+(non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
+the guard passes, runs L<D2TG::Poller>'s long-poll loop until C<SIGTERM>
+or C<SIGINT> is received. There is no access control yet - every sender's
+text message reaches STDOUT (see L<D2TG::Poller>).
 
 =cut
