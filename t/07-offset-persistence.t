@@ -40,4 +40,20 @@ sub fresh_db_path {
     is( $store->get_offset, 2, 'set_offset overwrites the previous value rather than accumulating rows' );
 }
 
+{
+    my $db = fresh_db_path();
+    my $store1 = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+    $store1->set_offset(12345);
+    undef $store1;
+
+    my $store2 = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+    my $offset = $store2->get_offset;
+
+    ok( !ref($offset) && $offset == 12345 && $offset eq '12345',
+        'get_offset returns a genuine number, not a string, after a round-trip through SQLite' );
+    require JSON::PP;
+    my $json = JSON::PP->new->encode( { offset => $offset } );
+    like( $json, qr/"offset":12345[^"]/, 'it JSON-encodes as a number, not a quoted string, for the Telegram API call' );
+}
+
 done_testing();
