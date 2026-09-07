@@ -28,7 +28,11 @@ sub download_file {
         my $hash       = sha256_hex($content);
         my $local_path = File::Spec->catfile( $args{dir}, "$hash$suffix" );
 
-        unless ( -e $local_path ) {
+        if ( -e $local_path ) {
+            my $now = time();
+            utime $now, $now, $local_path;
+        }
+        else {
             open my $fh, '>:raw', $local_path
               or die "D2TG::Download::download_file: cannot write $local_path: $!\n";
             print {$fh} $content;
@@ -103,10 +107,14 @@ optional. When given, the file is named by its own content's SHA256
 hash (plus the original extension) and written under C<dir> - if a file
 with that exact hash already exists there, the download's HTTP request
 still happens (the content has to be fetched to know its hash) but the
-existing file is kept as-is and nothing is re-written, so identical
-content downloaded any number of times only ever occupies one copy of
-disk space. Without C<dir>, behavior is unchanged from before this
-ticket: a uniquely-named file in the OS temp directory every call, never
+existing file's content is kept as-is and nothing is re-written, so
+identical content downloaded any number of times only ever occupies one
+copy of disk space. Its mtime, however, IS refreshed to now on every
+such dedup hit (TGT-054) - a repeatedly re-sent file counts as freshly
+used, so C<prune_vault>'s oldest-C<mtime>-first eviction (below) treats
+it as recently active rather than as stale since its one-time original
+download. Without C<dir>, behavior is unchanged from before TGT-051: a
+uniquely-named file in the OS temp directory every call, never
 deduplicated.
 
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)

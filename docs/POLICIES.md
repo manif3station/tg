@@ -275,6 +275,19 @@ copy can never orphan anything still referenced elsewhere: the same
 content, if needed again later, is simply re-downloaded and re-written
 under its same hash-derived name.
 
+## A re-sent (deduplicated) attachment counts as freshly used, not stale
+
+Bugfix (TGT-054, found via a scheduled bug-hunt pass, not user-reported):
+when a photo/document is re-sent and its content already exists in the
+vault (a dedup hit), the existing file's modification time is refreshed
+to now, even though its content is not rewritten. Without this, a
+popular file re-sent many times would keep the modification time of its
+very first download, making pruning (above) treat it as the *oldest*
+file in the vault - deleting it ahead of a truly stale file that was
+only ever downloaded once, just more recently. Refreshing the
+modification time on every dedup hit makes pruning behave as intended:
+least-recently-used, not least-recently-created.
+
 ## One poller process can serve multiple bots and chats
 
 Live design request (TGT-049, confirmed via follow-up Q&A): `d2

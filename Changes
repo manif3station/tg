@@ -416,3 +416,16 @@ Revision history for the tg skill
         restart after the first). PrintError is now suppressed for just
         that one statement; a genuinely unexpected failure still dies as
         before.
+
+0.34  2026-09-07
+      - BUGFIX (TGT-054, found via a scheduled bug-hunt pass):
+        D2TG::Download::download_file's content-addressed dedup branch
+        (TGT-051) never refreshed an existing file's mtime on a dedup
+        hit, so D2TG::Download::prune_vault's (TGT-052) oldest-mtime-
+        first eviction could delete a frequently re-sent, actively-
+        wanted attachment before a truly stale one-time file that merely
+        happened to have a newer original download timestamp - the
+        opposite of the intended "keep the new, ditch the old" behavior.
+        A dedup hit now calls utime() to mark the file as freshly
+        referenced, so repeated re-sends correctly keep a file warm
+        against pruning.
