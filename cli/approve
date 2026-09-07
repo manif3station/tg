@@ -32,7 +32,12 @@ if ( $store->approve($chat_id) ) {
     exit 0;
 }
 
-print STDERR "Not pending: $chat_id (already allowed, or never sent a message)\n";
+if ( $store->is_allowed($chat_id) ) {
+    print STDERR "$chat_id is already allowed - nothing to do\n";
+}
+else {
+    print STDERR "$chat_id was never pending (never sent a message) - nothing to approve\n";
+}
 exit 1;
 
 =head1 NAME
@@ -46,9 +51,10 @@ approve - move a pending chat id into the allow-list, dispatched as C<d2 tg.appr
 =head1 DESCRIPTION
 
 Moves C<chat_id> from L<D2TG::Store>'s C<pending> table into its
-C<allow_list>. Prints C<Approved N> and exits 0 on success. If
-C<chat_id> was never pending (already allowed, or never messaged the
-bot), prints an error to STDERR and exits 1 rather than reporting a
-false success.
+C<allow_list>. Prints C<Approved N> and exits 0 on success. If nothing
+changed, exits 1 with a message on STDERR distinguishing the two ways
+that can happen: the chat id is already allowed (nothing to do), or it
+was never pending at all (never messaged the bot, so there's nothing to
+approve).
 
 =cut

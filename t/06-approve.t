@@ -76,7 +76,7 @@ sub fresh_db_path {
     unlink "/tmp/d2tg-approve-stderr2.$$";
 
     isnt( $rc2, 0, 'cli/approve exits non-zero for a chat id that was never pending' );
-    like( $err2, qr/Not pending/, 'cli/approve reports the failure clearly on STDERR' );
+    like( $err2, qr/never pending/i, 'cli/approve reports the failure clearly on STDERR' );
 
     my $out3 = `$approve_cli 2>/tmp/d2tg-approve-stderr3.$$`;
     my $rc3  = $? >> 8;
@@ -93,6 +93,23 @@ sub fresh_db_path {
     my $store_check = D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 );
     ok( !$store_check->is_allowed(666),
         '...and the chat id named before the stray argument was NOT approved as a side effect' );
+
+    # 444 was approved above, so it is now allow-listed but not pending -
+    # re-approving it should read differently from an id never seen at all.
+    my $out5 = `$approve_cli 444 2>/tmp/d2tg-approve-stderr5.$$`;
+    my $rc5  = $? >> 8;
+    my $err5 = do { open my $fh, '<', "/tmp/d2tg-approve-stderr5.$$" or die $!; local $/; <$fh> };
+    unlink "/tmp/d2tg-approve-stderr5.$$";
+
+    isnt( $rc5, 0, 're-approving an already-allowed chat id still exits non-zero (no state change happened)' );
+    like( $err5, qr/already allowed/i, 'but the message distinguishes "already allowed" from "never seen"' );
+
+    my $out6 = `$approve_cli 777 2>/tmp/d2tg-approve-stderr6.$$`;
+    my $err6 = do { open my $fh, '<', "/tmp/d2tg-approve-stderr6.$$" or die $!; local $/; <$fh> };
+    unlink "/tmp/d2tg-approve-stderr6.$$";
+
+    like( $err6, qr/never/i, 'a genuinely unknown chat id gets the distinct "never seen" wording' );
+    unlike( $err6, qr/already allowed/i, '...and not the "already allowed" wording' );
 }
 
 done_testing();
