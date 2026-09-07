@@ -189,3 +189,11 @@ Revision history for the tg skill
         Fixed with the same shape: STDOUT/STDERR are temporarily
         redirected to /dev/null around the system() call and restored
         immediately after.
+
+0.14  2026-09-07
+      - REFACTOR (TGT-034, found via IMPROVEMENT HUNT): t/23 and t/25's
+        near-identical FD save/redirect/restore/compare boilerplate
+        extracted into a shared t/lib/Test/CaptureStdio.pm helper
+        (capture_stdio), matching the same test-infra deduplication
+        pattern already applied once (TGT-018). No behavior change -
+        all existing assertions in both files pass unchanged.
