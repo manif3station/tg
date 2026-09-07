@@ -218,13 +218,22 @@ C<cli/poller>, C<cli/reply>, C<cli/approve>, C<cli/unread>,
 C<cli/history> use this so the resolution logic exists in exactly one
 place.
 
+Since TGT-059 made C<resolve_alias_dir> always either die or return a
+defined directory, every one of those five callers now always supplies
+C<base_dir> - none can reach this function without one anymore. The
+C<base_dir>-omitted branch above is kept only because C<D2TG::Config>
+itself is still unit-tested by calling C<state_db_path> directly with no
+C<base_dir> (see C<t/40-db-alias-resolution.t>); no shipped C<d2 tg.*>
+invocation can trigger it.
+
 =head2 attachments_dir(default_root => $path, base_dir => $path)
 
 Resolves and returns the directory downloaded attachments (TGT-051)
 should live in, creating it if missing. Mirrors C<state_db_path>'s own
 resolution exactly: C<files/> under C<base_dir> if given, otherwise
 C<files/> under the skill root (C<DEVELOPER_DASHBOARD_SKILL_ROOT> or
-C<default_root>).
+C<default_root>) - and, like C<state_db_path>, the C<base_dir>-omitted
+branch is test-only as of TGT-059, for the same reason.
 
 =head2 extract_db_flag(@ARGV)
 

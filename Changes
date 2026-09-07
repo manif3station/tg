@@ -474,3 +474,13 @@ Revision history for the tg skill
         now refuses (STDERR message, exit 1, points at 'd2 paths') -
         an existing install relying on the old silent-fallback behavior
         must now set D2TG_DB (or pass --db/-d) before upgrading.
+
+0.39  2026-09-07
+      - DOC FIX (TGT-060, found via a scheduled improvement-hunt pass):
+        D2TG::Config::state_db_path/attachments_dir's own POD still
+        described their base_dir-omitted fallback branch as a normal,
+        reachable path. Since TGT-059 made resolve_alias_dir always
+        either die or return a defined directory, no real d2 tg.*
+        invocation can omit base_dir anymore - only direct unit tests of
+        these two functions can (t/40-db-alias-resolution.t). POD updated
+        to say so; no code/behavior change.
