@@ -440,3 +440,11 @@ Revision history for the tg skill
         caller (cli/reply and the poller's own template both already
         validate upstream); this closes a latent asymmetry between the
         two send methods.
+
+0.36  2026-09-07
+      - DOC FIX (TGT-056, found via a scheduled doc-accuracy hunt pass):
+        README.md/SKILLS.md's Status line was stuck at "v0.33" through
+        two shipped releases (v0.34, v0.35) - now correctly names v0.36.
+        A new t/50-status-line-version-match.t regression test asserts
+        both files' Status line always matches .env's VERSION, so this
+        can't silently drift again.
