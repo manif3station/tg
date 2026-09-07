@@ -30,6 +30,11 @@ Events printed:
   message's download or transcription failed; the poller keeps running.
 - `MEDIA DOWNLOAD ERROR [chat_id] sender: <message>` (stderr) — a
   photo/document message's download failed; the poller keeps running.
+  If the file's declared size is over Telegram's Bot API `getFile` limit
+  (20MB, TGT-037), this is reported specifically — `file too large to
+  download (<N>MB, Telegram's Bot API getFile limit is 20MB)` — instead
+  of an opaque `HTTP request failed (status 400 Bad Request)`, and the
+  download is never attempted at all.
 - `NEW TG PENDING [chat_id] awaiting approval` — printed once, the first
   time a non-allow-listed chat id sends anything.
 - `REPLY WITH: d2 tg.reply <chat_id> "..."` — printed immediately after
@@ -121,7 +126,7 @@ implemented and where:
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
-| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure; `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |

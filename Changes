@@ -228,3 +228,14 @@ Revision history for the tg skill
         itself in place (same PID) - a fresh Perl interpreter then loads
         the newly-installed code. A pending shutdown always takes
         priority over a detected version change.
+
+0.17  2026-09-07
+      - BUGFIX (TGT-037, live bug report): a large photo/document
+        produced an unexplained "MEDIA DOWNLOAD ERROR ... HTTP request
+        failed (status 400 Bad Request)" - Telegram's Bot API getFile
+        endpoint has a hard, documented 20MB limit. D2TG::Poller now
+        checks the message's own declared file_size before attempting a
+        download; a file over 20MB is reported with a specific "file
+        too large to download" error naming the limit, and the doomed
+        getFile call is never attempted at all. Normal-sized files are
+        unaffected.

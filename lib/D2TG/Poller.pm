@@ -3,6 +3,8 @@ package D2TG::Poller;
 use strict;
 use warnings;
 
+use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
+
 sub run_once_safe {
     my ( $telegram, $offset, $store, %opts ) = @_;
 
@@ -74,13 +76,22 @@ sub run_once {
             }
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
-            my $file_id = _media_file_id( $message, $media_kind );
-            my ( $ok, $local_path ) =
-              _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
+            my $file_id   = _media_file_id( $message, $media_kind );
+            my $file_size = _media_file_size( $message, $media_kind );
 
-            if ($ok) {
-                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$reply_ctx\n";
-                _print_reply_template($chat_id);
+            if ( defined $file_size && $file_size > TELEGRAM_GETFILE_MAX_BYTES ) {
+                my $mb = sprintf( '%.1f', $file_size / 1024 / 1024 );
+                print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: file too large to download "
+                  . "(${mb}MB, Telegram's Bot API getFile limit is 20MB)\n";
+            }
+            else {
+                my ( $ok, $local_path ) =
+                  _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
+
+                if ($ok) {
+                    print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$reply_ctx\n";
+                    _print_reply_template($chat_id);
+                }
             }
         }
         else {
@@ -151,6 +162,14 @@ sub _media_file_id {
     return $media_kind eq 'document'
       ? $message->{document}{file_id}
       : $message->{photo}[-1]{file_id};
+}
+
+sub _media_file_size {
+    my ( $message, $media_kind ) = @_;
+
+    return $media_kind eq 'document'
+      ? $message->{document}{file_size}
+      : $message->{photo}[-1]{file_size};
 }
 
 1;
@@ -244,6 +263,18 @@ prints C<MEDIA DOWNLOAD ERROR [chat_id] sender: <message>> to STDERR and
 the loop continues, matching C<transcribe_voice>'s non-fatal handling.
 Without C<download_media>, photo/document messages fall back to the
 plain C<NEW TG MEDIA> line.
+
+Before calling C<download_media> at all, if the message's own declared
+C<file_size> exceeds C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, TGT-037 - a
+live bug report: Telegram's Bot API C<getFile> endpoint has a hard,
+documented 20MB limit and returns an opaque C<400 Bad Request> for
+anything larger), C<download_media> is never called at all - a specific
+C<MEDIA DOWNLOAD ERROR [chat_id] sender: file too large to download
+(<N>MB, Telegram's Bot API getFile limit is 20MB)> is printed to STDERR
+instead, so the operator can tell this apart from a genuine bug at a
+glance. A message with no declared C<file_size> (Telegram does not
+always send one) falls through to the normal download attempt
+unaffected.
 
 C<_run_non_fatal> is the shared internal helper both of the above use:
 it evals a callback, and on failure strips the trailing newline from

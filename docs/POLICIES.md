@@ -15,6 +15,18 @@ it sends reaches stdout — until an operator runs `d2 tg.approve
 operator notices; repeat messages from the same still-pending sender do
 not repeat the notification.
 
+## Oversized files are rejected clearly, before a doomed download attempt
+
+Telegram's Bot API `getFile` endpoint has a hard, documented 20MB limit
+- anything larger returns an opaque `400 Bad Request` no matter what
+this skill does (TGT-037, live bug report: a large file produced an
+unexplained `MEDIA DOWNLOAD ERROR`). Before attempting to download a
+photo/document, the poller checks the message's own declared
+`file_size`; if it's over 20MB, it reports a specific, actionable
+`MEDIA DOWNLOAD ERROR ... file too large` message and never attempts the
+download at all, rather than letting the operator guess whether a raw
+400 means "expected size limit" or "something is actually broken."
+
 ## A reply-to-message carries its own context on the way in
 
 When a sender replies to a specific earlier Telegram message (TGT-029,
