@@ -7,3 +7,5 @@ Revision history for the tg skill
         guard warns to STDERR and refuses when D2TG_CHAT_ID is unset.
       - cli/poller (TGT-003): d2 tg.poller entrypoint calling the
         startup guard; poll loop itself not yet implemented.
+      - D2TG::Telegram (TGT-004): minimal Bot API client (get_me,
+        get_updates, get_file) over HTTP::Tiny, no SDK.

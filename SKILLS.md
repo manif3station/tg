@@ -14,3 +14,7 @@ shape and `tickets/` for what's actually done vs. planned.
 - `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard and
   refuses to proceed if it fails. The actual Telegram long-poll loop is
   not implemented yet (see TGIG-002); this only proves the guard wiring.
+- `D2TG::Telegram` (`lib/D2TG/Telegram.pm`) — minimal Bot API client:
+  `get_me`, `get_updates(offset, timeout)` (returns updates + next
+  offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK. Not
+  yet wired into `cli/poller`'s loop — that's the next ticket.
