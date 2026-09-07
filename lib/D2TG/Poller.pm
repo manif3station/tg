@@ -4,7 +4,7 @@ use strict;
 use warnings;
 
 sub run_once {
-    my ( $telegram, $offset ) = @_;
+    my ( $telegram, $offset, $store ) = @_;
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
@@ -15,6 +15,11 @@ sub run_once {
 
         my $chat_id = $message->{chat}{id};
         my $sender  = $message->{from}{username} // 'unknown';
+
+        if ( $store && !$store->is_allowed($chat_id) ) {
+            $store->add_pending($chat_id);
+            next;
+        }
 
         ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
 

@@ -4,10 +4,13 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+use File::Spec;
+use File::Path qw(make_path);
 
 use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Poller;
+use D2TG::Store;
 
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
@@ -18,11 +21,21 @@ my $shutting_down = 0;
 $SIG{TERM} = sub { $shutting_down = 1 };
 $SIG{INT}  = sub { $shutting_down = 1 };
 
+my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+  // File::Spec->catdir( $Bin, '..' );
+my $state_dir = File::Spec->catdir( $skill_root, 'state' );
+make_path($state_dir) unless -d $state_dir;
+
+my $store = D2TG::Store->new(
+    db_path       => File::Spec->catfile( $state_dir, 'store.sqlite' ),
+    admin_chat_id => D2TG::Config::chat_id(),
+);
+
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 my $offset;
 
 until ($shutting_down) {
-    ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset );
+    ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset, $store );
 }
 
 exit 0;

@@ -7,6 +7,7 @@ use File::Temp qw(tempfile);
 use IPC::Open3;
 use Symbol qw(gensym);
 use POSIX qw(:sys_wait_h);
+use File::Temp qw(tempdir);
 
 my $poller = File::Spec->catfile( $Bin, '..', 'cli', 'poller' );
 
@@ -62,6 +63,7 @@ for my $missing_value ( undef, '' ) {
     local %ENV = %ENV;
     $ENV{D2TG_TOKEN}   = 'test-token';
     $ENV{D2TG_CHAT_ID} = '12345';
+    $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} = tempdir( CLEANUP => 1 );
 
     my ( $child_out, $child_err ) = ( gensym, gensym );
     my $pid = open3( my $in, $child_out, $child_err, $poller );

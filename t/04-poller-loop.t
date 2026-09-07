@@ -150,4 +150,73 @@ sub capture_stdout {
     is( $@, '', 'a get_updates implementation returning undef instead of an arrayref does not crash' );
 }
 
+package Fake::Store;
+
+sub new {
+    my ( $class, %args ) = @_;
+    return bless { allowed => { map { $_ => 1 } @{ $args{allowed} || [] } }, pending => [] }, $class;
+}
+
+sub is_allowed  { my ( $self, $id ) = @_; return $self->{allowed}{$id} ? 1 : 0 }
+sub add_pending { my ( $self, $id ) = @_; push @{ $self->{pending} }, $id; return }
+
+package main;
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 80,
+                message   => { chat => { id => 999 }, from => { username => 'admin' }, text => 'allowed message' },
+            },
+        ],
+    );
+    my $store = Fake::Store->new( allowed => [999] );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef, $store );
+    } );
+
+    like( $out, qr/allowed message/, 'a message from an allow-listed chat id reaches stdout' );
+    is_deeply( $store->{pending}, [], 'nothing was recorded pending for an allowed sender' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 81,
+                message   => { chat => { id => 111 }, from => { username => 'stranger' }, text => 'let me in' },
+            },
+        ],
+    );
+    my $store = Fake::Store->new( allowed => [999] );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef, $store );
+    } );
+
+    is( $out, '', 'a message from a non-allow-listed chat id produces no stdout output' );
+    is_deeply( $store->{pending}, [111], 'the non-allow-listed chat id was recorded pending' );
+}
+
+{
+    # Backward compatibility: no store given at all means no gate (TGT-005's
+    # own tests, above, rely on this - the gate is opt-in via the 3rd arg).
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 82,
+                message   => { chat => { id => 5 }, from => { username => 'x' }, text => 'no gate here' },
+            },
+        ],
+    );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef );
+    } );
+
+    like( $out, qr/no gate here/, 'omitting the store argument entirely skips the access-control gate' );
+}
+
 done_testing();
