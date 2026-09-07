@@ -23,11 +23,14 @@ my ( $since, $until );
     my @rest;
     while (@ARGV) {
         my $arg = shift @ARGV;
-        if ( $arg eq '--since' ) {
-            $since = shift @ARGV;
-        }
-        elsif ( $arg eq '--until' ) {
-            $until = shift @ARGV;
+        if ( $arg eq '--since' || $arg eq '--until' ) {
+            my $value = shift @ARGV;
+            if ( !defined $value || $value eq '--since' || $value eq '--until' ) {
+                print STDERR "d2 tg.history: $arg requires a value\n";
+                exit 2;
+            }
+            if ( $arg eq '--since' ) { $since = $value }
+            else                     { $until = $value }
         }
         else {
             push @rest, $arg;
@@ -83,5 +86,13 @@ sender, timestamp, and the stored summary. Without C<--since>/C<--until>
 every message in that range instead - an open-ended range on whichever
 side is omitted. Prints C<No messages found.> and exits 0 when nothing
 matches, rather than a blank/confusing output.
+
+C<--since>/C<--until> validate their shifted value (TGT-070, a real
+live-reproduced incident, same class of bug as TGT-069's
+C<D2TG::Config::bot_groups> fix): a bare trailing flag with nothing
+following it, or one immediately followed by the other flag (which
+would otherwise silently swallow that flag's own name as the value),
+exits 2 with a clear C<requires a value> message instead of silently
+running the query unscoped or mis-scoped to match nothing.
 
 =cut

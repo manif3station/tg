@@ -227,7 +227,9 @@ sender, timestamp, and the stored summary. Without `--since`/`--until`
 every message in that range instead - an open-ended range on whichever
 side is omitted. Prints `No messages found.` and exits 0 when nothing
 matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
-does.
+does. `--since`/`--until` with no value following it (or immediately
+followed by the other flag) exits 2 with a clear message instead of
+silently running unscoped or matching nothing (TGT-070).
 
 ## Registering as a Tira monitor job
 

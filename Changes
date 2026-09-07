@@ -595,3 +595,16 @@ Revision history for the tg skill
         mistake. bot_groups now validates the shifted value is defined
         and isn't itself a recognized flag token, dying immediately with
         a clear "--chat_id requires a value" message instead.
+
+0.49  2026-09-08
+      - BUGFIX (TGT-070, found via a scheduled improvement-hunt pass,
+        live-reproduced, same class of bug as TGT-069): d2 tg.history's
+        --since/--until flags didn't validate their value. A bare
+        trailing --since silently ran the query completely unscoped
+        (printing a misleadingly confident "No messages found." on exit
+        0) instead of erroring on the malformed invocation, and --since
+        immediately followed by --until swallowed "--until" itself as
+        the since value, silently mis-scoping the query to match
+        nothing. Both flags now validate their shifted value is defined
+        and isn't itself a recognized flag token, exiting 2 with a clear
+        "--since/--until requires a value" message instead.
