@@ -8,6 +8,7 @@ use JSON::PP qw(decode_json encode_json);
 use File::Spec;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
+use constant DEFAULT_LONG_POLL_MARGIN => 20;
 
 sub new {
     my ( $class, %args ) = @_;
@@ -108,7 +109,7 @@ sub get_me {
 sub get_updates {
     my ( $self, %args ) = @_;
 
-    my $params = { timeout => $args{timeout} // 30 };
+    my $params = { timeout => $args{timeout} // ( DEFAULT_HARD_TIMEOUT - DEFAULT_LONG_POLL_MARGIN ) };
     $params->{offset} = $args{offset} if defined $args{offset};
 
     my $updates = $self->_call( 'getUpdates', $params );
@@ -261,6 +262,14 @@ Returns the bot's own user info.
 Long-polls C<getUpdates>. Returns a two-element list: the array of update
 hashes, and the offset to pass on the next call (one past the highest
 C<update_id> seen, or the offset that was passed in if no updates arrived).
+
+C<timeout> defaults to C<DEFAULT_HARD_TIMEOUT - DEFAULT_LONG_POLL_MARGIN>
+(50 - 20 = 30, TGT-067) rather than a bare literal - this keeps the
+margin TGT-066 established (the hard timeout must leave real headroom
+over the long-poll wait, or a legitimate slow-but-successful response
+gets mistaken for a hung connection) enforced as a code-level invariant
+instead of two numbers that merely happen to agree. No current caller
+passes an explicit C<timeout>, so this is unchanged behavior.
 
 =head2 get_file($file_id)
 

@@ -554,3 +554,15 @@ Revision history for the tg skill
         50s (a 15s margin); the real production LWP::UserAgent's own
         timeout and the SIGALRM fallback now derive from the exact same
         constant, so they can never silently drift apart again.
+
+0.46  2026-09-07
+      - HARDENING (TGT-067, found via a scheduled improvement-hunt pass):
+        D2TG::Telegram::get_updates' default long-poll wait (30s) was a
+        bare literal, entirely decoupled from DEFAULT_HARD_TIMEOUT - the
+        exact margin relationship TGT-066 just fixed a live incident
+        over wasn't encoded anywhere in code, only in prose. It now
+        derives from DEFAULT_HARD_TIMEOUT minus a new explicit
+        DEFAULT_LONG_POLL_MARGIN constant (50-20=30, unchanged
+        behavior), so the margin is a code-level invariant that can't
+        silently drift apart again if either constant changes in the
+        future.
