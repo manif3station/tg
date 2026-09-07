@@ -2,6 +2,8 @@ package D2TG::Config;
 
 use strict;
 use warnings;
+use File::Spec;
+use File::Path qw(make_path);
 
 sub token   { return $ENV{D2TG_TOKEN}; }
 sub chat_id { return $ENV{D2TG_CHAT_ID}; }
@@ -15,6 +17,19 @@ sub require_chat_id_or_warn {
     }
 
     return 1;
+}
+
+sub state_db_path {
+    my (%args) = @_;
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+      // $args{default_root}
+      // '.';
+
+    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
+    make_path($state_dir) unless -d $state_dir;
+
+    return File::Spec->catfile( $state_dir, 'store.sqlite' );
 }
 
 1;
