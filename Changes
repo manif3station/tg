@@ -164,3 +164,12 @@ Revision history for the tg skill
         child now reopens its own STDOUT/STDERR onto /dev/null before
         exec - only this project's own structured lines ever reach the
         real stream.
+
+0.11  2026-09-07
+      - FEATURE (TGT-029, live usability report): the poller's NEW TG/
+        NEW TG VOICE/NEW TG MEDIA lines now carry a "(replying to
+        <sender>: <snippet-or-kind>)" suffix when Telegram's
+        reply_to_message field is present, naming what a reply targets -
+        previously a reply looked identical to a fresh message on
+        stdout, giving the monitoring agent no way to tell which prior
+        message in a conversation a reply responds to.

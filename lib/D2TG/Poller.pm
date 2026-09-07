@@ -54,11 +54,13 @@ sub run_once {
             next;
         }
 
+        my $reply_ctx = _reply_context_suffix($message);
+
         if ( defined $text && length $text ) {
             ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
             $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
 
-            print "NEW TG [$chat_id] $sender: $safe_text\n";
+            print "NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
             _print_reply_template($chat_id);
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -67,7 +69,7 @@ sub run_once {
               _run_non_fatal( $transcribe_voice, $telegram, $file_id, $chat_id, $sender, 'TRANSCRIBE ERROR' );
 
             if ($ok) {
-                print "NEW TG VOICE [$chat_id] $sender: $transcript\n";
+                print "NEW TG VOICE [$chat_id] $sender: $transcript$reply_ctx\n";
                 _print_reply_template($chat_id);
             }
         }
@@ -77,17 +79,40 @@ sub run_once {
               _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
             if ($ok) {
-                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n";
+                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$reply_ctx\n";
                 _print_reply_template($chat_id);
             }
         }
         else {
-            print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
+            print "NEW TG MEDIA [$chat_id] $sender: $media_kind$reply_ctx\n";
             _print_reply_template($chat_id);
         }
     }
 
     return ( $updates, $next_offset );
+}
+
+sub _reply_context_suffix {
+    my ($message) = @_;
+
+    my $original = $message->{reply_to_message};
+    return '' unless $original;
+
+    my $original_sender = $original->{from}{username} // 'unknown';
+    my $original_text   = $original->{text};
+
+    my $what;
+    if ( defined $original_text && length $original_text ) {
+        ( my $safe = $original_text ) =~ s/\r?\n/\\n/g;
+        $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+        $safe = substr( $safe, 0, 60 ) . '...' if length $safe > 60;
+        $what = $safe;
+    }
+    else {
+        $what = _media_kind($original) // 'message';
+    }
+
+    return qq{ (replying to $original_sender: $what)};
 }
 
 sub _print_reply_template {
@@ -229,5 +254,14 @@ answered design question (Q-004). This is only ever a template: nothing
 in this module ever calls L<D2TG::Reply> or sends a reply itself. The
 pending-notification line and the two C<*ERROR> lines never get one -
 there is nothing to reply to yet.
+
+If Telegram's C<reply_to_message> field is present on the message (the
+sender used Telegram's native reply-to-message feature), every content
+line above also gets a C<< (replying to <sender>: <snippet-or-kind>) >>
+suffix (TGT-029), naming who/what the reply targets: the original
+sender's username, and either a sanitized/truncated (60 chars) snippet
+of the original text, or its media kind if the original had no text. A
+message with no C<reply_to_message> gets no suffix at all - unchanged
+from before this ticket. See C<_reply_context_suffix>.
 
 =cut

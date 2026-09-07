@@ -15,6 +15,15 @@ it sends reaches stdout — until an operator runs `d2 tg.approve
 operator notices; repeat messages from the same still-pending sender do
 not repeat the notification.
 
+## A reply-to-message carries its own context on the way in
+
+When a sender replies to a specific earlier Telegram message (TGT-029,
+live usability report), the poller's `NEW TG`/`NEW TG VOICE`/`NEW TG
+MEDIA` line names what that reply targets - the original sender and a
+snippet of the original text (or its media kind) - so the monitoring
+agent never has to cross-reference an earlier line to know which
+message in the conversation a reply responds to.
+
 ## CLI commands validate chat_id locally before any network call
 
 Both `d2 tg.approve` and `d2 tg.reply` reject a non-numeric `chat_id`

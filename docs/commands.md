@@ -32,6 +32,13 @@ Events printed:
   template with the chat id already filled in, per Q-004. This is only
   ever a template — the poller never sends a reply itself.
 
+If the sender used Telegram's native reply-to-message feature, every
+content line above also carries a `(replying to <sender>: <snippet-or-
+kind>)` suffix (TGT-029) naming what the reply targets — the original
+sender's username and either a snippet of the original text or its
+media kind if the original had none. A fresh message (no reply) gets no
+suffix.
+
 Requires a local `whisper` install (a multilingual, non `.en` model) for
 voice transcription. No extra dependency is needed for photo/document
 download - it reuses the same `D2TG::Download` module.
@@ -106,7 +113,7 @@ implemented and where:
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path. |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
-| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines, the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure. |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
