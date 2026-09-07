@@ -33,10 +33,11 @@ shape; ticket-level status lives on the project's Tira board
   if the id wasn't actually pending).
 - `cli/approve` (dispatched as `d2 tg.approve <chat_id>`) — the operator
   entrypoint for `D2TG::Store::approve`. Prints `Approved N` and exits 0
-  on success; exits non-zero with a clear STDERR message if the chat id
-  was never pending. **Not yet implemented**: any Telegram-side
-  notification to the admin that someone is pending, non-text media —
-  separate tickets under TGIG-002.
+  on success; exits non-zero on failure with a message distinguishing
+  "already allowed" (nothing to do) from "never pending" (never messaged
+  the bot). **Not yet implemented**: any Telegram-side notification to
+  the admin that someone is pending, non-text media — separate tickets
+  under TGIG-002.
 - `D2TG::Store::get_offset`/`set_offset` — the Telegram update offset is
   now persisted in the same SQLite file (`meta` table). `cli/poller`
   restores it at startup and saves it after every loop iteration, so a

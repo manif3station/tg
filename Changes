@@ -18,3 +18,5 @@ Revision history for the tg skill
         <chat_id> moves a pending sender into the allow-list.
       - D2TG::Store::get_offset/set_offset (TGT-008): poll offset now
         persists across cli/poller restarts.
+      - cli/approve (TGT-009): failure message now distinguishes
+        already-allowed from never-pending.
