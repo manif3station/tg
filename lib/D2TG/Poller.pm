@@ -39,7 +39,7 @@ D2TG::Poller - the long-poll loop connecting D2TG::Telegram to stdout
 
     my $offset;
     while (1) {
-        ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset );
+        ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset, $store );
     }
 
 =head1 KNOWN LIMITATION
@@ -54,19 +54,22 @@ the delay is bounded and short.
 =head1 DESCRIPTION
 
 C<run_once> performs a single C<get_updates> call and, for each update
-carrying a text message, prints one line to STDOUT naming the chat id,
-sender, and text. Non-text updates (photos, documents, voice, etc.) are
-silently skipped in this ticket's scope - handling them is separate,
-later work. Access control (allow-list/pending) is likewise not applied
-here - every sender's text is printed - a following ticket adds the gate
-before this is used for real.
+carrying a text message from an allow-listed sender, prints one line to
+STDOUT naming the chat id, sender, and text. Non-text updates (photos,
+documents, voice, etc.) are silently skipped in this ticket's scope -
+handling them is separate, later work.
 
 =head1 FUNCTIONS
 
-=head2 run_once($telegram, $offset)
+=head2 run_once($telegram, $offset, $store)
 
 Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
-method matching that signature) and the current offset. Returns the raw
-updates array and the next offset to pass on the following call.
+method matching that signature), the current offset, and an optional
+L<D2TG::Store>-shaped object (anything with C<is_allowed>/C<add_pending>
+methods). When C<$store> is given, a sender not in its allow-list is
+recorded via C<add_pending> and produces no STDOUT output at all; when
+omitted, every sender's text is printed (used by earlier tests only -
+C<cli/poller> always passes a real store). Returns the raw updates array
+and the next offset to pass on the following call.
 
 =cut

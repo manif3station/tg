@@ -11,3 +11,6 @@ Revision history for the tg skill
         get_updates, get_file) over HTTP::Tiny, no SDK.
       - D2TG::Poller + cli/poller (TGT-005): real long-poll loop; inbound
         text messages now print to stdout. No access control yet.
+      - D2TG::Store + access-control gate (TGT-006): SQLite allow_list/
+        pending tables; D2TG_CHAT_ID auto-seeded, everyone else silenced
+        and recorded pending. cpanfile added (DBI, DBD::SQLite).

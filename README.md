@@ -1,11 +1,13 @@
 # tg
 
 **Status: early implementation (v0.01).** `d2 tg.poller` runs for real —
-it long-polls Telegram and prints inbound text messages to stdout — but
-has **no access control yet** (every sender's text reaches stdout), no
-media handling, no reply/voice output, and does not persist its poll
-offset across restarts. See `SKILLS.md` for what's implemented so far and
-this project's Tira board ("D2 TG Skill") for ticket-level status.
+it long-polls Telegram, gates inbound senders against an allow-list (only
+`D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
+pending), and prints allowed text messages to stdout. Still missing: any
+way to approve a pending sender, media handling, reply/voice output, and
+persisting the poll offset across restarts. See `SKILLS.md` for what's
+implemented so far and this project's Tira board ("D2 TG Skill") for
+ticket-level status.
 
 Telegram bridge skill for Developer Dashboard. Lets an admin reach a
 project's live agent session over Telegram, and be reached by it — text,

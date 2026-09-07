@@ -18,10 +18,15 @@ shape; ticket-level status lives on the project's Tira board
 - `D2TG::Telegram` (`lib/D2TG/Telegram.pm`) — minimal Bot API client:
   `get_me`, `get_updates(offset, timeout)` (returns updates + next
   offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK.
-- `D2TG::Poller` (`lib/D2TG/Poller.pm`) — `run_once($telegram, $offset)`
-  does one `get_updates` call and prints one stdout line per inbound text
-  message (`NEW TG [chat_id] sender: text`). `cli/poller` now runs this
-  in a real loop (SIGTERM/SIGINT for clean shutdown) once the startup
-  guard passes. **Not yet implemented**: access control (every sender's
-  text currently reaches stdout), non-text media, persisting the offset
-  across restarts — all separate tickets under TGIG-002.
+- `D2TG::Poller` (`lib/D2TG/Poller.pm`) — `run_once($telegram, $offset,
+  $store)` does one `get_updates` call and prints one stdout line per
+  inbound text message (`NEW TG [chat_id] sender: text`) from an
+  allow-listed sender only. `cli/poller` runs this in a real loop
+  (SIGTERM/SIGINT for clean shutdown) once the startup guard passes.
+- `D2TG::Store` (`lib/D2TG/Store.pm`) — SQLite-backed (`state/store.sqlite`
+  under the skill's install root) `allow_list`/`pending` tables.
+  `D2TG_CHAT_ID` is auto-seeded as allowed on every start, no secret
+  phrase needed. Anyone else's message is silently recorded pending and
+  never reaches stdout. **Not yet implemented**: any command/workflow to
+  approve a pending sender, non-text media, persisting the poll offset
+  across restarts — separate tickets under TGIG-002.
