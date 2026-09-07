@@ -35,6 +35,9 @@ shape; ticket-level status lives on the project's Tira board
   entrypoint for `D2TG::Store::approve`. Prints `Approved N` and exits 0
   on success; exits non-zero with a clear STDERR message if the chat id
   was never pending. **Not yet implemented**: any Telegram-side
-  notification to the admin that someone is pending, non-text media,
-  persisting the poll offset across restarts — separate tickets under
-  TGIG-002.
+  notification to the admin that someone is pending, non-text media —
+  separate tickets under TGIG-002.
+- `D2TG::Store::get_offset`/`set_offset` — the Telegram update offset is
+  now persisted in the same SQLite file (`meta` table). `cli/poller`
+  restores it at startup and saves it after every loop iteration, so a
+  restart resumes exactly where it left off instead of losing its place.

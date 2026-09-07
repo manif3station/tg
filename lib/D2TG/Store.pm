@@ -160,8 +160,23 @@ True if C<$chat_id> is in the allow-list.
 
 Records C<$chat_id> as pending approval. Idempotent.
 
+=head2 approve($chat_id)
+
+Moves C<$chat_id> from C<pending> to C<allow_list>, atomically. Returns
+true if it was genuinely pending and is now approved; returns false
+(without error) if it was not pending - already approved, or never seen.
+
 =head2 pending_chat_ids
 
 Returns the list of chat ids currently pending, ordered.
+
+=head2 get_offset
+
+Returns the persisted Telegram update offset, or C<undef> if none has
+been saved yet.
+
+=head2 set_offset($offset)
+
+Persists C<$offset>, overwriting any previously saved value.
 
 =cut
