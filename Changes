@@ -379,3 +379,11 @@ Revision history for the tg skill
         not just a naming convention. New D2TG::Config::resolve_alias_dir/
         attachments_dir/extract_db_flag; D2TG::Download::download_file
         gains an optional dir param.
+
+0.31  2026-09-07
+      - FEATURE (TGT-052, live design request following TGT-051): the
+        poller now prunes its attachment vault after every poll cycle,
+        keeping it at or under a 100MB cap - once exceeded, the oldest
+        files (by mtime) are deleted first until back under it. Cheap
+        enough to run unconditionally (a directory listing and stat
+        calls, no network). New D2TG::Download::prune_vault.

@@ -46,6 +46,33 @@ sub download_file {
     return $local_path;
 }
 
+sub prune_vault {
+    my ( $dir, %args ) = @_;
+    my $max_bytes = $args{max_bytes} // 100 * 1024 * 1024;
+
+    opendir my $dh, $dir or return;
+    my @files = grep { -f "$dir/$_" } readdir $dh;
+    closedir $dh;
+
+    my @entries = map {
+        my $path = File::Spec->catfile( $dir, $_ );
+        my @stat = stat $path;
+        { path => $path, size => $stat[7], mtime => $stat[9] };
+    } @files;
+
+    my $total = 0;
+    $total += $_->{size} for @entries;
+
+    return if $total <= $max_bytes;
+
+    for my $entry ( sort { $a->{mtime} <=> $b->{mtime} } @entries ) {
+        last if $total <= $max_bytes;
+        unlink $entry->{path} and $total -= $entry->{size};
+    }
+
+    return;
+}
+
 1;
 
 =head1 NAME
@@ -81,5 +108,19 @@ content downloaded any number of times only ever occupies one copy of
 disk space. Without C<dir>, behavior is unchanged from before this
 ticket: a uniquely-named file in the OS temp directory every call, never
 deduplicated.
+
+=head2 prune_vault($dir, max_bytes => $bytes = 100MB)
+
+Keeps the attachment vault (TGT-052, typically
+C<D2TG::Config::attachments_dir>'s result) at or under C<max_bytes>
+total: if the sum of every regular file's size in C<$dir> exceeds it,
+deletes files oldest-C<mtime>-first until back at or under the cap.
+A vault already at or under the cap is left completely untouched - not
+even a listing beyond the size check. A non-existent or unreadable
+C<$dir> is a silent no-op (nothing to prune). Since content-addressed
+files (see C<download_file> above) are named by their own hash, deleting
+an old copy here can never orphan a still-referenced summary pointing
+at a different file - the same content, if downloaded again later,
+simply gets re-fetched and re-written under its same hash-derived name.
 
 =cut

@@ -97,6 +97,7 @@ until ($shutting_down) {
         download_media   => $download_media,
     );
     $store->set_offset($offset) if defined $offset;
+    D2TG::Download::prune_vault($attachments_dir);
 
     unless ($shutting_down) {
         my $current_version = D2TG::Config::skill_version( default_root => $skill_root );
@@ -150,6 +151,12 @@ itself runs via C<run_once_safe> (TGT-028), so a transient failure
 inside the poll cycle (e.g. a network blip) is logged as C<POLL ERROR>
 on STDERR and retried after a short backoff, rather than killing the
 whole process.
+
+After every poll cycle, C<D2TG::Download::prune_vault> (TGT-052) keeps
+the attachment vault at or under a 100MB cap, deleting the oldest files
+first once it's exceeded - cheap enough to run unconditionally (a
+directory listing and some C<stat> calls, no network), so the vault
+never grows unbounded over the skill's lifetime.
 
 C<SIGTERM>/C<SIGINT> also call L<D2TG::Transcribe>'s C<kill_current>
 (TGT-031), so a transcription in progress at shutdown time is killed

@@ -21,6 +21,9 @@ line per event to **stdout** (`NEW TG ...`), one line per error to
 **stderr** — no log file. Meant to run as a Tira monitor-kind job, not
 under systemd or cron.
 
+After every poll cycle, the attachment vault is pruned to a 100MB cap
+(TGT-052) - oldest files deleted first once exceeded.
+
 Self-refreshes on a new install (TGT-036): after each poll cycle, it
 compares its own on-disk `VERSION` against the one it started with. If
 `dashboard skills install tg` has installed a newer version in the
@@ -212,7 +215,7 @@ implemented and where:
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `mark_read`/`is_read` track read/unread status, set only after a reply actually succeeds (TGT-046); `unread_messages` lists every not-yet-read message, oldest first (TGT-047); `recent_messages`/`messages_in_range` back `d2 tg.history`'s default-last-10 and date-range views (TGT-048); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040); given a `store` too, marks that message read only after both sends succeed (TGT-046). `parse_cli_args` — parses `cli/reply`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042). |
-| `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. |
+| `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. `prune_vault` keeps a directory at or under a byte cap (100MB default), deleting oldest files first (TGT-052). |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
 
 `cli/poller`, `cli/approve`, `cli/reply`, `cli/unread`, `cli/history`

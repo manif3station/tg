@@ -263,6 +263,18 @@ use this shared, deduplicated location, to avoid the unlink after
 transcription ever risking deletion of a still-referenced file that
 happens to share the same content hash.
 
+## The attachment vault never grows unbounded
+
+Live design request (TGT-052, following TGT-051's content-addressed
+storage): the poller prunes the attachment vault after every poll
+cycle, keeping it at or under a 100MB cap. Once exceeded, the oldest
+files (by modification time) are deleted first until back under the
+cap - a vault already under the cap is left completely untouched.
+Because attachments are content-addressed (TGT-051), pruning an old
+copy can never orphan anything still referenced elsewhere: the same
+content, if needed again later, is simply re-downloaded and re-written
+under its same hash-derived name.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the
