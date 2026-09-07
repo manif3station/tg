@@ -10,5 +10,7 @@ shape and `tickets/` for what's actually done vs. planned.
 - `D2TG::Config` (`lib/D2TG/Config.pm`) — reads `D2TG_TOKEN`/`D2TG_CHAT_ID`
   from the environment; `require_chat_id_or_warn()` is the startup guard
   that refuses to proceed (warning to STDERR) when `D2TG_CHAT_ID` is
-  unset or empty. No CLI command uses it yet — that lands with the poller
-  entrypoint ticket.
+  unset or empty.
+- `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard and
+  refuses to proceed if it fails. The actual Telegram long-poll loop is
+  not implemented yet (see TGIG-002); this only proves the guard wiring.

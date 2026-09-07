@@ -5,3 +5,5 @@ Revision history for the tg skill
         LICENSE, .env.
       - D2TG::Config (TGT-002): reads D2TG_TOKEN/D2TG_CHAT_ID, startup
         guard warns to STDERR and refuses when D2TG_CHAT_ID is unset.
+      - cli/poller (TGT-003): d2 tg.poller entrypoint calling the
+        startup guard; poll loop itself not yet implemented.

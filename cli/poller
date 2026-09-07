@@ -13,3 +13,17 @@ print "d2tg poller starting up (token set: "
     . ( defined D2TG::Config::token() ? "yes" : "no" ) . ")\n";
 
 exit 0;
+
+=head1 NAME
+
+poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
+
+=head1 DESCRIPTION
+
+Calls L<D2TG::Config>'s startup guard first and refuses to proceed
+(non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. The
+actual Telegram long-poll loop is not implemented yet (TGIG-002) - this
+entrypoint currently only proves the guard is wired in and prints a
+startup confirmation.
+
+=cut
