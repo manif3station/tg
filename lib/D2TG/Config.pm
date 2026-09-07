@@ -99,6 +99,41 @@ sub extract_db_flag {
     return ( $alias, @rest );
 }
 
+sub bot_groups {
+    my (%args) = @_;
+
+    my @argv = @{ $args{argv} || [] };
+    my $env_chat_id = exists $args{env_chat_id} ? $args{env_chat_id} : $ENV{D2TG_CHAT_ID};
+    my $env_token   = exists $args{env_token}   ? $args{env_token}   : $ENV{D2TG_TOKEN};
+
+    push @argv, '--chat_id', $env_chat_id if defined $env_chat_id && length $env_chat_id;
+    push @argv, '--bot',     $env_token   if defined $env_token   && length $env_token;
+
+    my @groups;
+    my $current;
+    my @rest;
+
+    while (@argv) {
+        my $arg = shift @argv;
+
+        if ( $arg eq '--chat_id' ) {
+            $current = { chat_id => scalar( shift @argv ), bots => [] };
+            push @groups, $current;
+        }
+        elsif ( $arg eq '--bot' ) {
+            my $token = shift @argv;
+            die "D2TG::Config::bot_groups: --bot given before any --chat_id\n"
+              unless $current;
+            push @{ $current->{bots} }, $token;
+        }
+        else {
+            push @rest, $arg;
+        }
+    }
+
+    return ( \@groups, @rest );
+}
+
 sub resolve_alias_dir {
     my (%args) = @_;
 
@@ -202,6 +237,42 @@ C<D2TG::Reply::parse_cli_args>'s C<--reply-to-message-id> is
 trailing-only (TGT-042): reply text passed as free-form words could
 otherwise collide with the flag's own name. Returns C<($alias,
 @remaining_args)> - C<$alias> is C<undef> if the flag wasn't given.
+
+=head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
+
+Parses repeatable C<--chat_id <id>>/C<--bot <token>> pairs (TGT-049)
+into an ordered list of groups: each C<--chat_id> starts a new group,
+and each C<--bot> attaches to the most recently declared C<--chat_id>.
+Returns C<(\@groups, @rest)> - C<@groups> is a list of
+C<{ chat_id => ..., bots => [...] }> hashrefs in declaration order;
+C<@rest> is every argument that wasn't part of a C<--chat_id>/C<--bot>
+pair, unconsumed and in order, for the caller to keep parsing.
+
+C<env_chat_id>/C<env_token> default to C<$ENV{D2TG_CHAT_ID}>/
+C<$ENV{D2TG_TOKEN}> (pass explicit values, including C<undef>, to
+override for testing). Neither is special-cased: whichever is defined
+and non-empty is appended to C<argv> as an ordinary trailing
+C<--chat_id>/C<--bot> pair I<before> parsing, so the exact same grouping
+algorithm handles every case without a separate merge path:
+
+=over 4
+
+=item * Only env vars set, no CLI args at all (today's only mode): the
+appended stream is exactly one C<--chat_id>/C<--bot> pair, producing a
+single group - byte-for-byte equivalent to today's single-bot behavior.
+
+=item * C<env_token> set alone, with existing CLI-declared groups: only
+C<--bot $token> is appended, with no preceding C<--chat_id>, so it
+attaches to the I<last> already-open group.
+
+=item * Both env vars set, with existing CLI-declared groups: C<--chat_id
+$env_chat_id --bot $env_token> is appended as its own new, separate
+group.
+
+=back
+
+Dies if a C<--bot> is encountered (from either C<argv> or the appended
+env pair) with no C<--chat_id> having been declared yet.
 
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 

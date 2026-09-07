@@ -3,7 +3,7 @@
 All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 (the `cli/<name>` script in this repo).
 
-## `d2 tg.poller [--db <alias> | -d <alias>]`
+## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...]`
 
 `--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a
 fallback) relocates both the SQLite state file and downloaded
@@ -11,15 +11,31 @@ attachments under that Developer Dashboard path alias's directory - an
 unknown alias refuses to start (exit 1, clear STDERR message pointing at
 `d2 paths`). See the Environment variables section below.
 
+`--chat_id <id>`/`--bot <token>` (TGT-049, both repeatable) declare one
+or more bot/chat groups: each `--chat_id` starts a new group, and every
+`--bot` that follows attaches to it - e.g. `--chat_id 1234 --bot t1
+--bot t2 --chat_id 4567 --bot t3` polls bots `t1`/`t2` under chat
+`1234`'s allow-list and `t3` under `4567`'s, all from one process,
+sequentially, round-robin, once per poll cycle (never one process per
+bot). `D2TG_CHAT_ID`/`D2TG_TOKEN` are not a separate fallback code
+path - they fold into the exact same grouping algorithm as an implicit
+trailing pair (see `D2TG::Config::bot_groups`'s own POD for the full
+merge rule), which is what makes the plain env-var-only case (no
+`--chat_id`/`--bot` given at all) byte-identical to this skill's
+original single-bot behavior, with no migration step for an existing
+install. Refuses to start if no group ends up with at least one bot
+token.
+
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
-if `D2TG_CHAT_ID` is not set. On startup, prints `d2tg poller starting
-up (token: <first 4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) - the
-token is masked, the chat_id (not a secret) is shown in full, useful for
-confirming the right credentials loaded (e.g. not a stale value from a
-different terminal/project). Runs until `SIGTERM`/`SIGINT`. Prints one
-line per event to **stdout** (`NEW TG ...`), one line per error to
-**stderr** — no log file. Meant to run as a Tira monitor-kind job, not
-under systemd or cron.
+if `D2TG_CHAT_ID` is not set AND no `--chat_id` was given on the command
+line at all (a CLI-declared group supplies its own chat id
+independently of the env var). On startup, prints `d2tg poller starting
+up (token: <first 4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) for the
+single-group/single-bot case (the token is masked, the chat_id - not a
+secret - is shown in full), or a multi-line group listing otherwise.
+Runs until `SIGTERM`/`SIGINT`. Prints one line per event to **stdout**
+(`NEW TG ...`), one line per error to **stderr** — no log file. Meant to
+run as a Tira monitor-kind job, not under systemd or cron.
 
 After every poll cycle, the attachment vault is pruned to a 100MB cap
 (TGT-052) - oldest files deleted first once exceeded.
@@ -209,10 +225,10 @@ implemented and where:
 
 | Module | What it does |
 | --- | --- |
-| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045); `extract_db_flag`/`resolve_alias_dir`/`attachments_dir` resolve an optional `--db`/`-d`/`D2TG_DB` Developer Dashboard path alias for both storage and attachments (TGT-051). |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045); `extract_db_flag`/`resolve_alias_dir`/`attachments_dir` resolve an optional `--db`/`-d`/`D2TG_DB` Developer Dashboard path alias for both storage and attachments (TGT-051); `bot_groups` parses repeatable `--chat_id`/`--bot` CLI args, folding in `D2TG_CHAT_ID`/`D2TG_TOKEN` as an implicit trailing pair through the same grouping algorithm (TGT-049). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035, backed by a real SIGALRM-based hard timeout since a stuck TCP connect() was found to bypass it in production - TGT-044): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split, optional `reply_to_message_id` - TGT-040), `send_voice` (multipart, optional `reply_to_message_id` - TGT-040). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; naming the message's own `message_id` - TGT-040; plus a `(replying to ... [msg #N]: ...)` suffix when the message is itself a reply, naming the original message's own id (TGT-041) and preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template (now including `--reply-to-message-id` - TGT-040), non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
-| `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `mark_read`/`is_read` track read/unread status, set only after a reply actually succeeds (TGT-046); `unread_messages` lists every not-yet-read message, oldest first (TGT-047); `recent_messages`/`messages_in_range` back `d2 tg.history`'s default-last-10 and date-range views (TGT-048); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
+| `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `mark_read`/`is_read` track read/unread status, set only after a reply actually succeeds (TGT-046); `unread_messages` lists every not-yet-read message, oldest first (TGT-047); `recent_messages`/`messages_in_range` back `d2 tg.history`'s default-last-10 and date-range views (TGT-048); `admin_chat_id` (constructor) also accepts an arrayref to seed multiple chat ids allowed; `get_offset`/`set_offset` accept an optional per-bot key (SHA256-hashed before storage, never plaintext) for independent multi-bot offsets (TGT-049); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040); given a `store` too, marks that message read only after both sends succeed (TGT-046). `parse_cli_args` — parses `cli/reply`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042). |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. `prune_vault` keeps a directory at or under a byte cap (100MB default), deleting oldest files first (TGT-052). |

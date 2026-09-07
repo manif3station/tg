@@ -387,3 +387,21 @@ Revision history for the tg skill
         files (by mtime) are deleted first until back under it. Cheap
         enough to run unconditionally (a directory listing and stat
         calls, no network). New D2TG::Download::prune_vault.
+
+0.32  2026-09-07
+      - FEATURE (TGT-049, live design request, design confirmed via
+        follow-up Q&A): d2 tg.poller accepts repeatable --chat_id <id>/
+        --bot <token> CLI args - each --chat_id starts a new group, each
+        --bot attaches to the most recently declared one - polling every
+        (chat_id, bot) pair sequentially, round-robin, once per poll
+        cycle (one process, no forked child per bot). D2TG_CHAT_ID/
+        D2TG_TOKEN fold in as an implicit trailing --chat_id/--bot pair
+        through the exact same grouping algorithm, so the plain
+        env-var-only case (no CLI args at all) is byte-identical to this
+        skill's original single-bot behavior - no separate merge code
+        path, no migration step for existing installs. Each bot gets its
+        own persisted poll offset (D2TG::Store::get_offset/set_offset
+        gain an optional bot key, SHA256-hashed before storage so a live
+        token is never persisted in plaintext); D2TG::Store's
+        admin_chat_id now also accepts an arrayref to seed every
+        declared chat_id allowed. New D2TG::Config::bot_groups.

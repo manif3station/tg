@@ -3,6 +3,7 @@ package D2TG::Store;
 use strict;
 use warnings;
 use DBI;
+use Digest::SHA qw(sha256_hex);
 
 sub new {
     my ( $class, %args ) = @_;
@@ -16,7 +17,11 @@ sub new {
 
     my $self = bless { dbh => $dbh }, $class;
     $self->_ensure_schema;
-    $self->_seed_admin( $args{admin_chat_id} ) if defined $args{admin_chat_id};
+
+    if ( defined $args{admin_chat_id} ) {
+        my @ids = ref $args{admin_chat_id} eq 'ARRAY' ? @{ $args{admin_chat_id} } : ( $args{admin_chat_id} );
+        $self->_seed_admin($_) for @ids;
+    }
 
     return $self;
 }
@@ -116,23 +121,29 @@ sub approve {
     return $result;
 }
 
+sub _offset_meta_key {
+    my ($bot_key) = @_;
+    return 'offset' unless defined $bot_key;
+    return 'offset:' . sha256_hex($bot_key);
+}
+
 sub get_offset {
-    my ($self) = @_;
+    my ( $self, $bot_key ) = @_;
 
     my ($value) = $self->{dbh}->selectrow_array(
-        "SELECT value FROM meta WHERE key = 'offset'"
+        'SELECT value FROM meta WHERE key = ?', undef, _offset_meta_key($bot_key),
     );
 
     return defined $value ? $value : undef;
 }
 
 sub set_offset {
-    my ( $self, $offset ) = @_;
+    my ( $self, $offset, $bot_key ) = @_;
 
     $self->{dbh}->do(
-        "INSERT INTO meta (key, value) VALUES ('offset', ?)
-         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        undef, $offset,
+        'INSERT INTO meta (key, value) VALUES (?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        undef, _offset_meta_key($bot_key), $offset,
     );
 
     return;
@@ -272,10 +283,13 @@ into C<allow_list> on every C<new>, idempotently.
 
 =head1 METHODS
 
-=head2 new(db_path => $path, admin_chat_id => $id)
+=head2 new(db_path => $path, admin_chat_id => $id_or_arrayref)
 
 Opens (creating if needed) the SQLite database at C<db_path>, ensures the
 schema exists, and seeds C<admin_chat_id> into the allow-list if given.
+C<admin_chat_id> may be a single scalar (unchanged from before) or an
+arrayref of chat ids (TGT-049, for multi-group polling) - every id in
+the arrayref is seeded allowed.
 
 =head2 is_allowed($chat_id)
 
@@ -302,14 +316,21 @@ a subsequent C<approve> call on the same object still works normally.
 
 Returns the list of chat ids currently pending, ordered.
 
-=head2 get_offset
+=head2 get_offset($bot_key)
 
 Returns the persisted Telegram update offset, or C<undef> if none has
-been saved yet.
+been saved yet. C<$bot_key> is optional (TGT-049, for multi-bot
+polling, where each bot token has its own independent Telegram update
+sequence) - typically the bot's own token. It is never stored in
+plaintext: internally hashed (SHA256) into the storage key, so the live
+credential never lands in the SQLite C<meta> table. Omitting it (single-
+bot usage) is unchanged from before this ticket.
 
-=head2 set_offset($offset)
+=head2 set_offset($offset, $bot_key)
 
-Persists C<$offset>, overwriting any previously saved value.
+Persists C<$offset>, overwriting any previously saved value for that
+C<$bot_key> (see C<get_offset> above; omitting it is unchanged from
+before TGT-049).
 
 =head2 record_message($chat_id, $message_id, $sender, $summary)
 

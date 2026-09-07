@@ -275,6 +275,32 @@ copy can never orphan anything still referenced elsewhere: the same
 content, if needed again later, is simply re-downloaded and re-written
 under its same hash-derived name.
 
+## One poller process can serve multiple bots and chats
+
+Live design request (TGT-049, confirmed via follow-up Q&A): `d2
+tg.poller` accepts repeatable `--chat_id`/`--bot` pairs, polling every
+bot under its own chat id's allow-list, sequentially round-robin in one
+process each poll cycle - never a forked child per bot, keeping the
+same simple single-loop architecture this skill has always used.
+`D2TG_CHAT_ID`/`D2TG_TOKEN` are never a special-cased fallback: they
+fold into the exact same grouping rule as an implicit trailing
+`--chat_id`/`--bot` pair, which is precisely what makes today's plain
+env-var-only usage (no CLI args at all) come out byte-identical to this
+skill's original single-bot behavior - an existing install upgrades
+with no migration step, and there is exactly one grouping code path to
+reason about, not two.
+
+## Each bot's own poll offset, and a live token, are never confused
+
+A companion consequence of TGT-049: since Telegram gives every bot
+token its own independent update sequence, each bot now gets its own
+persisted poll offset - but the offset's storage key is the bot's
+token run through SHA256 first, never the raw token itself, so a live
+credential is never written into the SQLite `meta` table in plaintext.
+The original single-bot case keeps using the exact same unhashed
+`offset` key it always has, so nothing about upgrading an existing
+install changes.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

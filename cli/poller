@@ -38,12 +38,26 @@ if ($@) {
     exit 1;
 }
 
-exit 1 unless D2TG::Config::require_chat_id_or_warn();
+# Multi-bot/multi-chat support (TGT-049): peek whether the CLI declared
+# any --chat_id groups BEFORE consuming them, so the original single-var
+# startup guard (exact message, for exact backward compatibility) only
+# fires for the plain env-var-only case - CLI-declared groups supply
+# their own chat ids independently of D2TG_CHAT_ID.
+my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
+exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
 
-print "d2tg poller starting up (token: "
-    . D2TG::Config::masked_token( D2TG::Config::token() )
-    . ") (chat_id: "
-    . D2TG::Config::chat_id() . ")\n";
+my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
+@ARGV = @leftover;
+
+if ( !@$groups ) {
+    print STDERR "No --chat_id/--bot groups configured (neither via CLI nor D2TG_CHAT_ID/D2TG_TOKEN) - refusing to start.\n";
+    exit 1;
+}
+
+# Byte-identical to pre-TGT-049 behavior in the single-group/single-bot
+# case: the startup line, and the offset meta key (see below), are both
+# unchanged so an existing install upgrades with no migration step.
+my $single_bot_mode = ( @$groups == 1 && @{ $groups->[0]{bots} } == 1 );
 
 my $shutting_down = 0;
 $SIG{TERM} = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
@@ -56,11 +70,39 @@ my $store = D2TG::Store->new(
         default_root => $skill_root,
         base_dir      => $base_dir,
     ),
-    admin_chat_id => D2TG::Config::chat_id(),
+    admin_chat_id => [ map { $_->{chat_id} } @$groups ],
 );
 
-my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
-my $offset = $store->get_offset;
+my @pairs;
+for my $group (@$groups) {
+    for my $token ( @{ $group->{bots} } ) {
+        my $bot_key = $single_bot_mode ? undef : $token;
+        push @pairs, {
+            telegram => D2TG::Telegram->new( token => $token ),
+            bot_key  => $bot_key,
+            offset   => $store->get_offset($bot_key),
+        };
+    }
+}
+
+if ( !@pairs ) {
+    print STDERR "No bot tokens configured (a --chat_id group with no --bot, and D2TG_TOKEN not set) - refusing to start.\n";
+    exit 1;
+}
+
+if ($single_bot_mode) {
+    print "d2tg poller starting up (token: "
+        . D2TG::Config::masked_token( $groups->[0]{bots}[0] )
+        . ") (chat_id: "
+        . $groups->[0]{chat_id} . ")\n";
+}
+else {
+    print "d2tg poller starting up with " . scalar(@$groups) . " group(s):\n";
+    for my $group (@$groups) {
+        print "  chat_id $group->{chat_id}: " . scalar( @{ $group->{bots} } ) . " bot(s) ("
+            . join( ', ', map { D2TG::Config::masked_token($_) } @{ $group->{bots} } ) . ")\n";
+    }
+}
 
 my $starting_version = D2TG::Config::skill_version( default_root => $skill_root );
 
@@ -91,12 +133,16 @@ my $download_media = sub {
 };
 
 until ($shutting_down) {
-    $offset = D2TG::Poller::run_once_safe(
-        $telegram, $offset, $store,
-        transcribe_voice => $transcribe_voice,
-        download_media   => $download_media,
-    );
-    $store->set_offset($offset) if defined $offset;
+    for my $pair (@pairs) {
+        last if $shutting_down;
+
+        $pair->{offset} = D2TG::Poller::run_once_safe(
+            $pair->{telegram}, $pair->{offset}, $store,
+            transcribe_voice => $transcribe_voice,
+            download_media   => $download_media,
+        );
+        $store->set_offset( $pair->{offset}, $pair->{bot_key} ) if defined $pair->{offset};
+    }
     D2TG::Download::prune_vault($attachments_dir);
 
     unless ($shutting_down) {
@@ -118,6 +164,7 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 =head1 SYNOPSIS
 
     d2 tg.poller [--db <alias> | -d <alias>]
+    d2 tg.poller --chat_id <id> --bot <token> [--bot <token> ...] [--chat_id <id> --bot <token> ...]
 
 =head1 DESCRIPTION
 
@@ -128,15 +175,36 @@ attachments should live under, instead of the default skill-root-based
 location - unknown alias refuses to start with a clear STDERR message.
 See L<D2TG::Config/resolve_alias_dir>.
 
-Calls L<D2TG::Config>'s startup guard first and refuses to proceed
-(non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
-the guard passes, prints a startup line naming the masked token
-(L<D2TG::Config/masked_token>, TGT-045) and full chat_id actually
-loaded, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
-allowed), resumes from its persisted poll offset if any, and runs
-L<D2TG::Poller>'s long-poll loop - gated by that store, saving the offset
-back after every iteration - until C<SIGTERM> or C<SIGINT> is received.
-An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
+C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
+more bot/chat groups: each C<--chat_id> starts a new group, and each
+following C<--bot> attaches to it, so multiple bots can be polled under
+multiple admin chat ids in a single process. C<D2TG_CHAT_ID>/
+C<D2TG_TOKEN> fold in as an implicit trailing group rather than being a
+separate code path - see L<D2TG::Config/bot_groups> for the exact
+merge rule (which also documents why the plain single-env-var case,
+with no C<--chat_id>/C<--bot> given at all, is byte-identical to this
+skill's original single-bot behavior). All declared chat ids are seeded
+into the allow-list. Every (chat_id, bot) pair is polled sequentially,
+round-robin, once per poll cycle - not one process per bot - each with
+its own L<D2TG::Telegram> instance and its own persisted offset (see
+L<D2TG::Store/get_offset>); the single-bot case keeps using the
+original, unhashed offset key so an existing install upgrades with no
+migration step. Refuses to start (STDERR, exit 1) if no group ends up
+with at least one bot token.
+
+Calls L<D2TG::Config>'s original startup guard only when no CLI
+C<--chat_id> was given at all (so CLI-declared groups aren't blocked by
+an unset C<D2TG_CHAT_ID>, which only matters for the plain env-var-only
+case), refuses to proceed (non-zero exit, nothing on STDOUT) when
+C<D2TG_CHAT_ID> is missing in that case. Once past every guard, prints a
+startup line naming each group's chat id and its bots' masked tokens
+(L<D2TG::Config/masked_token>, TGT-045; the single-bot case keeps the
+original one-line format verbatim), opens a L<D2TG::Store> (auto-
+seeding every declared chat id as allowed), resumes each pair's own
+persisted poll offset if any, and runs L<D2TG::Poller>'s long-poll loop
+for every pair in turn - gated by that shared store, saving each pair's
+own offset back after its own iteration - until C<SIGTERM> or C<SIGINT>
+is received. An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
 and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
 downloaded temp file is removed either way. A photo or document message
 is downloaded via L<D2TG::Download> and its local path printed (kept,
