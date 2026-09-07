@@ -15,6 +15,14 @@ it sends reaches stdout — until an operator runs `d2 tg.approve
 operator notices; repeat messages from the same still-pending sender do
 not repeat the notification.
 
+## CLI commands validate chat_id locally before any network call
+
+Both `d2 tg.approve` and `d2 tg.reply` reject a non-numeric `chat_id`
+argument immediately (exit 2, `Usage` message on STDERR) rather than
+letting it reach the Telegram API and fail there (TGT-027) - a mistyped
+or missing chat id should read as a clear local usage error, not an
+opaque remote failure.
+
 ## A reply is always text + voice, never text-only
 
 `d2 tg.reply` (via `D2TG::Reply::send_reply`) synthesizes the voice note

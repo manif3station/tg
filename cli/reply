@@ -9,7 +9,7 @@ use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Reply;
 
-if ( @ARGV < 2 ) {
+if ( @ARGV < 2 || $ARGV[0] !~ /^-?\d+$/ ) {
     print STDERR "Usage: d2 tg.reply <chat_id> <text...>\n";
     exit 2;
 }
@@ -42,5 +42,10 @@ voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a
 text message and the voice note to C<chat_id> via L<D2TG::Telegram>. If
 synthesis fails, the command dies before sending anything - never a
 text-only reply.
+
+C<chat_id> is validated as a numeric value (matching C<d2 tg.approve>'s
+own guard, TGT-027) before anything else runs; a non-numeric first
+argument prints the same C<Usage> message and exits 2, without
+constructing L<D2TG::Telegram> or attempting any network call.
 
 =cut

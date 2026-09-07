@@ -129,3 +129,12 @@ Revision history for the tg skill
         alive through failures, STDOUT could sit block-buffered
         indefinitely instead of reaching the watched stream in real
         time. Fixed with an explicit $|=1.
+
+0.08  2026-09-07
+      - BUGFIX (TGT-027, found via IMPROVEMENT HUNT): cli/reply did not
+        validate chat_id was numeric before use, unlike cli/approve.
+        A non-numeric first argument silently reached D2TG::Telegram and
+        failed there with an opaque error instead of a clean local
+        Usage message. Fixed: cli/reply now uses the same /^-?\d+$/
+        guard as cli/approve, exiting 2 with a Usage message on STDERR
+        for a non-numeric chat_id, before any Telegram call is attempted.

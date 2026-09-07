@@ -52,6 +52,10 @@ units is split across multiple `sendMessage` calls without ever breaking
 a single character (a supplementary-plane character, which is a UTF-16
 surrogate pair, is always kept in one chunk).
 
+`chat_id` must be numeric (matching `d2 tg.approve`'s own guard,
+TGT-027) — a non-numeric first argument exits 2 with a `Usage` message
+on STDERR, before any Telegram call is attempted.
+
 Requires `gtts-cli` and `ffmpeg` to be installed on the machine running
 this command.
 
