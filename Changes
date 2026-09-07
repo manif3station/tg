@@ -299,3 +299,12 @@ Revision history for the tg skill
         arguments - matching exactly how the poller's own REPLY WITH
         template always appends it. Trailing usage (the documented/
         template usage) is unaffected.
+
+0.23  2026-09-07
+      - DOCS (TGT-043, found via DOC-ACCURACY HUNT): SKILLS.md's
+        onboarding-example stdout snippets still showed the pre-TGT-040
+        format with no message_id or --reply-to-message-id, so a new
+        user following the doc literally would see extra output not
+        shown in the example. Updated to match the actual current
+        output, matching docs/commands.md's already-accurate
+        description.

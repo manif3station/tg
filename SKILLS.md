@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.22).** This file is a procedure to
+**Status: early implementation (v0.23).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -89,16 +89,20 @@ names what to do and exactly what confirms it worked.
 3. **Confirm it arrives.** Expect two new stdout lines within the
    poller's poll cycle:
    ```
-   NEW TG [<chat_id>] <username>: hello from onboarding test
-   REPLY WITH: d2 tg.reply <chat_id> "..."
+   NEW TG [<chat_id>] <username>: hello from onboarding test (msg #<message_id>)
+   REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <message_id>
    ```
-   If nothing appears within ~30s, check `D2TG_TOKEN` is the right bot's
+   `(msg #<message_id>)` and `--reply-to-message-id <message_id>` (TGT-040)
+   are always present - Telegram always assigns every message an id. If
+   nothing appears within ~30s, check `D2TG_TOKEN` is the right bot's
    token and that the user actually messaged that bot (not a different
    one).
 4. **Send a reply.** Compose real text and run (in a second terminal,
-   the poller keeps running):
+   the poller keeps running) - copy the exact `REPLY WITH` line printed
+   in step 3 and fill in your own text, or send a fresh unthreaded reply
+   by omitting `--reply-to-message-id`:
    ```
-   d2 tg.reply <chat_id> "onboarding test received, reply is working"
+   d2 tg.reply <chat_id> "onboarding test received, reply is working" --reply-to-message-id <message_id>
    ```
    Expect: `Replied to <chat_id>` and exit 0.
 5. **Confirm the user received it.** Ask the user to check Telegram:
@@ -107,10 +111,11 @@ names what to do and exactly what confirms it worked.
    `d2 tg.reply` would have already exited non-zero with an error - this
    is not a silent-failure design (see `docs/POLICIES.md`).
 6. **Optional: exercise voice and media.** Ask the user to send a voice
-   note and a photo. Expect `NEW TG VOICE [...]: <transcript>` (needs
-   local `whisper`, step 2.5) and `NEW TG MEDIA [...]: photo
-   <local_path>` respectively, each followed by its own `REPLY WITH`
-   line.
+   note and a photo. Expect `NEW TG VOICE [...]: <transcript> (msg
+   #<message_id>)` (needs local `whisper`, step 2.5) and `NEW TG MEDIA
+   [...]: photo <local_path> (msg #<message_id>)` respectively, each
+   followed by its own `REPLY WITH` line (with `--reply-to-message-id`
+   filled in).
 7. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-5 have
    both been confirmed by the user. **Onboarding is successful once
    this whole loop - real message in, real reply out, user confirms
