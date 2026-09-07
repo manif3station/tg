@@ -22,6 +22,13 @@ use D2TG::Transcribe;
 # the watched stream in real time. STDERR is unbuffered by default.
 $| = 1;
 
+# Preserved separately from the parsed/stripped @ARGV below: the
+# self-restart exec() further down must re-exec with the ORIGINAL
+# arguments (including --db, if given), not the already-parsed
+# remainder - otherwise a version-triggered restart would silently lose
+# the --db override and fall back to the default storage location.
+my @original_argv = @ARGV;
+
 my ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV);
 @ARGV = @rest;
 
@@ -96,7 +103,7 @@ until ($shutting_down) {
         if ( $current_version ne $starting_version ) {
             print "d2tg poller detected version change ($starting_version -> $current_version), restarting...\n";
             $store->disconnect;
-            exec( $^X, $0, @ARGV ) or die "d2tg poller: exec failed: $!\n";
+            exec( $^X, $0, @original_argv ) or die "d2tg poller: exec failed: $!\n";
         }
     }
 }
