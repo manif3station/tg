@@ -64,3 +64,7 @@ Revision history for the tg skill
         poller loop. For photos, the largest PhotoSize (Telegram's last
         array entry) is selected. This closes TGIG-002's original
         inbound-media scope.
+      - D2TG::Poller internal refactor (TGT-017): extracted the
+        duplicated eval/error-report pattern shared by the voice and
+        photo/document branches into one _run_non_fatal helper. Pure
+        refactor, no behavior change - existing tests needed zero edits.

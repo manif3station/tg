@@ -36,29 +36,17 @@ sub run_once {
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
             my $file_id = $message->{voice}{file_id};
-            my $transcript = eval { $transcribe_voice->( $telegram, $file_id ) };
+            my ( $ok, $transcript ) =
+              _run_non_fatal( $transcribe_voice, $telegram, $file_id, $chat_id, $sender, 'TRANSCRIBE ERROR' );
 
-            if ($@) {
-                my $error = $@;
-                $error =~ s/\n\z//;
-                print STDERR "TRANSCRIBE ERROR [$chat_id] $sender: $error\n";
-            }
-            else {
-                print "NEW TG VOICE [$chat_id] $sender: $transcript\n";
-            }
+            print "NEW TG VOICE [$chat_id] $sender: $transcript\n" if $ok;
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
             my $file_id = _media_file_id( $message, $media_kind );
-            my $local_path = eval { $download_media->( $telegram, $file_id ) };
+            my ( $ok, $local_path ) =
+              _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
-            if ($@) {
-                my $error = $@;
-                $error =~ s/\n\z//;
-                print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: $error\n";
-            }
-            else {
-                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n";
-            }
+            print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n" if $ok;
         }
         else {
             print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
@@ -75,6 +63,21 @@ sub _media_kind {
     return 'document' if $message->{document};
     return 'voice'    if $message->{voice};
     return undef;
+}
+
+sub _run_non_fatal {
+    my ( $coderef, $telegram, $file_id, $chat_id, $sender, $error_prefix ) = @_;
+
+    my $result = eval { $coderef->( $telegram, $file_id ) };
+
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        print STDERR "$error_prefix [$chat_id] $sender: $error\n";
+        return ( 0, undef );
+    }
+
+    return ( 1, $result );
 }
 
 sub _media_file_id {
@@ -156,5 +159,12 @@ prints C<MEDIA DOWNLOAD ERROR [chat_id] sender: <message>> to STDERR and
 the loop continues, matching C<transcribe_voice>'s non-fatal handling.
 Without C<download_media>, photo/document messages fall back to the
 plain C<NEW TG MEDIA> line.
+
+C<_run_non_fatal> is the shared internal helper both of the above use:
+it evals a callback, and on failure strips the trailing newline from
+C<$@> and prints C<< <error_prefix> [chat_id] sender: <message> >> to
+STDERR, returning C<(0, undef)>; on success it returns
+C<(1, $result)>. The caller is responsible for printing its own
+differently-shaped success line.
 
 =cut
