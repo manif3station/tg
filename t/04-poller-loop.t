@@ -183,8 +183,14 @@ sub new {
     return bless { allowed => { map { $_ => 1 } @{ $args{allowed} || [] } }, pending => [] }, $class;
 }
 
-sub is_allowed  { my ( $self, $id ) = @_; return $self->{allowed}{$id} ? 1 : 0 }
-sub add_pending { my ( $self, $id ) = @_; push @{ $self->{pending} }, $id; return }
+sub is_allowed { my ( $self, $id ) = @_; return $self->{allowed}{$id} ? 1 : 0 }
+
+sub add_pending {
+    my ( $self, $id ) = @_;
+    my $already = grep { $_ == $id } @{ $self->{pending} };
+    push @{ $self->{pending} }, $id;
+    return $already ? 0 : 1;
+}
 
 package main;
 
@@ -222,8 +228,46 @@ package main;
         D2TG::Poller::run_once( $tg, undef, $store );
     } );
 
-    is( $out, '', 'a message from a non-allow-listed chat id produces no stdout output' );
+    unlike( $out, qr/let me in/, 'the message TEXT from a non-allow-listed sender never reaches stdout' );
+    like( $out, qr/111/, 'but a pending-notification line does appear, naming the chat id (TGT-010)' );
     is_deeply( $store->{pending}, [111], 'the non-allow-listed chat id was recorded pending' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 90,
+                message   => { chat => { id => 222 }, from => { username => 'newperson' }, text => 'hi there' },
+            },
+        ],
+    );
+    my $store = Fake::Store->new( allowed => [999] );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef, $store );
+    } );
+
+    like( $out, qr/222/, 'a genuinely new pending sender produces a pending-notification line naming the chat id' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 91,
+                message   => { chat => { id => 333 }, from => { username => 'again' }, text => 'still waiting' },
+            },
+        ],
+    );
+    my $store = Fake::Store->new( allowed => [999] );
+    $store->add_pending(333);    # already pending before this message arrives
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef, $store );
+    } );
+
+    is( $out, '', 'a message from an already-pending sender produces no further notification' );
 }
 
 {

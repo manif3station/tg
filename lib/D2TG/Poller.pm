@@ -17,7 +17,9 @@ sub run_once {
         my $sender  = $message->{from}{username} // 'unknown';
 
         if ( $store && !$store->is_allowed($chat_id) ) {
-            $store->add_pending($chat_id);
+            if ( $store->add_pending($chat_id) ) {
+                print "NEW TG PENDING [$chat_id] awaiting approval\n";
+            }
             next;
         }
 

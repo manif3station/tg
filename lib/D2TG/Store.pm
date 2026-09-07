@@ -61,12 +61,12 @@ sub is_allowed {
 sub add_pending {
     my ( $self, $chat_id ) = @_;
 
-    $self->{dbh}->do(
+    my $inserted = $self->{dbh}->do(
         'INSERT OR IGNORE INTO pending (chat_id) VALUES (?)',
         undef, $chat_id,
     );
 
-    return;
+    return $inserted && $inserted ne '0E0' ? 1 : 0;
 }
 
 sub approve {
