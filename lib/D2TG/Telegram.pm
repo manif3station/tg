@@ -7,7 +7,7 @@ use HTTP::Request;
 use JSON::PP qw(decode_json encode_json);
 use File::Spec;
 
-use constant DEFAULT_HARD_TIMEOUT => 35;
+use constant DEFAULT_HARD_TIMEOUT => 50;
 
 sub new {
     my ( $class, %args ) = @_;
@@ -17,7 +17,7 @@ sub new {
     return bless {
         token => $token,
         api   => "https://api.telegram.org/bot$token",
-        ua    => $args{ua} || LWP::UserAgent->new( timeout => 35 ),
+        ua    => $args{ua} || LWP::UserAgent->new( timeout => DEFAULT_HARD_TIMEOUT ),
     }, $class;
 }
 
@@ -221,7 +221,7 @@ once the blocking syscall it's inside of returns). C<alarm()>/C<SIGALRM>
 reliably interrupts any blocking syscall in Perl, unlike trusting a
 library's own internal timeout implementation to cover every phase. The
 bound used is the C<ua>'s own C<timeout> value if it exposes one (a real
-L<LWP::UserAgent> does), otherwise C<DEFAULT_HARD_TIMEOUT> (35s,
+L<LWP::UserAgent> does), otherwise C<DEFAULT_HARD_TIMEOUT> (50s (TGT-066),
 matching the C<ua>'s own default).
 
 =head1 METHODS
@@ -229,15 +229,20 @@ matching the C<ua>'s own default).
 =head2 new(token => $token, ua => $optional_client)
 
 The default C<ua> is an L<LWP::UserAgent> with an explicit C<timeout =E<gt>
-35> (TGT-035, a real production incident: LWP's own default is 180s, so a
-single C<get_updates> long-poll call - default C<timeout =E<gt> 30> - could
-block for up to 180s with no explicit bound. Since Perl defers signal
-handling until the current blocking syscall returns, this meant
-C<cli/poller>'s C<SIGINT>/C<SIGTERM> handlers could be delayed by up to
-180s even after TGT-031's transcription-timeout fix, which only bounded a
-different blocking call). 35s comfortably covers C<get_updates>' own
-30s server-side hint with a small margin, bounding both shutdown delay and
-new-message latency to a known, short maximum.
+DEFAULT_HARD_TIMEOUT> (originally 35, TGT-035, a real production incident:
+LWP's own default is 180s, so a single C<get_updates> long-poll call -
+default C<timeout =E<gt> 30> - could block for up to 180s with no explicit
+bound. Since Perl defers signal handling until the current blocking
+syscall returns, this meant C<cli/poller>'s C<SIGINT>/C<SIGTERM> handlers
+could be delayed by up to 180s even after TGT-031's transcription-timeout
+fix, which only bounded a different blocking call). Widened to 50s
+(TGT-066, another real production incident: a 35s bound left only a 5s
+margin over C<get_updates>' own 30s server-side long-poll wait, so a
+perfectly legitimate, successful response taking slightly longer than
+35s total under normal network/TLS/latency overhead was mistaken for a
+genuinely stuck connection - the 15s margin now bounds both shutdown
+delay and new-message latency to a known, short maximum without
+false-positive timeouts on ordinary long-poll responses.
 
 =head2 token
 

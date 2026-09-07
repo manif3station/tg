@@ -541,3 +541,16 @@ Revision history for the tg skill
         never receive the timestamp. Both now correctly scope the claim
         to the 4 stdout event lines and explicitly note the 2 stderr
         lines are not timestamped. No code change.
+
+0.45  2026-09-07
+      - BUGFIX (TGT-066, live production incident reported by the owner:
+        repeated "POLL ERROR: ... request timed out after 35s" on every
+        poll cycle): D2TG::Telegram::DEFAULT_HARD_TIMEOUT (35s) left only
+        a 5s margin over get_updates' own 30s long-poll wait - too tight
+        for real network/TLS/latency overhead, so a perfectly legitimate,
+        successful long-poll response occasionally exceeded 35s total and
+        was mistaken for a genuinely stuck connection (a different failure
+        mode from TGT-044's actual-hung-connection scenario). Widened to
+        50s (a 15s margin); the real production LWP::UserAgent's own
+        timeout and the SIGALRM fallback now derive from the exact same
+        constant, so they can never silently drift apart again.

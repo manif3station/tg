@@ -232,7 +232,7 @@ poller) catches this, logs `POLL ERROR: <message>` to stderr, waits a
 short backoff, and retries - the poller process itself must never die
 from a failure that will very likely resolve on its own.
 
-## A single poll cycle can never block shutdown for longer than ~35s
+## A single poll cycle can never block shutdown for longer than ~50s
 
 Confirmed live (TGT-035, a real production incident caught on screen
 recording): even after TGT-031's transcription-timeout fix, `Ctrl+C`
@@ -243,21 +243,32 @@ open for up to its own `timeout` parameter, default 30s) could block
 for LWP's own 180s default instead - and since Perl defers signal
 handling until the current blocking call returns, that also bounded how
 long `SIGINT`/`SIGTERM` could be delayed. `D2TG::Telegram::new` now sets
-an explicit `timeout => 35` on its default `ua`, so a single poll cycle
-- and therefore shutdown delay - is genuinely bounded to about 35s, not
-merely assumed to be.
+an explicit `timeout => DEFAULT_HARD_TIMEOUT` on its default `ua`, so a
+single poll cycle - and therefore shutdown delay - is genuinely bounded,
+not merely assumed to be.
 
 That bound turned out to still have a gap (TGT-044, a second live
 production incident): `LWP::UserAgent`'s own `timeout` did not reliably
 cover a request stuck in the initial TCP `connect()` phase - the live
-poller was found with its socket wedged in `SYN-SENT` far past 35s, and
-even `SIGTERM` could not stop it (Perl only delivers a pending signal
+poller was found with its socket wedged in `SYN-SENT` far past the bound,
+and even `SIGTERM` could not stop it (Perl only delivers a pending signal
 once the blocking syscall it's inside of returns - `SIGKILL` was needed).
 `D2TG::Telegram::_call` now wraps its request in an explicit
 `alarm()`/`SIGALRM`-based hard timeout, which reliably interrupts any
 blocking syscall - including a stuck `connect()` - regardless of which
-phase it's stuck in, so the ~35s bound above is now actually enforced in
+phase it's stuck in, so the bound above is now actually enforced in
 every case, not just the ones LWP's own timeout happens to cover.
+
+A third live incident (TGT-066) found the bound itself (35s at the time)
+left only a 5s margin over `get_updates`' own 30s long-poll wait - too
+tight for real network/TLS/latency overhead, so a perfectly legitimate,
+successful long-poll response occasionally exceeded 35s total and was
+mistaken for a genuinely stuck connection, producing repeated "request
+timed out after 35s" errors under completely normal operation.
+`DEFAULT_HARD_TIMEOUT` is now 50s - a 15s margin - and both the real
+production `ua`'s own timeout and the SIGALRM fallback derive from the
+exact same constant, so the two values can never silently drift apart
+again the way a bare `timeout => 35` literal once could.
 
 ## The startup line confirms which credentials actually loaded, without exposing them
 
