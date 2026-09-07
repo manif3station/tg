@@ -20,3 +20,5 @@ Revision history for the tg skill
         persists across cli/poller restarts.
       - cli/approve (TGT-009): failure message now distinguishes
         already-allowed from never-pending.
+      - Pending-sender notification (TGT-010): the poller prints a
+        stdout line the first time a new sender is queued pending.

@@ -58,9 +58,13 @@ the delay is bounded and short.
 
 C<run_once> performs a single C<get_updates> call and, for each update
 carrying a text message from an allow-listed sender, prints one line to
-STDOUT naming the chat id, sender, and text. Non-text updates (photos,
-documents, voice, etc.) are silently skipped in this ticket's scope -
-handling them is separate, later work.
+STDOUT naming the chat id, sender, and text. A message from a sender not
+yet allow-listed produces no message-text output, but does print a
+one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
+time that sender is recorded pending (not on subsequent messages from
+the same still-pending sender). Non-text updates (photos, documents,
+voice, etc.) are silently skipped in this ticket's scope - handling them
+is separate, later work.
 
 =head1 FUNCTIONS
 
@@ -70,8 +74,9 @@ Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
 method matching that signature), the current offset, and an optional
 L<D2TG::Store>-shaped object (anything with C<is_allowed>/C<add_pending>
 methods). When C<$store> is given, a sender not in its allow-list is
-recorded via C<add_pending> and produces no STDOUT output at all; when
-omitted, every sender's text is printed (used by earlier tests only -
+recorded via C<add_pending>, printing the one-time pending notification
+described above but never the message text; when omitted, every
+sender's text is printed unconditionally (used by earlier tests only -
 C<cli/poller> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
 

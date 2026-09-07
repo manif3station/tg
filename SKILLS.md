@@ -42,3 +42,8 @@ shape; ticket-level status lives on the project's Tira board
   now persisted in the same SQLite file (`meta` table). `cli/poller`
   restores it at startup and saves it after every loop iteration, so a
   restart resumes exactly where it left off instead of losing its place.
+- Pending-sender notification — `D2TG::Poller::run_once` now prints a
+  `NEW TG PENDING [chat_id] awaiting approval` line the first time a
+  non-allow-listed sender messages the bot (not on every subsequent
+  message from the same still-pending sender), so the admin sees it on
+  the same watched stream as everything else.

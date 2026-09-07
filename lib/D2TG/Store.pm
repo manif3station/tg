@@ -158,7 +158,10 @@ True if C<$chat_id> is in the allow-list.
 
 =head2 add_pending($chat_id)
 
-Records C<$chat_id> as pending approval. Idempotent.
+Records C<$chat_id> as pending approval. Idempotent. Returns true the
+first time a given C<$chat_id> is recorded, false on every subsequent
+call for the same id (already pending) - this is what lets a caller
+notify only once per new sender.
 
 =head2 approve($chat_id)
 
