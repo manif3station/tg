@@ -98,3 +98,21 @@ implemented and where:
 `cli/poller`, `cli/approve`, `cli/reply` are the thin `d2 tg.*`
 entrypoints described above; each just wires the relevant modules
 together.
+
+## Troubleshooting
+
+### `HTTP request failed (status 401 Unauthorized)`
+
+This means **Telegram itself rejected the token** - `D2TG_TOKEN` is
+wrong, was regenerated, or was revoked. It is not a code bug: confirmed
+(TGT-026) by running a direct `curl
+https://api.telegram.org/bot<token>/getMe` alongside `cli/poller` in a
+fresh `developer-dashboard:latest` container with the same token - both
+fail with the identical 401, proving the code correctly surfaces
+Telegram's own rejection rather than misbehaving locally.
+
+Fix: open `@BotFather` on Telegram, `/mybots` → the bot → **API Token**
+→ **Revoke current token** to get a fresh one, then update
+`D2TG_TOKEN` and retry. Quick standalone check before retrying anything
+else: `curl https://api.telegram.org/bot<token>/getMe` - if that alone
+returns 401, the token is the problem, not this skill.

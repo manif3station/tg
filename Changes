@@ -103,3 +103,9 @@ Revision history for the tg skill
         _install_skill_requirements_txt aborts the rest of the install
         chain on its first failure. That's a gap in Developer Dashboard
         itself, not something this skill can safely work around.
+      - Docs (TGT-026): added a Troubleshooting section to
+        docs/commands.md for "HTTP request failed (status 401
+        Unauthorized)" - confirmed (side-by-side curl getMe + cli/poller
+        in a developer-dashboard:latest container) this always means the
+        configured D2TG_TOKEN is rejected by Telegram directly, not a
+        code bug.
