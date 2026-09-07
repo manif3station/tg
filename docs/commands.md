@@ -3,7 +3,13 @@
 All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 (the `cli/<name>` script in this repo).
 
-## `d2 tg.poller`
+## `d2 tg.poller [--db <alias> | -d <alias>]`
+
+`--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a
+fallback) relocates both the SQLite state file and downloaded
+attachments under that Developer Dashboard path alias's directory - an
+unknown alias refuses to start (exit 1, clear STDERR message pointing at
+`d2 paths`). See the Environment variables section below.
 
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
 if `D2TG_CHAT_ID` is not set. On startup, prints `d2tg poller starting
@@ -31,6 +37,10 @@ Events printed:
 - `NEW TG MEDIA [chat_id] sender: <photo|document> <local_path>` — an
   allowed sender's photo/document message, downloaded to `local_path`.
   For a photo, the largest available resolution is downloaded.
+  `local_path` is content-addressed (TGT-051, named by the file's own
+  SHA256 hash) under `D2TG::Config::attachments_dir` - identical content
+  downloaded any number of times, from any sender, only ever occupies
+  one copy of disk space.
 - `NEW TG VOICE [chat_id] sender: <transcript>` — an allowed sender's
   voice message, downloaded and transcribed via a local Whisper install
   (the downloaded audio itself is not kept, only its transcript).
@@ -95,15 +105,19 @@ per-segment transcript lines) never reaches the poller's stdout/stderr
 (TGT-030) - only the structured `NEW TG VOICE`/`REPLY WITH` lines do,
 keeping the watched stream clean.
 
-## `d2 tg.approve <chat_id>`
+## `d2 tg.approve <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
 and exits 0 on success. Exits 1 (message on STDERR) if `chat_id` was
-already allowed, or was never pending at all.
+already allowed, or was never pending at all. `--db`/`-d` (TGT-051)
+resolves the same way `d2 tg.poller`'s does.
 
-## `d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]`
+## `d2 tg.reply [--db <alias> | -d <alias>] <chat_id> <text...> [--reply-to-message-id <id>]`
 
-(the flag, when given, must be the last two arguments - see below)
+(`--reply-to-message-id`, when given, must be the last two arguments -
+see below; `--db`/`-d` is the opposite - recognized only in the
+*leading* position, before `chat_id`, for the same collision-avoidance
+reason)
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)
@@ -138,14 +152,15 @@ anything is marked). A message with no reply against it stays unread.
 Requires `gtts-cli` and `ffmpeg` to be installed on the machine running
 this command.
 
-## `d2 tg.unread`
+## `d2 tg.unread [--db <alias> | -d <alias>]`
 
 Lists every stored message (TGT-038) not yet marked read (TGT-046),
 oldest first: chat id, message id, sender, timestamp, and the stored
 summary. Prints `No unread messages.` and exits 0 when there are none,
-rather than a blank/confusing output.
+rather than a blank/confusing output. `--db`/`-d` (TGT-051) resolves
+the same way `d2 tg.poller`'s does.
 
-## `d2 tg.history [--since <iso8601>] [--until <iso8601>]`
+## `d2 tg.history [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without `--since`/`--until`
@@ -153,7 +168,8 @@ sender, timestamp, and the stored summary. Without `--since`/`--until`
 (ISO 8601 timestamps, matching `created_at`'s own stored format), shows
 every message in that range instead - an open-ended range on whichever
 side is omitted. Prints `No messages found.` and exits 0 when nothing
-matches.
+matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
+does.
 
 ## Registering as a Tira monitor job
 
@@ -177,6 +193,10 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
   to start.
 - `DEVELOPER_DASHBOARD_SKILL_ROOT` — overrides where `state/store.sqlite`
   is resolved from; normally set by Developer Dashboard itself.
+- `D2TG_DB` (TGT-051) — a Developer Dashboard path alias (see `d2 paths`)
+  whose directory relocates both the SQLite state file and downloaded
+  attachments; fallback for every `d2 tg.*` command's `--db`/`-d` flag
+  when the flag isn't given. An unknown alias refuses to start.
 
 ## Module reference
 
@@ -186,13 +206,13 @@ implemented and where:
 
 | Module | What it does |
 | --- | --- |
-| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045). |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045); `extract_db_flag`/`resolve_alias_dir`/`attachments_dir` resolve an optional `--db`/`-d`/`D2TG_DB` Developer Dashboard path alias for both storage and attachments (TGT-051). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035, backed by a real SIGALRM-based hard timeout since a stuck TCP connect() was found to bypass it in production - TGT-044): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split, optional `reply_to_message_id` - TGT-040), `send_voice` (multipart, optional `reply_to_message_id` - TGT-040). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; naming the message's own `message_id` - TGT-040; plus a `(replying to ... [msg #N]: ...)` suffix when the message is itself a reply, naming the original message's own id (TGT-041) and preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template (now including `--reply-to-message-id` - TGT-040), non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `mark_read`/`is_read` track read/unread status, set only after a reply actually succeeds (TGT-046); `unread_messages` lists every not-yet-read message, oldest first (TGT-047); `recent_messages`/`messages_in_range` back `d2 tg.history`'s default-last-10 and date-range views (TGT-048); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040); given a `store` too, marks that message read only after both sends succeed (TGT-046). `parse_cli_args` — parses `cli/reply`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042). |
-| `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |
+| `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
 
 `cli/poller`, `cli/approve`, `cli/reply`, `cli/unread`, `cli/history`

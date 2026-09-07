@@ -11,6 +11,18 @@ use D2TG::Telegram;
 use D2TG::Reply;
 use D2TG::Store;
 
+my $db_alias;
+if ( @ARGV && ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) ) {
+    shift @ARGV;
+    $db_alias = shift @ARGV;
+}
+
+my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@ARGV);
 
 if ( !defined $chat_id
@@ -26,7 +38,8 @@ my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
-        default_root => File::Spec->catdir( $Bin, '..' )
+        default_root => File::Spec->catdir( $Bin, '..' ),
+        base_dir      => $base_dir,
     ),
     admin_chat_id => D2TG::Config::chat_id(),
 );
@@ -47,9 +60,19 @@ reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
 
 =head1 SYNOPSIS
 
-    d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]
+    d2 tg.reply [--db <alias> | -d <alias>] <chat_id> <text...> [--reply-to-message-id <id>]
 
 =head1 DESCRIPTION
+
+C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
+fallback) is recognized only in the I<leading> position - the very
+first one or two arguments, before C<chat_id> - unlike
+L<D2TG::Config/extract_db_flag>'s whole-list scan used by the other
+C<cli/tg.*> entrypoints. This is deliberate, for the same reason
+C<--reply-to-message-id> is trailing-only (TGT-042): a whole-list scan
+here could misinterpret reply text that happens to contain the literal
+token C<--db> as multiple unquoted shell words. Resolution otherwise
+matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>.
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

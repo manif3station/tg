@@ -22,6 +22,15 @@ use D2TG::Transcribe;
 # the watched stream in real time. STDERR is unbuffered by default.
 $| = 1;
 
+my ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV);
+@ARGV = @rest;
+
+my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
 print "d2tg poller starting up (token: "
@@ -33,9 +42,12 @@ my $shutting_down = 0;
 $SIG{TERM} = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
 $SIG{INT}  = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
 
+my $skill_root = File::Spec->catdir( $Bin, '..' );
+
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
-        default_root => File::Spec->catdir( $Bin, '..' )
+        default_root => $skill_root,
+        base_dir      => $base_dir,
     ),
     admin_chat_id => D2TG::Config::chat_id(),
 );
@@ -43,11 +55,21 @@ my $store = D2TG::Store->new(
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 my $offset = $store->get_offset;
 
-my $skill_root      = File::Spec->catdir( $Bin, '..' );
 my $starting_version = D2TG::Config::skill_version( default_root => $skill_root );
+
+my $attachments_dir = D2TG::Config::attachments_dir(
+    default_root => $skill_root,
+    base_dir      => $base_dir,
+);
 
 my $transcribe_voice = sub {
     my ( $tg, $file_id ) = @_;
+
+    # Deliberately NOT passed dir => $attachments_dir: this download is
+    # transient (unlinked immediately below), so it must never land in
+    # the shared, deduplicated attachment vault - doing so and then
+    # unlinking it would risk deleting a still-referenced photo/document
+    # that happens to share the exact same content hash.
     my $local_path = D2TG::Download::download_file( $tg, $file_id );
     my $text = eval { D2TG::Transcribe::transcribe($local_path) };
     my $error = $@;
@@ -58,7 +80,7 @@ my $transcribe_voice = sub {
 
 my $download_media = sub {
     my ( $tg, $file_id ) = @_;
-    return D2TG::Download::download_file( $tg, $file_id );
+    return D2TG::Download::download_file( $tg, $file_id, dir => $attachments_dir );
 };
 
 until ($shutting_down) {
@@ -85,7 +107,18 @@ exit 0;
 
 poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
+=head1 SYNOPSIS
+
+    d2 tg.poller [--db <alias> | -d <alias>]
+
 =head1 DESCRIPTION
+
+C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
+fallback env var) names a Developer Dashboard path alias (see C<d2
+paths>) whose directory this run's SQLite state file and downloaded
+attachments should live under, instead of the default skill-root-based
+location - unknown alias refuses to start with a clear STDERR message.
+See L<D2TG::Config/resolve_alias_dir>.
 
 Calls L<D2TG::Config>'s startup guard first and refuses to proceed
 (non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
@@ -99,7 +132,12 @@ An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
 and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
 downloaded temp file is removed either way. A photo or document message
 is downloaded via L<D2TG::Download> and its local path printed (kept,
-unlike the transient voice download). A download or transcription
+unlike the transient voice download). Kept downloads are content-
+addressed (TGT-051, named by their own SHA256 hash) under
+L<D2TG::Config/attachments_dir>, so identical content sent any number of
+times only ever occupies one copy of disk space; the transient voice
+download deliberately does not use this shared, deduplicated location
+(see the code comment on C<transcribe_voice>). A download or transcription
 failure is reported on STDERR and does not stop the loop. The loop
 itself runs via C<run_once_safe> (TGT-028), so a transient failure
 inside the poll cycle (e.g. a network blip) is logged as C<POLL ERROR>

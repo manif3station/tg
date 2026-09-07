@@ -240,6 +240,29 @@ window." `d2 tg.history` fills that gap: defaults to the 10 most recent
 stored messages, or an explicit `--since`/`--until` range, independent of
 read/unread status.
 
+## Storage can relocate, per invocation, to a named Developer Dashboard path
+
+Live design request (TGT-051): every `d2 tg.*` command accepts
+`--db <alias>`/`-d <alias>` (or `D2TG_DB=<alias>` as a fallback), naming
+one of `d2 paths`' own entries. When given, both the SQLite state file
+and downloaded attachments relocate under that alias's directory
+instead of the skill's own install location - an unknown alias refuses
+to start rather than silently falling back to the default, so a typo
+can never silently write to the wrong place. Omitting it entirely is
+unchanged from before this ticket.
+
+## Downloaded attachments are deduplicated by content, not just by name
+
+Live design request (TGT-051): a photo/document download is named by
+its own SHA256 content hash rather than a random/original filename -
+identical content sent by any sender, at any time, only ever occupies
+one copy of disk space. This applies only to attachments that are
+actually kept (photo/document); the transient voice download used only
+for transcription (and deleted immediately after) deliberately does not
+use this shared, deduplicated location, to avoid the unlink after
+transcription ever risking deletion of a still-referenced file that
+happens to share the same content hash.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

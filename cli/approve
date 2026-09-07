@@ -9,8 +9,17 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Store;
 
+my ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV);
+@ARGV = @rest;
+
+my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
-    print STDERR "Usage: d2 tg.approve <chat_id>\n";
+    print STDERR "Usage: d2 tg.approve <chat_id> [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 
@@ -18,7 +27,8 @@ my $chat_id = $ARGV[0];
 
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
-        default_root => File::Spec->catdir( $Bin, '..' )
+        default_root => File::Spec->catdir( $Bin, '..' ),
+        base_dir      => $base_dir,
     ),
     admin_chat_id => D2TG::Config::chat_id(),
 );
@@ -42,9 +52,13 @@ approve - move a pending chat id into the allow-list, dispatched as C<d2 tg.appr
 
 =head1 SYNOPSIS
 
-    d2 tg.approve <chat_id>
+    d2 tg.approve <chat_id> [--db <alias> | -d <alias>]
 
 =head1 DESCRIPTION
+
+C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
+fallback) resolves the same way C<d2 tg.poller>'s does - see
+L<D2TG::Config/resolve_alias_dir>.
 
 Moves C<chat_id> from L<D2TG::Store>'s C<pending> table into its
 C<allow_list>. Prints C<Approved N> and exits 0 on success. If nothing

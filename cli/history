@@ -9,6 +9,15 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Store;
 
+my ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag(@ARGV);
+@ARGV = @after_db;
+
+my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 my ( $since, $until );
 {
     my @rest;
@@ -29,7 +38,8 @@ my ( $since, $until );
 
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
-        default_root => File::Spec->catdir( $Bin, '..' )
+        default_root => File::Spec->catdir( $Bin, '..' ),
+        base_dir      => $base_dir,
     ),
     admin_chat_id => D2TG::Config::chat_id(),
 );
@@ -58,8 +68,13 @@ history - view past messages by date range, dispatched as C<d2 tg.history>
     d2 tg.history --since 2026-09-01T00:00:00
     d2 tg.history --until 2026-09-07T23:59:59
     d2 tg.history --since 2026-09-01T00:00:00 --until 2026-09-07T23:59:59
+    d2 tg.history --db <alias>
 
 =head1 DESCRIPTION
+
+C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
+fallback) resolves the same way C<d2 tg.poller>'s does - see
+L<D2TG::Config/resolve_alias_dir>.
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without C<--since>/C<--until>

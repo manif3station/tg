@@ -363,3 +363,19 @@ Revision history for the tg skill
         (ISO 8601, open-ended on the omitted side), shows only messages
         in that range. New D2TG::Store::recent_messages/
         messages_in_range back it.
+
+0.30  2026-09-07
+      - FEATURE (TGT-051, live design request): all five d2 tg.*
+        entrypoints (poller, reply, approve, unread, history) accept
+        --db <alias> / -d <alias> (or D2TG_DB=<alias> as a fallback),
+        naming a Developer Dashboard path alias (see d2 paths) whose
+        directory both the SQLite state file AND downloaded attachments
+        relocate under - store.sqlite directly, attachments under
+        files/. An unknown alias refuses to start with a clear STDERR
+        message. Downloaded attachments (photos/documents, not the
+        transient voice download) are now content-addressed by their
+        own SHA256 hash, so identical content sent any number of times
+        only ever occupies one copy of disk space - true deduplication,
+        not just a naming convention. New D2TG::Config::resolve_alias_dir/
+        attachments_dir/extract_db_flag; D2TG::Download::download_file
+        gains an optional dir param.
