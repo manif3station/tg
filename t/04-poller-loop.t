@@ -2,29 +2,10 @@ use strict;
 use warnings;
 use Test::More;
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 
 require D2TG::Poller;
-
-package Fake::Telegram;
-
-sub new {
-    my ( $class, @updates_batches ) = @_;
-    return bless { batches => [@updates_batches] }, $class;
-}
-
-sub get_updates {
-    my ( $self, %args ) = @_;
-    my $batch = shift @{ $self->{batches} } || [];
-
-    my $next_offset = $args{offset};
-    for my $u (@$batch) {
-        my $candidate = $u->{update_id} + 1;
-        $next_offset = $candidate
-          if !defined $next_offset || $candidate > $next_offset;
-    }
-    return ( $batch, $next_offset );
-}
+require Fake::Telegram;
 
 package main;
 

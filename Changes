@@ -68,3 +68,9 @@ Revision history for the tg skill
         duplicated eval/error-report pattern shared by the voice and
         photo/document branches into one _run_non_fatal helper. Pure
         refactor, no behavior change - existing tests needed zero edits.
+      - Test-infrastructure refactor (TGT-018): extracted t/lib/Fake/
+        Telegram.pm and t/lib/Fake/Store.pm, the identically-duplicated
+        poll-mock shape shared by t/04, t/09, t/17, t/18 (5 -> 1 copy
+        each). t/14 and t/15's differently-shaped same-named local
+        mocks are untouched (different capabilities). Zero test
+        assertions changed.
