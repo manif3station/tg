@@ -1,10 +1,12 @@
 # tg — skill reference
 
-**Status: early implementation (v0.01).** This file will grow into the
+**Status: early implementation (v0.02).** This file will grow into the
 full command/workflow reference as the skill is implemented (per TGIG-002
 through TGIG-005). See `README.md` for the intended install/config/run
-shape; ticket-level status lives on the project's Tira board
-("D2 TG Skill"), not as markdown files in `tickets/`.
+shape, `docs/commands.md` for the command reference, `docs/POLICIES.md`
+for the operational rules this skill follows; ticket-level status lives
+on the project's Tira board ("D2 TG Skill"), not as markdown files in
+`tickets/`.
 
 ## Implemented so far
 
@@ -53,3 +55,18 @@ shape; ticket-level status lives on the project's Tira board
   sender now prints `NEW TG MEDIA [chat_id] sender: <type>` instead of
   being silently skipped. **Not yet implemented**: downloading the file,
   transcribing voice, or replying to media — separate tickets.
+- `D2TG::Telegram::send_message`/`send_voice`/`split_text_utf16` (TGT-013)
+  — outbound support: `send_message` auto-splits text at 4000 UTF-16
+  units (never breaking a codepoint, so a supplementary-plane character
+  is never split across chunks); `send_voice` uploads an audio file via a
+  hand-built `multipart/form-data` body (no external multipart
+  dependency).
+- `D2TG::TTS::synthesize` (TGT-013) — shells out to `gtts-cli` (cloud
+  gTTS, per Q-001) then `ffmpeg` to produce an Ogg/Opus voice note. Dies
+  on either step's failure - no partial/degraded output is ever returned.
+- `D2TG::Reply::send_reply` + `cli/reply` (dispatched as `d2 tg.reply
+  <chat_id> <text...>`) (TGT-013) — synthesizes the voice note first, and
+  only sends anything to Telegram once synthesis succeeds: a reply is
+  always both a text message and a voice note, never text-only.
+  **Not yet implemented**: automatically wiring an inbound message to a
+  reply (the poller does not call this itself yet) - separate ticket.

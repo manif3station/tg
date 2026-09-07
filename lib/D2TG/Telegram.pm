@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use HTTP::Tiny;
 use JSON::PP qw(decode_json encode_json);
+use File::Spec;
 
 sub new {
     my ( $class, %args ) = @_;
@@ -18,13 +19,16 @@ sub new {
 }
 
 sub _call {
-    my ( $self, $method, $params ) = @_;
+    my ( $self, $method, $params, %opts ) = @_;
+
+    my $headers = $opts{headers} || { 'Content-Type' => 'application/json' };
+    my $content = defined $opts{raw_content} ? $opts{raw_content} : encode_json( $params || {} );
 
     my $res = $self->{ua}->post(
         "$self->{api}/$method",
         {
-            headers => { 'Content-Type' => 'application/json' },
-            content => encode_json( $params || {} ),
+            headers => $headers,
+            content => $content,
         }
     );
 
@@ -39,6 +43,37 @@ sub _call {
       unless $data->{ok};
 
     return $data->{result};
+}
+
+sub _utf16_units {
+    my ($codepoint) = @_;
+    return $codepoint > 0xFFFF ? 2 : 1;
+}
+
+sub split_text_utf16 {
+    my ( $text, $limit ) = @_;
+    $limit //= 4000;
+
+    my @chunks;
+    my $current = '';
+    my $units   = 0;
+
+    for my $ch ( split //, $text ) {
+        my $cost = _utf16_units( ord($ch) );
+
+        if ( $units + $cost > $limit && length $current ) {
+            push @chunks, $current;
+            $current = '';
+            $units   = 0;
+        }
+
+        $current .= $ch;
+        $units   += $cost;
+    }
+
+    push @chunks, $current if length $current;
+
+    return @chunks;
 }
 
 sub get_me {
@@ -69,6 +104,44 @@ sub get_file {
 
     my $result = $self->_call( 'getFile', { file_id => $file_id } );
     return $result->{file_path};
+}
+
+sub send_message {
+    my ( $self, $chat_id, $text, $limit ) = @_;
+
+    my @results;
+    for my $chunk ( split_text_utf16( $text, $limit ) ) {
+        push @results, $self->_call( 'sendMessage', { chat_id => $chat_id, text => $chunk } );
+    }
+    return \@results;
+}
+
+sub send_voice {
+    my ( $self, $chat_id, $file_path ) = @_;
+
+    open my $fh, '<:raw', $file_path
+      or die "D2TG::Telegram sendVoice: cannot read $file_path: $!\n";
+    local $/;
+    my $data = <$fh>;
+    close $fh;
+
+    my ( undef, undef, $filename ) = File::Spec->splitpath($file_path);
+    my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
+
+    my $body = "--$boundary\r\n"
+      . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
+      . "$chat_id\r\n"
+      . "--$boundary\r\n"
+      . qq{Content-Disposition: form-data; name="voice"; filename="$filename"\r\n}
+      . "Content-Type: audio/ogg\r\n\r\n"
+      . $data . "\r\n"
+      . "--$boundary--\r\n";
+
+    return $self->_call(
+        'sendVoice', undef,
+        headers     => { 'Content-Type' => "multipart/form-data; boundary=$boundary" },
+        raw_content => $body,
+    );
 }
 
 1;
@@ -109,5 +182,26 @@ C<update_id> seen, or the offset that was passed in if no updates arrived).
 
 Returns the C<file_path> for a given C<file_id>, for use with Telegram's
 file-download endpoint.
+
+=head2 send_message($chat_id, $text, $limit = 4000)
+
+Sends C<$text> to C<$chat_id> via C<sendMessage>, splitting it across
+multiple calls if it exceeds C<$limit> UTF-16 code units (Telegram's own
+hard cap is 4096; this defaults to 4000 to leave headroom). Returns an
+arrayref of the raw Telegram result for each call made.
+
+=head2 send_voice($chat_id, $file_path)
+
+Sends the audio file at C<$file_path> to C<$chat_id> via C<sendVoice>,
+built as a raw C<multipart/form-data> request body (no external multipart
+dependency). Dies if C<$file_path> cannot be read.
+
+=head2 split_text_utf16($text, $limit = 4000)
+
+Splits C<$text> into chunks of at most C<$limit> UTF-16 code units each,
+without ever splitting a single codepoint (so a supplementary-plane
+character, which encodes as a UTF-16 surrogate pair, is never divided
+across two chunks). Returns the list of chunks; joining them reproduces
+the original text exactly.
 
 =cut

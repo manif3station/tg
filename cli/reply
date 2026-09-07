@@ -1,0 +1,46 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use D2TG::Config;
+use D2TG::Telegram;
+use D2TG::Reply;
+
+if ( @ARGV < 2 ) {
+    print STDERR "Usage: d2 tg.reply <chat_id> <text...>\n";
+    exit 2;
+}
+
+my $chat_id = shift @ARGV;
+my $text    = join( ' ', @ARGV );
+
+my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
+
+D2TG::Reply::send_reply(
+    telegram => $telegram,
+    chat_id  => $chat_id,
+    text     => $text,
+);
+
+print "Replied to $chat_id\n";
+
+=head1 NAME
+
+reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
+
+=head1 SYNOPSIS
+
+    d2 tg.reply <chat_id> <text...>
+
+=head1 DESCRIPTION
+
+Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
+voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a
+text message and the voice note to C<chat_id> via L<D2TG::Telegram>. If
+synthesis fails, the command dies before sending anything - never a
+text-only reply.
+
+=cut

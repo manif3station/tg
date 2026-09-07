@@ -26,3 +26,15 @@ Revision history for the tg skill
         announce their type on stdout instead of being silently skipped.
       - D2TG::Config::state_db_path (TGT-012): extracted duplicated
         state-path resolution out of cli/poller and cli/approve.
+
+0.02  2026-09-07
+      - D2TG::Telegram send_message/send_voice/split_text_utf16 (TGT-013):
+        outbound Bot API support - sendMessage auto-splits at 4000 UTF-16
+        units without ever breaking a codepoint; sendVoice uploads via a
+        hand-built multipart/form-data body.
+      - D2TG::TTS (TGT-013): text -> gtts-cli mp3 -> ffmpeg/libopus ogg,
+        fatal on either step's failure (no degraded/partial output).
+      - D2TG::Reply + cli/reply (TGT-013): d2 tg.reply <chat_id> <text>
+        sends a reply as text + voice note together, never text-only -
+        synthesis happens before any Telegram call, so a TTS failure
+        sends nothing at all.
