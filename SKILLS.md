@@ -3,7 +3,8 @@
 **Status: early implementation (v0.01).** This file will grow into the
 full command/workflow reference as the skill is implemented (per TGIG-002
 through TGIG-005). See `README.md` for the intended install/config/run
-shape and `tickets/` for what's actually done vs. planned.
+shape; ticket-level status lives on the project's Tira board
+("D2 TG Skill"), not as markdown files in `tickets/`.
 
 ## Implemented so far
 
