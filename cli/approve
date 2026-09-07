@@ -1,0 +1,54 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use File::Spec;
+use File::Path qw(make_path);
+
+use D2TG::Config;
+use D2TG::Store;
+
+my $chat_id = shift @ARGV;
+
+if ( !defined $chat_id || $chat_id !~ /^-?\d+$/ ) {
+    print STDERR "Usage: d2 tg.approve <chat_id>\n";
+    exit 2;
+}
+
+my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+  // File::Spec->catdir( $Bin, '..' );
+my $state_dir = File::Spec->catdir( $skill_root, 'state' );
+make_path($state_dir) unless -d $state_dir;
+
+my $store = D2TG::Store->new(
+    db_path       => File::Spec->catfile( $state_dir, 'store.sqlite' ),
+    admin_chat_id => D2TG::Config::chat_id(),
+);
+
+if ( $store->approve($chat_id) ) {
+    print "Approved $chat_id\n";
+    exit 0;
+}
+
+print STDERR "Not pending: $chat_id (already allowed, or never sent a message)\n";
+exit 1;
+
+=head1 NAME
+
+approve - move a pending chat id into the allow-list, dispatched as C<d2 tg.approve>
+
+=head1 SYNOPSIS
+
+    d2 tg.approve <chat_id>
+
+=head1 DESCRIPTION
+
+Moves C<chat_id> from L<D2TG::Store>'s C<pending> table into its
+C<allow_list>. Prints C<Approved N> and exits 0 on success. If
+C<chat_id> was never pending (already allowed, or never messaged the
+bot), prints an error to STDERR and exits 1 rather than reporting a
+false success.
+
+=cut

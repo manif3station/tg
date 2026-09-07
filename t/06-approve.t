@@ -1,0 +1,87 @@
+use strict;
+use warnings;
+use Test::More;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use File::Spec;
+use File::Temp qw(tempfile tempdir);
+
+require D2TG::Store;
+
+sub fresh_db_path {
+    my ( $fh, $path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
+    close $fh;
+    unlink $path;
+    return $path;
+}
+
+{
+    my $db = fresh_db_path();
+    my $store = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+    $store->add_pending(111);
+
+    my $result = $store->approve(111);
+
+    ok( $result, 'approve returns a true result for a genuinely pending chat id' );
+    ok( $store->is_allowed(111), 'the chat id is now allow-listed' );
+    is_deeply( [ $store->pending_chat_ids ], [], 'the chat id is no longer pending' );
+}
+
+{
+    my $db = fresh_db_path();
+    my $store = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+
+    my $result = $store->approve(222);
+
+    ok( !$result, 'approve returns false for a chat id that was never pending' );
+    ok( !$store->is_allowed(222), 'it is not allow-listed either' );
+}
+
+{
+    my $db = fresh_db_path();
+    my $store = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+    $store->add_pending(333);
+    $store->approve(333);
+
+    my $result = $store->approve(333);
+
+    ok( !$result, 'approving an already-approved chat id a second time reports false (idempotent, not an error)' );
+    ok( $store->is_allowed(333), 'it remains allow-listed' );
+}
+
+{
+    my $approve_cli = File::Spec->catfile( $Bin, '..', 'cli', 'approve' );
+    my $skill_root  = tempdir( CLEANUP => 1 );
+
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN}                     = 'test-token';
+    $ENV{D2TG_CHAT_ID}                   = '999';
+    $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} = $skill_root;
+
+    my $db_path = File::Spec->catfile( $skill_root, 'state', 'store.sqlite' );
+    require File::Path;
+    File::Path::make_path( File::Spec->catdir( $skill_root, 'state' ) );
+    D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 )->add_pending(444);
+
+    my $out = `$approve_cli 444 2>/tmp/d2tg-approve-stderr.$$`;
+    my $rc  = $? >> 8;
+    unlink "/tmp/d2tg-approve-stderr.$$";
+
+    is( $rc, 0, 'cli/approve exits 0 for a genuinely pending chat id' );
+    like( $out, qr/Approved 444/, 'cli/approve confirms the approval' );
+
+    my $out2 = `$approve_cli 555 2>/tmp/d2tg-approve-stderr2.$$`;
+    my $rc2  = $? >> 8;
+    my $err2 = do { open my $fh, '<', "/tmp/d2tg-approve-stderr2.$$" or die $!; local $/; <$fh> };
+    unlink "/tmp/d2tg-approve-stderr2.$$";
+
+    isnt( $rc2, 0, 'cli/approve exits non-zero for a chat id that was never pending' );
+    like( $err2, qr/Not pending/, 'cli/approve reports the failure clearly on STDERR' );
+
+    my $out3 = `$approve_cli 2>/tmp/d2tg-approve-stderr3.$$`;
+    my $rc3  = $? >> 8;
+    unlink "/tmp/d2tg-approve-stderr3.$$";
+    isnt( $rc3, 0, 'cli/approve with no argument exits non-zero' );
+}
+
+done_testing();

@@ -66,6 +66,26 @@ sub add_pending {
     return;
 }
 
+sub approve {
+    my ( $self, $chat_id ) = @_;
+
+    my ($was_pending) = $self->{dbh}->selectrow_array(
+        'SELECT 1 FROM pending WHERE chat_id = ?', undef, $chat_id,
+    );
+
+    return 0 unless $was_pending;
+
+    $self->{dbh}->do(
+        'INSERT OR IGNORE INTO allow_list (chat_id) VALUES (?)',
+        undef, $chat_id,
+    );
+    $self->{dbh}->do(
+        'DELETE FROM pending WHERE chat_id = ?', undef, $chat_id,
+    );
+
+    return 1;
+}
+
 sub pending_chat_ids {
     my ($self) = @_;
 
