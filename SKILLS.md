@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.05).** This file is a procedure to
+**Status: early implementation (v0.06).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -34,12 +34,18 @@ Collect these before starting:
    `D2TG_CHAT_ID` first - see step 4 below) - or ask the user directly
    for their Telegram numeric user id (e.g. via `@userinfobot`). This
    becomes `D2TG_CHAT_ID`.
-3. **`gtts-cli` and `ffmpeg`** installed on the machine that will run
-   `d2 tg.reply` - required for the voice half of every reply. Check
-   with `which gtts-cli ffmpeg`.
-4. **A local `whisper` install** with a multilingual (non `*.en`) model,
-   if inbound voice-note transcription is wanted. Check with
-   `which whisper`. Not required for text-only inbound traffic.
+3. **`ffmpeg`** — installs automatically (`aptfile`) as part of step 3
+   below on Debian-like hosts. Check with `which ffmpeg` if unsure.
+4. **`gtts-cli`** (`pip install --user gTTS`, or `--break-system-packages`
+   on PEP-668-enforced hosts like current Debian/Ubuntu) — required for
+   the voice half of every `d2 tg.reply`. Not yet automatic (TGT-025):
+   `dashboard`'s own `requirements.txt` installer aborts the whole skill
+   install on PEP-668 hosts, so this stays a manual step for now. Check
+   with `which gtts-cli`.
+5. **A local `whisper` install** (`pip install --user openai-whisper`,
+   same PEP-668 caveat) with a multilingual (non `*.en`) model, if
+   inbound voice-note transcription is wanted. Check with `which
+   whisper`. Not required for text-only inbound traffic.
 
 ## 3. Install
 
@@ -102,7 +108,7 @@ names what to do and exactly what confirms it worked.
    is not a silent-failure design (see `docs/POLICIES.md`).
 6. **Optional: exercise voice and media.** Ask the user to send a voice
    note and a photo. Expect `NEW TG VOICE [...]: <transcript>` (needs
-   local `whisper`, step 2.4) and `NEW TG MEDIA [...]: photo
+   local `whisper`, step 2.5) and `NEW TG MEDIA [...]: photo
    <local_path>` respectively, each followed by its own `REPLY WITH`
    line.
 7. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-5 have

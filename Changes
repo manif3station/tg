@@ -93,3 +93,13 @@ Revision history for the tg skill
         REPLY WITH: d2 tg.reply <chat_id> "..." template line - never on
         the pending-notification or error lines. No automatic send;
         this only makes composing the real reply fast.
+
+0.06  2026-09-07
+      - aptfile (TGT-025): ffmpeg now installs automatically as part of
+        'dashboard skills install tg' on Debian-like hosts. gtts-cli and
+        whisper stay manual for now - shipping a requirements.txt was
+        found to abort the WHOLE skill install on any PEP-668-enforced
+        host (modern Debian/Ubuntu), since dashboard's own
+        _install_skill_requirements_txt aborts the rest of the install
+        chain on its first failure. That's a gap in Developer Dashboard
+        itself, not something this skill can safely work around.

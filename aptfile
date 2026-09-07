@@ -1,0 +1,6 @@
+# System packages this skill needs, installed automatically by
+# `dashboard skills install tg` on Debian-like hosts.
+#
+# ffmpeg - used by D2TG::TTS to convert gTTS's mp3 output to Ogg/Opus
+# for Telegram's sendVoice.
+ffmpeg
