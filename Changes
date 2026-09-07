@@ -277,3 +277,13 @@ Revision history for the tg skill
         threaded under the original message in Telegram's UI - instead
         of always arriving as a fresh, unthreaded message. Omitting the
         flag is unchanged from before.
+
+0.21  2026-09-07
+      - FEATURE (TGT-041, live example - "where is msg80 at msg81 when
+        81 is replying to 80"): the reply-context suffix
+        ("(replying to <sender>: ...)") now also names the original
+        message's own message_id, e.g. "(replying to bob [msg #80]:
+        document ...)" - previously only the reply's own message
+        (TGT-040) named its id, leaving the original message's id
+        invisible unless the operator scrolled back to find its own
+        line.

@@ -118,9 +118,11 @@ sub _reply_context_suffix {
     my $original = $message->{reply_to_message};
     return '' unless $original;
 
-    my $original_sender = $original->{from}{username} // 'unknown';
+    my $original_sender    = $original->{from}{username} // 'unknown';
+    my $original_message_id = $original->{message_id};
+    my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
 
-    my $what = _stored_summary( $store, $chat_id, $original->{message_id} );
+    my $what = _stored_summary( $store, $chat_id, $original_message_id );
 
     unless ( defined $what ) {
         my $original_text = $original->{text};
@@ -134,7 +136,7 @@ sub _reply_context_suffix {
         }
     }
 
-    return qq{ (replying to $original_sender: $what)};
+    return qq{ (replying to $original_sender$id_note: $what)};
 }
 
 sub _stored_summary {
@@ -340,10 +342,12 @@ the two C<*ERROR> lines never get one - there is nothing to reply to yet.
 
 If Telegram's C<reply_to_message> field is present on the message (the
 sender used Telegram's native reply-to-message feature), every content
-line above also gets a C<< (replying to <sender>: <snippet-or-kind>) >>
-suffix (TGT-029), naming who/what the reply targets: the original
-sender's username, and a description of the original message. A message
-with no C<reply_to_message> gets no suffix at all. See
+line above also gets a C<< (replying to <sender> [msg #N]: <snippet-or-
+kind>) >> suffix (TGT-029, message id added TGT-041), naming who/what
+the reply targets: the original sender's username, that message's own
+C<message_id> (omitted, along with its brackets, only if Telegram's
+payload didn't carry one), and a description of the original message. A
+message with no C<reply_to_message> gets no suffix at all. See
 C<_reply_context_suffix>.
 
 As of TGT-038, that description is looked up first in C<$store> (via

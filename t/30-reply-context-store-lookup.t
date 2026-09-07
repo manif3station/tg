@@ -55,7 +55,7 @@ sub new_store {
 
     like(
         $out,
-        qr{replying to bob: document /tmp/media/report\.pdf},
+        qr{replying to bob \[msg #100\]: document /tmp/media/report\.pdf},
         'reply to a stored document message shows the stored local_path, not just "document"'
     );
 }
@@ -88,7 +88,7 @@ sub new_store {
 
     like(
         $out,
-        qr{replying to bob: call me back at five},
+        qr{replying to bob \[msg #200\]: call me back at five},
         'reply to a stored voice message shows the stored transcript, not just "voice"'
     );
 }
@@ -120,7 +120,7 @@ sub new_store {
 
     like(
         $out,
-        qr{replying to bob: photo\)},
+        qr{replying to bob \[msg #300\]: photo\)},
         'reply to a message with no stored record falls back to the Telegram-payload media-kind behavior unchanged'
     );
 }

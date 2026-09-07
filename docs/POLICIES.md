@@ -50,6 +50,17 @@ for it (it predates this feature, or its sender was never allow-listed
 at the time) does it fall back to Telegram's own `reply_to_message`
 payload, unchanged from before.
 
+## The reply-context suffix names the original message's own id too
+
+Live example (TGT-041): "where is msg80 at msg81 when 81 is replying to
+80" - TGT-040 named each message's own id, but the reply-context suffix
+itself still only named the original sender and a content description,
+not that message's own id. The suffix now reads "(replying to bob [msg
+#80]: document ...)" - the bracketed id is the original message's own
+`message_id`, sourced directly from Telegram's `reply_to_message`
+payload (always present on a native reply, independent of whether a
+stored record was found for the store-lookup-first behavior above).
+
 ## A reply can thread natively under the original Telegram message
 
 Live follow-up question (TGT-040): "where is the message id?" - every
