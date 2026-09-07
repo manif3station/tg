@@ -28,6 +28,20 @@ sub send_reply {
     return { text => $text_result, voice => $voice_result };
 }
 
+sub parse_cli_args {
+    my (@args) = @_;
+
+    my $reply_to_message_id;
+    if ( @args >= 2 && $args[-2] eq '--reply-to-message-id' ) {
+        ( undef, $reply_to_message_id ) = splice( @args, -2 );
+    }
+
+    my $chat_id = shift @args;
+    my $text    = join( ' ', @args );
+
+    return ( $chat_id, $text, $reply_to_message_id );
+}
+
 1;
 
 =head1 NAME
@@ -67,5 +81,22 @@ through to both C<send_voice> and C<send_message>, so the reply threads
 natively under the original message in Telegram's UI instead of arriving
 as a fresh, unthreaded message. Omitting it is unchanged from before
 this ticket.
+
+=head2 parse_cli_args(@ARGV)
+
+Parses C<cli/reply>'s raw argument list into C<($chat_id, $text,
+$reply_to_message_id)> (TGT-042). C<--reply-to-message-id <id>> is
+recognized I<only> in the trailing position - the last two elements of
+the argument list, matching exactly how the poller's own C<REPLY WITH>
+template (TGT-040) always appends it. This is deliberately narrower than
+scanning the whole argument list for that token: reply text passed as
+multiple unquoted shell words could otherwise legitimately contain the
+literal string C<--reply-to-message-id> (e.g. discussing the flag
+itself), which a whole-list scan would misinterpret as the flag and
+silently corrupt the text. C<$reply_to_message_id> is C<undef> when the
+flag isn't given (or isn't trailing) - unchanged from before this
+ticket. Does not validate that C<$chat_id> or C<$reply_to_message_id>
+are numeric; C<cli/reply> does that itself before using the parsed
+result.
 
 =cut

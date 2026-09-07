@@ -9,31 +9,16 @@ use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Reply;
 
-my $reply_to_message_id;
-{
-    my @rest;
-    while (@ARGV) {
-        my $arg = shift @ARGV;
-        if ( $arg eq '--reply-to-message-id' ) {
-            $reply_to_message_id = shift @ARGV;
-        }
-        else {
-            push @rest, $arg;
-        }
-    }
-    @ARGV = @rest;
-}
+my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@ARGV);
 
-if ( @ARGV < 2
-    || $ARGV[0] !~ /^-?\d+$/
+if ( !defined $chat_id
+    || $chat_id !~ /^-?\d+$/
+    || !length $text
     || ( defined $reply_to_message_id && $reply_to_message_id !~ /^\d+$/ ) )
 {
     print STDERR "Usage: d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]\n";
     exit 2;
 }
-
-my $chat_id = shift @ARGV;
-my $text    = join( ' ', @ARGV );
 
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 
@@ -67,13 +52,17 @@ own guard, TGT-027) before anything else runs; a non-numeric first
 argument prints the same C<Usage> message and exits 2, without
 constructing L<D2TG::Telegram> or attempting any network call.
 
-C<--reply-to-message-id <id>> (TGT-040) is optional and may appear
-anywhere in the argument list; when given, both the voice and text sends
+C<--reply-to-message-id <id>> (TGT-040) is optional and is recognized
+only in the I<trailing> position - the very last two arguments, matching
+exactly how the poller's own C<REPLY WITH> template always prints it
+(TGT-042: recognizing it anywhere in the argument list would make free
+reply text ambiguous with the flag itself whenever that text is passed
+as multiple unquoted shell words containing the literal token
+C<--reply-to-message-id>). When given, both the voice and text sends
 carry Telegram's own C<reply_to_message_id>, so the reply threads
 natively under the original message in Telegram's UI instead of arriving
-as a fresh, unthreaded message. The poller's own C<REPLY WITH> template
-(see L<D2TG::Poller>) already fills this in for you when the inbound
-message it names has a known C<message_id>. Omitting it is unchanged
-from before this ticket - no C<reply_to_message_id> is sent.
+as a fresh, unthreaded message. See L<D2TG::Reply/parse_cli_args>.
+Omitting it is unchanged from before TGT-040 - no C<reply_to_message_id>
+is sent.
 
 =cut

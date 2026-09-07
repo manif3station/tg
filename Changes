@@ -287,3 +287,15 @@ Revision history for the tg skill
         (TGT-040) named its id, leaving the original message's id
         invisible unless the operator scrolled back to find its own
         line.
+
+0.22  2026-09-07
+      - BUGFIX (TGT-042, hourly bug-hunt finding): cli/reply's
+        --reply-to-message-id flag (TGT-040) was recognized anywhere in
+        the argument list, so reply text passed as multiple unquoted
+        shell words could be silently corrupted if it happened to
+        contain the literal token "--reply-to-message-id". The parsing
+        logic is now extracted into D2TG::Reply::parse_cli_args and only
+        recognizes the flag in the trailing position - the last two
+        arguments - matching exactly how the poller's own REPLY WITH
+        template always appends it. Trailing usage (the documented/
+        template usage) is unaffected.

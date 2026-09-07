@@ -99,6 +99,8 @@ already allowed, or was never pending at all.
 
 ## `d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]`
 
+(the flag, when given, must be the last two arguments - see below)
+
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)
 fails for any reason, the command dies before sending anything at all;
@@ -111,14 +113,18 @@ surrogate pair, is always kept in one chunk).
 TGT-027) — a non-numeric first argument exits 2 with a `Usage` message
 on STDERR, before any Telegram call is attempted.
 
-`--reply-to-message-id <id>` (TGT-040, may appear anywhere in the
-argument list) is optional; when given, both the voice and text sends
-carry Telegram's own `reply_to_message_id`, so the reply threads
-natively under the original message in Telegram's UI instead of arriving
-as a fresh, unthreaded message. The poller's `REPLY WITH` template
-already fills this in with the inbound message's own `message_id` when
-one is known - copy the template as printed and it just works. Omitting
-the flag is unchanged from before this ticket.
+`--reply-to-message-id <id>` (TGT-040) is optional and is recognized
+only in the **trailing** position - the last two arguments, matching
+exactly how the `REPLY WITH` template always prints it (TGT-042:
+recognizing it anywhere would make free reply text ambiguous with the
+flag itself, whenever that text is passed as multiple unquoted shell
+words containing the literal token `--reply-to-message-id`). When given,
+both the voice and text sends carry Telegram's own `reply_to_message_id`,
+so the reply threads natively under the original message in Telegram's
+UI instead of arriving as a fresh, unthreaded message. The poller's
+`REPLY WITH` template already fills this in with the inbound message's
+own `message_id` when one is known - copy the template as printed and it
+just works. Omitting the flag is unchanged from before TGT-040.
 
 Requires `gtts-cli` and `ffmpeg` to be installed on the machine running
 this command.
@@ -159,7 +165,7 @@ implemented and where:
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; naming the message's own `message_id` - TGT-040; plus a `(replying to ... [msg #N]: ...)` suffix when the message is itself a reply, naming the original message's own id (TGT-041) and preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template (now including `--reply-to-message-id` - TGT-040), non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
-| `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040). |
+| `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040). `parse_cli_args` — parses `cli/reply`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042). |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
 

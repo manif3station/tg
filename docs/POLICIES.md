@@ -50,6 +50,19 @@ for it (it predates this feature, or its sender was never allow-listed
 at the time) does it fall back to Telegram's own `reply_to_message`
 payload, unchanged from before.
 
+## d2 tg.reply's --reply-to-message-id flag only ever means what it looks like
+
+Hourly bug-hunt finding (TGT-042): the flag (TGT-040) was originally
+recognized anywhere in `cli/reply`'s argument list, which made it
+ambiguous with free reply text - text passed as multiple unquoted shell
+words could, in principle, contain the literal token
+`--reply-to-message-id` and have it (and the following word) silently
+stripped out and misread as the flag, corrupting the sent message
+without any error. It is now recognized only in the trailing position -
+the last two arguments - matching exactly how the poller's own `REPLY
+WITH` template always appends it, so there is no longer any ambiguity
+between "this is reply text" and "this is the flag."
+
 ## The reply-context suffix names the original message's own id too
 
 Live example (TGT-041): "where is msg80 at msg81 when 81 is replying to
