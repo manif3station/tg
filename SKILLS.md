@@ -11,7 +11,9 @@ shape; ticket-level status lives on the project's Tira board
 - `D2TG::Config` (`lib/D2TG/Config.pm`) — reads `D2TG_TOKEN`/`D2TG_CHAT_ID`
   from the environment; `require_chat_id_or_warn()` is the startup guard
   that refuses to proceed (warning to STDERR) when `D2TG_CHAT_ID` is
-  unset or empty.
+  unset or empty. `state_db_path()` resolves (and creates) the skill's
+  `state/store.sqlite` path — the single source of truth `cli/poller`
+  and `cli/approve` both call, instead of each duplicating the logic.
 - `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard,
   then runs `D2TG::Poller`'s real long-poll loop against a `D2TG::Store`
   access-control gate until `SIGTERM`/`SIGINT`. See the `D2TG::Poller` and

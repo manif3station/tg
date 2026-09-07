@@ -70,4 +70,14 @@ prints a warning to C<STDERR> naming the missing variable and returns
 false. Callers (e.g. the poller entrypoint) are expected to refuse to
 start when this returns false, rather than falling back to a default.
 
+=head2 state_db_path(default_root => $path)
+
+Resolves and returns the path to this skill's SQLite state file
+(C<state/store.sqlite>), creating the C<state/> directory if needed.
+Resolves the skill root from C<DEVELOPER_DASHBOARD_SKILL_ROOT> if set,
+otherwise from the given C<default_root> (callers typically pass
+C<File::Spec-E<gt>catdir($Bin, '..')> for this). Both C<cli/poller> and
+C<cli/approve> use this so the resolution logic exists in exactly one
+place.
+
 =cut

@@ -24,3 +24,5 @@ Revision history for the tg skill
         stdout line the first time a new sender is queued pending.
       - Media recognition (TGT-011): photo/document/voice messages now
         announce their type on stdout instead of being silently skipped.
+      - D2TG::Config::state_db_path (TGT-012): extracted duplicated
+        state-path resolution out of cli/poller and cli/approve.
