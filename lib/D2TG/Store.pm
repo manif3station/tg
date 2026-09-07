@@ -205,6 +205,43 @@ sub unread_messages {
     return @$rows;
 }
 
+sub recent_messages {
+    my ( $self, $limit ) = @_;
+    $limit //= 10;
+
+    my $rows = $self->{dbh}->selectall_arrayref(
+        'SELECT chat_id, message_id, sender, summary, created_at
+         FROM messages ORDER BY created_at DESC, message_id DESC LIMIT ?',
+        { Slice => {} }, $limit,
+    );
+
+    return @$rows;
+}
+
+sub messages_in_range {
+    my ( $self, %args ) = @_;
+
+    my @where;
+    my @bind;
+
+    if ( defined $args{since} ) {
+        push @where, 'created_at >= ?';
+        push @bind,  $args{since};
+    }
+    if ( defined $args{until} ) {
+        push @where, 'created_at <= ?';
+        push @bind,  $args{until};
+    }
+
+    my $sql = 'SELECT chat_id, message_id, sender, summary, created_at FROM messages';
+    $sql .= ' WHERE ' . join( ' AND ', @where ) if @where;
+    $sql .= ' ORDER BY created_at';
+
+    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
+
+    return @$rows;
+}
+
 sub disconnect {
     my ($self) = @_;
 
@@ -306,6 +343,20 @@ Returns the list of all stored messages (TGT-047) not yet marked read
 (C<mark_read>), as a list of hashrefs C<{ chat_id, message_id, sender,
 summary, created_at }>, ordered oldest first. Empty list if there are
 none - never dies on an empty store.
+
+=head2 recent_messages($limit = 10)
+
+Returns the C<$limit> most recently recorded messages (TGT-048), newest
+first, as a list of hashrefs C<{ chat_id, message_id, sender, summary,
+created_at }>. Returns fewer than C<$limit> (down to none) without
+error if the store has fewer rows than that.
+
+=head2 messages_in_range(since => $iso8601, until => $iso8601)
+
+Returns every stored message (TGT-048) with C<created_at> between
+C<since> and C<until> inclusive, oldest first. Either bound may be
+omitted (an open-ended range on that side); omitting both returns every
+stored message, oldest first.
 
 =head2 disconnect
 

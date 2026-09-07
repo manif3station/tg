@@ -355,3 +355,11 @@ Revision history for the tg skill
         the other use statements at the top, matching D2TG::Poller's
         established convention for compile-time declarations. No
         behavior change - full suite unaffected.
+
+0.29  2026-09-07
+      - FEATURE (TGT-048, live design request): new d2 tg.history
+        command lists stored messages oldest first. Without --since/
+        --until, shows the 10 most recent. With either or both given
+        (ISO 8601, open-ended on the omitted side), shows only messages
+        in that range. New D2TG::Store::recent_messages/
+        messages_in_range back it.

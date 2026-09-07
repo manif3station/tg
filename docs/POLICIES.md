@@ -232,6 +232,14 @@ every stored message not yet marked read (TGT-046), so "what's still
 waiting for a reply?" always has a direct answer instead of relying on
 scrollback.
 
+## Stored message history is browsable, not just queryable by unread status
+
+Live design follow-up (TGT-048): `d2 tg.unread` (TGT-047) answers "what's
+outstanding" but not "what happened recently" or "what happened in this
+window." `d2 tg.history` fills that gap: defaults to the 10 most recent
+stored messages, or an explicit `--since`/`--until` range, independent of
+read/unread status.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

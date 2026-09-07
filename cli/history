@@ -1,0 +1,72 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+use File::Spec;
+
+use D2TG::Config;
+use D2TG::Store;
+
+my ( $since, $until );
+{
+    my @rest;
+    while (@ARGV) {
+        my $arg = shift @ARGV;
+        if ( $arg eq '--since' ) {
+            $since = shift @ARGV;
+        }
+        elsif ( $arg eq '--until' ) {
+            $until = shift @ARGV;
+        }
+        else {
+            push @rest, $arg;
+        }
+    }
+    @ARGV = @rest;
+}
+
+my $store = D2TG::Store->new(
+    db_path => D2TG::Config::state_db_path(
+        default_root => File::Spec->catdir( $Bin, '..' )
+    ),
+    admin_chat_id => D2TG::Config::chat_id(),
+);
+
+my @messages =
+  ( defined $since || defined $until )
+  ? $store->messages_in_range( since => $since, until => $until )
+  : reverse $store->recent_messages(10);
+
+if ( !@messages ) {
+    print "No messages found.\n";
+    exit 0;
+}
+
+for my $msg (@messages) {
+    print "[$msg->{chat_id}] msg #$msg->{message_id} $msg->{sender} ($msg->{created_at}): $msg->{summary}\n";
+}
+
+=head1 NAME
+
+history - view past messages by date range, dispatched as C<d2 tg.history>
+
+=head1 SYNOPSIS
+
+    d2 tg.history
+    d2 tg.history --since 2026-09-01T00:00:00
+    d2 tg.history --until 2026-09-07T23:59:59
+    d2 tg.history --since 2026-09-01T00:00:00 --until 2026-09-07T23:59:59
+
+=head1 DESCRIPTION
+
+Lists stored messages (TGT-038) oldest first: chat id, message id,
+sender, timestamp, and the stored summary. Without C<--since>/C<--until>
+(TGT-048), shows the 10 most recent messages. With either or both given
+(ISO 8601 timestamps, matching C<created_at>'s own stored format), shows
+every message in that range instead - an open-ended range on whichever
+side is omitted. Prints C<No messages found.> and exits 0 when nothing
+matches, rather than a blank/confusing output.
+
+=cut
