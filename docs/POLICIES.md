@@ -44,6 +44,16 @@ whole poller loop, since a live bridge processing many messages should
 keep serving the rest of them. `cli/poller` reports such a failure on
 stderr (`TRANSCRIBE ERROR [chat_id] sender: <message>`) and continues.
 
+## The poll loop itself survives transient failures
+
+Beyond individual voice/media failures (above), the poll cycle itself
+(`get_updates`) can fail transiently - a network blip, a momentary
+Telegram-side error. `run_once_safe` (TGT-028, a real production
+incident: an uncaught transient failure once silently killed the whole
+poller) catches this, logs `POLL ERROR: <message>` to stderr, waits a
+short backoff, and retries - the poller process itself must never die
+from a failure that will very likely resolve on its own.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

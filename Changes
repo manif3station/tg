@@ -109,3 +109,23 @@ Revision history for the tg skill
         in a developer-dashboard:latest container) this always means the
         configured D2TG_TOKEN is rejected by Telegram directly, not a
         code bug.
+
+0.07  2026-09-07
+      - BUGFIX (TGT-028, live production incident): cli/poller's loop
+        had no error handling around D2TG::Poller::run_once - any
+        transient getUpdates failure (a real one hit in production: 599
+        Internal Exception, a low-level connection failure) propagated
+        uncaught and silently killed the whole poller process, which
+        then never fetched again until manually restarted. Fixed:
+        D2TG::Poller::run_once_safe wraps run_once, logging POLL ERROR
+        to stderr and retrying after a short backoff instead of dying.
+      - D2TG::Telegram and D2TG::Download now use LWP::UserAgent instead
+        of HTTP::Tiny (owner-directed, TGT-028) - cpanfile gained
+        LWP::UserAgent as a new dependency.
+      - BUGFIX found while verifying TGT-028's own fix: cli/poller never
+        set $|=1 (autoflush). Previously this didn't matter because any
+        transient failure crashed the process, which flushes all
+        filehandles on exit; now that run_once_safe keeps the process
+        alive through failures, STDOUT could sit block-buffered
+        indefinitely instead of reaching the watched stream in real
+        time. Fixed with an explicit $|=1.

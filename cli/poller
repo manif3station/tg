@@ -13,6 +13,15 @@ use D2TG::Store;
 use D2TG::Download;
 use D2TG::Transcribe;
 
+# Autoflush STDOUT. Without this, STDOUT is fully block-buffered once
+# connected to a pipe (as it always is under a Tira monitor job or any
+# other non-TTY consumer) - since TGT-028 made this loop resilient to
+# transient failures instead of dying on the first one, the process no
+# longer exits promptly to force a flush, so every line (including real
+# inbound messages) could sit unflushed indefinitely instead of reaching
+# the watched stream in real time. STDERR is unbuffered by default.
+$| = 1;
+
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
 print "d2tg poller starting up (token set: "
@@ -48,7 +57,7 @@ my $download_media = sub {
 };
 
 until ($shutting_down) {
-    ( undef, $offset ) = D2TG::Poller::run_once(
+    $offset = D2TG::Poller::run_once_safe(
         $telegram, $offset, $store,
         transcribe_voice => $transcribe_voice,
         download_media   => $download_media,
@@ -75,6 +84,10 @@ and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
 downloaded temp file is removed either way. A photo or document message
 is downloaded via L<D2TG::Download> and its local path printed (kept,
 unlike the transient voice download). A download or transcription
-failure is reported on STDERR and does not stop the loop.
+failure is reported on STDERR and does not stop the loop. The loop
+itself runs via C<run_once_safe> (TGT-028), so a transient failure
+inside the poll cycle (e.g. a network blip) is logged as C<POLL ERROR>
+on STDERR and retried after a short backoff, rather than killing the
+whole process.
 
 =cut

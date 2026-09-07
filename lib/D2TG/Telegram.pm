@@ -2,7 +2,8 @@ package D2TG::Telegram;
 
 use strict;
 use warnings;
-use HTTP::Tiny;
+use LWP::UserAgent;
+use HTTP::Request;
 use JSON::PP qw(decode_json encode_json);
 use File::Spec;
 
@@ -14,7 +15,7 @@ sub new {
     return bless {
         token => $token,
         api   => "https://api.telegram.org/bot$token",
-        ua    => $args{ua} || HTTP::Tiny->new,
+        ua    => $args{ua} || LWP::UserAgent->new,
     }, $class;
 }
 
@@ -24,18 +25,16 @@ sub _call {
     my $headers = $opts{headers} || { 'Content-Type' => 'application/json' };
     my $content = defined $opts{raw_content} ? $opts{raw_content} : encode_json( $params || {} );
 
-    my $res = $self->{ua}->post(
-        "$self->{api}/$method",
-        {
-            headers => $headers,
-            content => $content,
-        }
-    );
+    my $req = HTTP::Request->new( POST => "$self->{api}/$method" );
+    $req->header( %$headers );
+    $req->content($content);
 
-    die "D2TG::Telegram $method: HTTP request failed (status $res->{status} $res->{reason})\n"
-      unless $res->{success};
+    my $res = $self->{ua}->request($req);
 
-    my $data = eval { decode_json( $res->{content} ) };
+    die "D2TG::Telegram $method: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
+      unless $res->is_success;
+
+    my $data = eval { decode_json( $res->decoded_content ) };
     die "D2TG::Telegram $method: response was not valid JSON\n" unless $data;
 
     die "D2TG::Telegram $method failed: "
@@ -166,8 +165,8 @@ D2TG::Telegram - minimal Telegram Bot API client
 
 Raw HTTP client against the Telegram Bot API - no SDK dependency, matching
 the C<~/skills/tg> blueprint's own "no heavy SDK" principle. Uses
-L<HTTP::Tiny> by default; pass C<ua> to the constructor to inject a
-different (or mock) client for testing.
+L<LWP::UserAgent> by default (TGT-028); pass C<ua> to the constructor to
+inject a different (or mock) client for testing.
 
 =head1 METHODS
 

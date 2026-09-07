@@ -87,8 +87,8 @@ implemented and where:
 | Module | What it does |
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path. |
-| `D2TG::Telegram` | Raw HTTP Bot API client (`HTTP::Tiny`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
-| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines, the `REPLY WITH` template, non-fatal error handling for voice/media. |
+| `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines, the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure. |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
@@ -116,3 +116,13 @@ Fix: open `@BotFather` on Telegram, `/mybots` → the bot → **API Token**
 `D2TG_TOKEN` and retry. Quick standalone check before retrying anything
 else: `curl https://api.telegram.org/bot<token>/getMe` - if that alone
 returns 401, the token is the problem, not this skill.
+
+### `POLL ERROR: ...` lines on stderr, and the poller keeps running
+
+Expected and correct (TGT-028): a transient failure inside one poll
+cycle (network blip, a temporary Telegram-side error, etc.) is caught by
+`run_once_safe`, logged as `POLL ERROR: <message>`, and retried after a
+short backoff - the poller does not stop. If these repeat continuously
+with the same message, treat it like any other error line (e.g. a
+repeating "401 Unauthorized" `POLL ERROR` means the token problem above,
+not a new bug).

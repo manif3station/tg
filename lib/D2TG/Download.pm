@@ -2,7 +2,7 @@ package D2TG::Download;
 
 use strict;
 use warnings;
-use HTTP::Tiny;
+use LWP::UserAgent;
 use File::Temp qw(tempfile);
 
 sub download_file {
@@ -12,17 +12,17 @@ sub download_file {
     die "D2TG::Download::download_file: no file_path returned for $file_id\n"
       unless defined $file_path;
 
-    my $ua  = $args{ua} || HTTP::Tiny->new;
+    my $ua  = $args{ua} || LWP::UserAgent->new;
     my $url = $telegram->file_download_url($file_path);
 
     my $res = $ua->get($url);
-    die "D2TG::Download::download_file: HTTP request failed (status $res->{status} $res->{reason})\n"
-      unless $res->{success};
+    die "D2TG::Download::download_file: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
+      unless $res->is_success;
 
     my $suffix = $file_path =~ /(\.[A-Za-z0-9]+)$/ ? $1 : '';
     my ( $fh, $local_path ) = tempfile( SUFFIX => $suffix, UNLINK => 0 );
     binmode $fh;
-    print {$fh} $res->{content};
+    print {$fh} $res->decoded_content( charset => 'none' );
     close $fh;
 
     return $local_path;
@@ -50,7 +50,7 @@ local temp file, preserving the original file extension.
 
 Returns the local path to the downloaded file. Dies if C<get_file>
 returns no C<file_path>, or if the download request fails. C<ua> is
-optional and defaults to L<HTTP::Tiny>; tests inject a fake here
-instead.
+optional and defaults to L<LWP::UserAgent> (TGT-028); tests inject a
+fake here instead.
 
 =cut

@@ -3,6 +3,7 @@ use warnings;
 use Test::More;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+use HTTP::Response;
 
 require D2TG::Telegram;
 
@@ -13,24 +14,31 @@ sub new {
     return bless { responses => $args{responses} || [], calls => [] }, $class;
 }
 
-sub post {
-    my ( $self, $url, $opts ) = @_;
-    push @{ $self->{calls} }, { method => 'post', url => $url, opts => $opts };
+sub request {
+    my ( $self, $req ) = @_;
+    push @{ $self->{calls} }, { method => 'request', url => $req->uri->as_string, req => $req };
     return shift @{ $self->{responses} };
 }
 
 package main;
 
+sub http_response {
+    my (%args) = @_;
+    my $res = HTTP::Response->new( $args{code} // 200, $args{message} // 'OK' );
+    $res->header( 'Content-Type' => 'application/json; charset=utf-8' );
+    $res->content( $args{content} ) if defined $args{content};
+    return $res;
+}
+
 {
     my $ua = Fake::UA->new(
         responses => [
-            {
-                success => 1,
+            http_response(
                 content => '{"ok":true,"result":['
                   . '{"update_id":100,"message":{"text":"hi"}},'
                   . '{"update_id":101,"message":{"text":"there"}}'
                   . ']}',
-            },
+            ),
         ],
     );
 
@@ -47,10 +55,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            {
-                success => 1,
-                content => '{"ok":true,"result":{"file_path":"voice/file_1.oga"}}',
-            },
+            http_response( content => '{"ok":true,"result":{"file_path":"voice/file_1.oga"}}' ),
         ],
     );
 
@@ -64,10 +69,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            {
-                success => 1,
-                content => '{"ok":true,"result":{"id":42,"is_bot":true,"username":"d2tg_bot"}}',
-            },
+            http_response( content => '{"ok":true,"result":{"id":42,"is_bot":true,"username":"d2tg_bot"}}' ),
         ],
     );
 
@@ -80,10 +82,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            {
-                success => 1,
-                content => '{"ok":false,"description":"Unauthorized"}',
-            },
+            http_response( content => '{"ok":false,"description":"Unauthorized"}' ),
         ],
     );
 
@@ -96,7 +95,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            { success => 0, status => 429, reason => 'Too Many Requests' },
+            http_response( code => 429, message => 'Too Many Requests' ),
         ],
     );
 
@@ -109,7 +108,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            { success => 1, content => 'not json at all' },
+            http_response( content => 'not json at all' ),
         ],
     );
 
@@ -121,7 +120,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            { success => 1, content => '{"ok":true,"result":[]}' },
+            http_response( content => '{"ok":true,"result":[]}' ),
         ],
     );
 
@@ -135,7 +134,7 @@ package main;
 {
     my $ua = Fake::UA->new(
         responses => [
-            { success => 1, content => '{"ok":true,"result":{}}' },
+            http_response( content => '{"ok":true,"result":{}}' ),
         ],
     );
 

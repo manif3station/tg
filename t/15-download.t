@@ -3,6 +3,7 @@ use warnings;
 use Test::More;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+use HTTP::Response;
 
 require D2TG::Download;
 
@@ -40,7 +41,9 @@ package main;
 
 {
     my $telegram = Fake::Telegram->new( file_path => 'voice/file_1.oga' );
-    my $ua = Fake::UA->new( response => { success => 1, content => 'fake audio bytes' } );
+    my $response = HTTP::Response->new( 200, 'OK' );
+    $response->content('fake audio bytes');
+    my $ua = Fake::UA->new( response => $response );
 
     my $local_path = D2TG::Download::download_file( $telegram, 'AABB123', ua => $ua );
 
@@ -66,7 +69,8 @@ package main;
 
 {
     my $telegram = Fake::Telegram->new( file_path => 'voice/file_2.oga' );
-    my $ua = Fake::UA->new( response => { success => 0, status => 404, reason => 'Not Found' } );
+    my $response = HTTP::Response->new( 404, 'Not Found' );
+    my $ua = Fake::UA->new( response => $response );
 
     eval { D2TG::Download::download_file( $telegram, 'AABB456', ua => $ua ) };
     like( $@, qr/404/, 'download_file dies naming the HTTP status on transport failure' );

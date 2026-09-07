@@ -3,6 +3,32 @@ package D2TG::Poller;
 use strict;
 use warnings;
 
+sub run_once_safe {
+    my ( $telegram, $offset, $store, %opts ) = @_;
+
+    my $sleep_fn = delete $opts{sleep} || \&_sleep;
+
+    my $new_offset = eval {
+        my ( undef, $off ) = run_once( $telegram, $offset, $store, %opts );
+        $off;
+    };
+
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        print STDERR "POLL ERROR: $error\n";
+        $sleep_fn->(2);
+        return $offset;
+    }
+
+    return $new_offset;
+}
+
+sub _sleep {
+    my ($seconds) = @_;
+    return sleep $seconds;
+}
+
 sub run_once {
     my ( $telegram, $offset, $store, %opts ) = @_;
 
@@ -138,6 +164,20 @@ time that sender is recorded pending (not on subsequent messages from
 the same still-pending sender). Replying is separate, later work.
 
 =head1 FUNCTIONS
+
+=head2 run_once_safe($telegram, $offset, $store, sleep => \&coderef, %run_once_opts)
+
+Wraps C<run_once> so a transient failure (e.g. a network blip inside
+C<get_updates>) never kills the caller's loop - see TGT-028, a real
+production incident where an uncaught exception here silently ended the
+whole poller process. On success, behaves exactly like calling
+C<run_once> and taking its offset. On failure: strips the trailing
+newline from C<$@>, prints C<POLL ERROR: <message>> to STDERR, sleeps 2
+seconds (via C<sleep>, injectable for tests; defaults to a real
+C<sleep>) to avoid hammering a persistently-failing endpoint, and
+returns the I<unchanged> C<$offset> so the next call retries from the
+same place. All other C<%opts> (C<transcribe_voice>, C<download_media>)
+pass through to C<run_once> unchanged.
 
 =head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef, download_media => \&coderef)
 
