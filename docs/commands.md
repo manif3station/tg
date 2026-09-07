@@ -115,7 +115,7 @@ implemented and where:
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
-| `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure. |
+| `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |

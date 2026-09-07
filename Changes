@@ -180,3 +180,12 @@ Revision history for the tg skill
         run_once_safe/TGT-028), likely caused by a forced (non-clean)
         poller restart, now less likely since TGT-031's prompt-shutdown
         fix.
+
+0.13  2026-09-07
+      - BUGFIX (TGT-033, found while investigating TGT-030): D2TG::TTS::
+        _run had the identical unredirected system(@cmd) pattern as
+        D2TG::Transcribe's (fixed in TGT-030) - gtts-cli/ffmpeg's own
+        console output could leak onto d2 tg.reply's stdout/stderr.
+        Fixed with the same shape: STDOUT/STDERR are temporarily
+        redirected to /dev/null around the system() call and restored
+        immediately after.

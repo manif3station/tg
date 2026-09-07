@@ -3,6 +3,7 @@ package D2TG::TTS;
 use strict;
 use warnings;
 use File::Temp qw(tempfile);
+use File::Spec;
 
 sub synthesize {
     my ( $text, %args ) = @_;
@@ -33,7 +34,19 @@ sub synthesize {
 
 sub _run {
     my (@cmd) = @_;
-    return system(@cmd);
+
+    open my $saved_stdout, '>&', \*STDOUT or die "D2TG::TTS::_run: cannot save STDOUT: $!\n";
+    open my $saved_stderr, '>&', \*STDERR or die "D2TG::TTS::_run: cannot save STDERR: $!\n";
+
+    open STDOUT, '>', File::Spec->devnull or die "D2TG::TTS::_run: cannot redirect STDOUT: $!\n";
+    open STDERR, '>', File::Spec->devnull or die "D2TG::TTS::_run: cannot redirect STDERR: $!\n";
+
+    my $rc = system(@cmd);
+
+    open STDOUT, '>&', $saved_stdout or die "D2TG::TTS::_run: cannot restore STDOUT: $!\n";
+    open STDERR, '>&', $saved_stderr or die "D2TG::TTS::_run: cannot restore STDERR: $!\n";
+
+    return $rc;
 }
 
 1;
@@ -67,8 +80,16 @@ descriptive message (and cleans up any partial temp files) if either step
 exits non-zero, or if C<$text> is empty.
 
 C<runner> is an optional coderef taking a command's argument list and
-returning its exit status (0 for success); it defaults to a plain
-C<system(@cmd)> call, and exists so callers (tests) can inject a fake
-runner instead of invoking real subprocesses.
+returning its exit status (0 for success); it defaults to C<_run>
+(list-form C<system(@cmd)>, no shell), and exists so callers (tests) can
+inject a fake runner instead of invoking real subprocesses.
+
+=head2 _run(@cmd)
+
+Runs C<@cmd> via C<system>, with C<STDOUT>/C<STDERR> temporarily
+redirected to C<File::Spec-E<gt>devnull> for the duration of the call
+and restored immediately afterward (TGT-033, mirroring TGT-030's fix
+for L<D2TG::Transcribe>) - C<gtts-cli>/C<ffmpeg>'s own console output
+never reaches the caller's real stdout/stderr.
 
 =cut

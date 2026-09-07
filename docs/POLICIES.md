@@ -82,7 +82,10 @@ inherited straight onto the poller's real stdout, polluting the exact
 stream a Tira monitor job's feeder reads. `D2TG::Transcribe::_run`'s
 forked child now reopens its own stdout/stderr onto `/dev/null` before
 exec, so only this project's own structured lines (`NEW TG VOICE`,
-`TRANSCRIBE ERROR`, etc.) ever reach the real stream.
+`TRANSCRIBE ERROR`, etc.) ever reach the real stream. `D2TG::TTS::_run`
+(TGT-033) applies the same principle on the outbound side - `gtts-cli`/
+`ffmpeg`'s own console output never leaks onto `d2 tg.reply`'s
+stdout/stderr either.
 
 ## The poll loop itself survives transient failures
 
