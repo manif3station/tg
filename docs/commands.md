@@ -32,7 +32,13 @@ token.
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
 if `D2TG_CHAT_ID` is not set AND no `--chat_id` was given on the command
 line at all (a CLI-declared group supplies its own chat id
-independently of the env var). On startup, prints `d2tg poller starting
+independently of the env var). Also refuses to start (TGT-062) if
+another `d2 tg.poller` instance already holds an exclusive lock
+(`poller.pid` under the resolved `--db`/`-d`/`D2TG_DB` storage location)
+and is still alive - the message names the exact PID to kill. A lock
+left by an unclean death (e.g. `kill -9`, a crash) is reclaimed
+automatically on the next start rather than blocking it; only a
+genuinely still-running process refuses. On startup, prints `d2tg poller starting
 up (token: <first 4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) for the
 single-group/single-bot case (the token is masked, the chat_id - not a
 secret - is shown in full), or a multi-line group listing otherwise.

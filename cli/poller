@@ -12,6 +12,7 @@ use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Download;
 use D2TG::Transcribe;
+use D2TG::Lock;
 
 # Autoflush STDOUT. Without this, STDOUT is fully block-buffered once
 # connected to a pipe (as it always is under a Tira monitor job or any
@@ -33,6 +34,17 @@ my ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV);
 @ARGV = @rest;
 
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
+# TGT-062: refuse to start a second instance against the same storage
+# location - a prior poller merely suspended (Ctrl-Z, not killed) still
+# holds a live connection to Telegram and would otherwise silently
+# compete with this one for the same bot's getUpdates slot.
+my $lock_path = File::Spec->catfile( $base_dir, 'poller.pid' );
+eval { D2TG::Lock::acquire($lock_path) };
 if ($@) {
     print STDERR $@;
     exit 1;
@@ -156,6 +168,7 @@ until ($shutting_down) {
     }
 }
 
+D2TG::Lock::release($lock_path);
 exit 0;
 
 =head1 NAME
@@ -175,6 +188,17 @@ paths>) whose directory this run's SQLite state file and downloaded
 attachments should live under, instead of the default skill-root-based
 location - unknown alias refuses to start with a clear STDERR message.
 See L<D2TG::Config/resolve_alias_dir>.
+
+Immediately after resolving that location, this process acquires an
+exclusive lock there (TGT-062, C<poller.pid> - see L<D2TG::Lock>) and
+refuses to start if another live process already holds it, since
+Telegram allows only one active C<getUpdates> long-poll consumer per
+bot token; a previous process merely suspended (C<Ctrl-Z>, not killed)
+still holding that connection was found to silently compete with a
+freshly started one for the same updates, with no signal-based fix able
+to reach a stopped process. The lock releases on a clean C<SIGTERM>/
+C<SIGINT> shutdown; a stale lock left by an unclean death is reclaimed
+automatically on the next start.
 
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each

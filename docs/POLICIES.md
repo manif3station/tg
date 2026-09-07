@@ -142,6 +142,25 @@ there is deliberately no fallback that degrades to a text-only reply. A
 caller that wants to know a reply failed needs to see the failure, not a
 silently incomplete answer on the other end.
 
+## Only one poller may run against a given storage location at a time
+
+Live production incident (TGT-062): "it is not always works. when send
+message. the poller no showing new messages. i need to kill it and
+reload." Root-caused live - a previous `d2 tg.poller` process had been
+suspended via job control (`Ctrl-Z`, not killed) rather than terminated,
+and still held an open connection to Telegram, silently competing with
+a freshly started poller for the same bot's `getUpdates` slot (Telegram
+allows only one active long-poll consumer per bot token). A stopped
+process cannot be interrupted by any signal-based fix - including
+TGT-044's own hard timeout - since the OS never schedules a stopped
+process to run, so this had to be closed at startup instead. `d2
+tg.poller` now acquires an exclusive PID-file lock (`poller.pid`, under
+the resolved `--db`/`-d`/`D2TG_DB` storage location) before doing
+anything else and refuses to start while a live process already holds
+it, naming the exact PID to kill. A lock naming a PID that's no longer
+alive (an unclean death, e.g. `kill -9`) is reclaimed automatically -
+a stale lock must never itself prevent recovery from a crash.
+
 ## No log file — stdout/stderr only
 
 `d2 tg.poller` writes its event stream to **stdout** and errors to

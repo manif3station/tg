@@ -484,3 +484,20 @@ Revision history for the tg skill
         invocation can omit base_dir anymore - only direct unit tests of
         these two functions can (t/40-db-alias-resolution.t). POD updated
         to say so; no code/behavior change.
+
+0.40  2026-09-07
+      - BUGFIX (TGT-062, live production incident reported by the owner:
+        "it is not always works. when send message. the poller no
+        showing new messages. i need to kill it and reload"):
+        root-caused live - a previous d2 tg.poller process suspended via
+        job control (Ctrl-Z, not killed) still held an open connection
+        to Telegram, silently competing with a freshly started poller
+        for the same bot's single-consumer getUpdates slot. A stopped
+        process cannot receive any signal (including TGT-044's own
+        SIGALRM hard timeout), so no signal-based fix could ever close
+        this gap. d2 tg.poller now acquires an exclusive PID-file lock
+        under its resolved --db/-d/D2TG_DB storage location at startup
+        and refuses to start a second instance while a live one already
+        holds it, naming the exact PID to kill; a stale lock left by an
+        unclean death (e.g. kill -9) is correctly reclaimed rather than
+        blocking a legitimate restart.
