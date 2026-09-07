@@ -97,6 +97,23 @@ not that message's own id. The suffix now reads "(replying to bob [msg
 payload (always present on a native reply, independent of whether a
 stored record was found for the store-lookup-first behavior above).
 
+## message_id is Telegram's own counter - --db/-d/D2TG_DB has no effect on it
+
+Live question (TGT-063): "even i switch to different vault dir. the
+message id still the same increment from last?" - yes, and this is
+expected, not a bug. `message_id` is assigned entirely on Telegram's own
+servers, as a per-bot sequence that increments with every message that
+bot ever sends or receives, across every chat - this skill never
+generates, offsets, or otherwise touches it (grep-verifiable: every
+`message_id` in `D2TG::Poller` is read directly from
+`$message->{message_id}`, Telegram's own payload). `--db`/`-d`/`D2TG_DB`
+(TGT-051, TGT-059) only relocates where this skill's own local SQLite
+state and downloaded attachments live - it has no relationship to, and
+no ability to influence, Telegram's own counter for that bot. Switching
+storage locations, or even switching which bot token is in use (TGT-049
+multi-bot mode), never resets or changes where a given bot's own
+`message_id` sequence continues from.
+
 ## A reply can thread natively under the original Telegram message
 
 Live follow-up question (TGT-040): "where is the message id?" - every

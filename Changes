@@ -511,3 +511,11 @@ Revision history for the tg skill
         so the printed timestamp reflects when the message really
         arrived, even if this poller processed it a poll cycle or more
         later.
+
+0.42  2026-09-07
+      - DOC CLARIFICATION (TGT-063, live question): confirmed and
+        documented that message_id is entirely Telegram's own per-bot
+        sequence number - switching --db/-d/D2TG_DB (or even which bot
+        token is in use) has no effect on it and never resets it. No
+        code change; this skill was already reading message_id straight
+        from Telegram's own payload everywhere.
