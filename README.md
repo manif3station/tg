@@ -1,5 +1,9 @@
 # tg
 
+**Status: scaffold only (v0.01).** The directory layout, packaging, and
+this README describe the intended design; the poller and its commands
+below are not implemented yet. See `tickets/` for in-progress work.
+
 Telegram bridge skill for Developer Dashboard. Lets an admin reach a
 project's live agent session over Telegram, and be reached by it — text,
 photos, documents, and voice notes in both directions.
