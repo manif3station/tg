@@ -145,4 +145,13 @@ package main;
     is( $file_path, undef, 'get_file returns undef when file_path is absent' );
 }
 
+{
+    my $tg = D2TG::Telegram->new( token => 'test-token' );
+    is(
+        $tg->file_download_url('voice/file_1.oga'),
+        'https://api.telegram.org/file/bottest-token/voice/file_1.oga',
+        'file_download_url builds the correct download URL'
+    );
+}
+
 done_testing();

@@ -4,7 +4,9 @@ use strict;
 use warnings;
 
 sub run_once {
-    my ( $telegram, $offset, $store ) = @_;
+    my ( $telegram, $offset, $store, %opts ) = @_;
+
+    my $transcribe_voice = $opts{transcribe_voice};
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
@@ -30,6 +32,19 @@ sub run_once {
             $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
 
             print "NEW TG [$chat_id] $sender: $safe_text\n";
+        }
+        elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
+            my $file_id = $message->{voice}{file_id};
+            my $transcript = eval { $transcribe_voice->( $telegram, $file_id ) };
+
+            if ($@) {
+                my $error = $@;
+                $error =~ s/\n\z//;
+                print STDERR "TRANSCRIBE ERROR [$chat_id] $sender: $error\n";
+            }
+            else {
+                print "NEW TG VOICE [$chat_id] $sender: $transcript\n";
+            }
         }
         else {
             print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
@@ -75,16 +90,17 @@ the delay is bounded and short.
 C<run_once> performs a single C<get_updates> call and, for each update
 carrying a text message or recognized media (photo/document/voice) from
 an allow-listed sender, prints one line to STDOUT: the message text, or
-C<NEW TG MEDIA [chat_id] sender: <type>> for media. A message from a
+C<NEW TG MEDIA [chat_id] sender: <type>> for photo/document (and voice
+too, when no C<transcribe_voice> callback is given). A message from a
 sender not yet allow-listed produces no content output at all, but does
 print a one-time C<NEW TG PENDING [chat_id] awaiting approval> line the
 first time that sender is recorded pending (not on subsequent messages
-from the same still-pending sender). Downloading a media file,
-transcribing voice, or replying are all separate, later work.
+from the same still-pending sender). Downloading photo/document media or
+replying are separate, later work.
 
 =head1 FUNCTIONS
 
-=head2 run_once($telegram, $offset, $store)
+=head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef)
 
 Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
 method matching that signature), the current offset, and an optional
@@ -95,5 +111,15 @@ described above but never the message text; when omitted, every
 sender's text is printed unconditionally (used by earlier tests only -
 C<cli/poller> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
+
+C<transcribe_voice>, if given, is called as
+C<< $transcribe_voice->($telegram, $file_id) >> for a voice message and
+should return its transcript text (typically wiring L<D2TG::Download>
+and L<D2TG::Transcribe> together). Its success prints
+C<NEW TG VOICE [chat_id] sender: <transcript>> to STDOUT; its failure
+prints C<TRANSCRIBE ERROR [chat_id] sender: <message>> to STDERR and the
+loop continues - one bad voice note never crashes the poller. Without
+C<transcribe_voice>, a voice message falls back to the plain
+C<NEW TG MEDIA> line.
 
 =cut

@@ -34,6 +34,16 @@ consumer is a Tira monitor-kind job, whose `tira.policy.bridge` output
 already captures both streams — a separate log file would be a second,
 divergent copy of the same information.
 
+## Outbound TTS failure is fatal; inbound transcription failure is not
+
+`d2 tg.reply`'s synthesis/send failure is deliberately fatal (see above)
+- a reply the operator can't verify happened should not silently
+partially happen. Inbound voice transcription is the opposite: a single
+voice note that fails to download or transcribe must not take down the
+whole poller loop, since a live bridge processing many messages should
+keep serving the rest of them. `cli/poller` reports such a failure on
+stderr (`TRANSCRIBE ERROR [chat_id] sender: <message>`) and continues.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

@@ -38,3 +38,14 @@ Revision history for the tg skill
         sends a reply as text + voice note together, never text-only -
         synthesis happens before any Telegram call, so a TTS failure
         sends nothing at all.
+
+0.03  2026-09-07
+      - D2TG::Download (TGT-014): downloads a Telegram file_id to a
+        local temp file via get_file + file_download_url.
+      - D2TG::Transcribe (TGT-014): text <- whisper CLI, refusing any
+        *.en (English-only) model checkpoint.
+      - D2TG::Poller transcribe_voice wiring + cli/poller (TGT-014): an
+        allow-listed sender's voice message is now downloaded and
+        transcribed, printed to stdout; a download/transcription
+        failure is reported on stderr and does not stop the poller
+        loop (non-fatal, unlike D2TG::TTS's outbound fatal rule).

@@ -10,6 +10,8 @@ use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Poller;
 use D2TG::Store;
+use D2TG::Download;
+use D2TG::Transcribe;
 
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
@@ -30,8 +32,21 @@ my $store = D2TG::Store->new(
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 my $offset = $store->get_offset;
 
+my $transcribe_voice = sub {
+    my ( $tg, $file_id ) = @_;
+    my $local_path = D2TG::Download::download_file( $tg, $file_id );
+    my $text = eval { D2TG::Transcribe::transcribe($local_path) };
+    my $error = $@;
+    unlink $local_path;
+    die $error if $error;
+    return $text;
+};
+
 until ($shutting_down) {
-    ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset, $store );
+    ( undef, $offset ) = D2TG::Poller::run_once(
+        $telegram, $offset, $store,
+        transcribe_voice => $transcribe_voice,
+    );
     $store->set_offset($offset) if defined $offset;
 }
 
@@ -49,5 +64,9 @@ the guard passes, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
 allowed), resumes from its persisted poll offset if any, and runs
 L<D2TG::Poller>'s long-poll loop - gated by that store, saving the offset
 back after every iteration - until C<SIGTERM> or C<SIGINT> is received.
+An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
+and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
+downloaded temp file is removed either way. A download or transcription
+failure is reported on STDERR and does not stop the loop.
 
 =cut

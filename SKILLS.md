@@ -1,6 +1,6 @@
 # tg — skill reference
 
-**Status: early implementation (v0.02).** This file will grow into the
+**Status: early implementation (v0.03).** This file will grow into the
 full command/workflow reference as the skill is implemented (per TGIG-002
 through TGIG-005). See `README.md` for the intended install/config/run
 shape, `docs/commands.md` for the command reference, `docs/POLICIES.md`
@@ -70,3 +70,18 @@ on the project's Tira board ("D2 TG Skill"), not as markdown files in
   always both a text message and a voice note, never text-only.
   **Not yet implemented**: automatically wiring an inbound message to a
   reply (the poller does not call this itself yet) - separate ticket.
+- `D2TG::Download::download_file` (TGT-014) — resolves a Telegram
+  `file_id` via `get_file` + `file_download_url` and saves the bytes to a
+  local temp file, preserving the original extension.
+- `D2TG::Transcribe::transcribe` (TGT-014) — shells out to a local
+  `whisper` CLI (per Q-002) to transcribe an audio file, refusing any
+  `*.en` (English-only) model checkpoint per the blueprint.
+- `D2TG::Poller::run_once`'s new `transcribe_voice` parameter (TGT-014) —
+  when given, a voice message from an allow-listed sender is downloaded
+  and transcribed, printing `NEW TG VOICE [chat_id] sender: <transcript>`
+  to stdout; a failure prints `TRANSCRIBE ERROR [chat_id] sender:
+  <message>` to stderr and the loop continues (non-fatal, unlike
+  `D2TG::TTS`'s outbound fatal-on-failure rule). `cli/poller` wires this
+  to `D2TG::Download` + `D2TG::Transcribe`, removing the downloaded temp
+  file either way. **Not yet implemented**: photo/document download,
+  replying to the transcript.

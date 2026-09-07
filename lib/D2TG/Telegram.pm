@@ -106,6 +106,11 @@ sub get_file {
     return $result->{file_path};
 }
 
+sub file_download_url {
+    my ( $self, $file_path ) = @_;
+    return "https://api.telegram.org/file/bot$self->{token}/$file_path";
+}
+
 sub send_message {
     my ( $self, $chat_id, $text, $limit ) = @_;
 
@@ -182,6 +187,12 @@ C<update_id> seen, or the offset that was passed in if no updates arrived).
 
 Returns the C<file_path> for a given C<file_id>, for use with Telegram's
 file-download endpoint.
+
+=head2 file_download_url($file_path)
+
+Builds the full download URL for a C<file_path> previously returned by
+C<get_file> (Telegram's file-download endpoint is separate from, and
+embeds the same bot token as, the regular Bot API endpoint).
 
 =head2 send_message($chat_id, $text, $limit = 4000)
 
