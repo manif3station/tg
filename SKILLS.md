@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.40).** This file is a procedure to
+**Status: early implementation (v0.41).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -102,11 +102,13 @@ names what to do and exactly what confirms it worked.
 3. **Confirm it arrives.** Expect two new stdout lines within the
    poller's poll cycle:
    ```
-   NEW TG [<chat_id>] <username>: hello from onboarding test (msg #<message_id>)
+   [<timestamp>] NEW TG [<chat_id>] <username>: hello from onboarding test (msg #<message_id>)
    REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <message_id>
    ```
-   `(msg #<message_id>)` and `--reply-to-message-id <message_id>` (TGT-040)
-   are always present - Telegram always assigns every message an id. If
+   `[<timestamp>]` (TGT-061) is Telegram's own received-time, not local
+   wall-clock time. `(msg #<message_id>)` and `--reply-to-message-id
+   <message_id>` (TGT-040) are always present - Telegram always assigns
+   every message an id. If
    nothing appears within ~30s, check `D2TG_TOKEN` is the right bot's
    token and that the user actually messaged that bot (not a different
    one).

@@ -501,3 +501,13 @@ Revision history for the tg skill
         holds it, naming the exact PID to kill; a stale lock left by an
         unclean death (e.g. kill -9) is correctly reclaimed rather than
         blocking a legitimate restart.
+
+0.41  2026-09-07
+      - FEATURE (TGT-061, live design request): every NEW TG/NEW TG
+        VOICE/NEW TG MEDIA/NEW TG PENDING stdout line is now prefixed
+        with a timestamp, e.g. "[2026-09-07 14:32:10] NEW TG [...]".
+        Sourced from Telegram's own message.date field (when a message
+        was actually received by Telegram), not local wall-clock time -
+        so the printed timestamp reflects when the message really
+        arrived, even if this poller processed it a poll cycle or more
+        later.

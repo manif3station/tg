@@ -57,6 +57,12 @@ no manual restart needed to pick up a new release.
 
 Events printed:
 
+Every event line below is prefixed with `[YYYY-MM-DD HH:MM:SS]` (TGT-061),
+sourced from Telegram's own `message.date` field rather than local
+wall-clock time - so the printed timestamp always reflects when Telegram
+itself received the message, even if this poller processed it a poll
+cycle or more later.
+
 - `NEW TG [chat_id] sender: text` — an allowed sender's text message.
   Every content line (this one and the two below) also names the
   message's own `message_id` as `(msg #N)` (TGT-040), so it can be passed

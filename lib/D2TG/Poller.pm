@@ -2,6 +2,7 @@ package D2TG::Poller;
 
 use strict;
 use warnings;
+use POSIX qw(strftime);
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
@@ -50,9 +51,11 @@ sub run_once {
         my $chat_id = $message->{chat}{id};
         my $sender  = $message->{from}{username} // 'unknown';
 
+        my $ts = _timestamp_prefix($message);
+
         if ( $store && !$store->is_allowed($chat_id) ) {
             if ( $store->add_pending($chat_id) ) {
-                print "NEW TG PENDING [$chat_id] awaiting approval\n";
+                print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
             }
             next;
         }
@@ -64,7 +67,7 @@ sub run_once {
         if ( defined $text && length $text ) {
             my $safe_text = _sanitize_for_stdout($text);
 
-            print "NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
+            print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
             $store->record_message( $chat_id, $message_id, $sender, $safe_text )
               if $store && defined $message_id;
@@ -77,7 +80,7 @@ sub run_once {
             if ($ok) {
                 my $safe_transcript = _sanitize_for_stdout($transcript);
 
-                print "NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
+                print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
                 $store->record_message( $chat_id, $message_id, $sender, $safe_transcript )
                   if $store && defined $message_id;
@@ -97,7 +100,7 @@ sub run_once {
                   _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
                 if ($ok) {
-                    print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$msg_note$reply_ctx\n";
+                    print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$msg_note$reply_ctx\n";
                     _print_reply_template( $chat_id, $message_id, $bot_token );
                     $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path" )
                       if $store && defined $message_id;
@@ -105,7 +108,7 @@ sub run_once {
             }
         }
         else {
-            print "NEW TG MEDIA [$chat_id] $sender: $media_kind$msg_note$reply_ctx\n";
+            print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
         }
     }
@@ -148,6 +151,14 @@ sub _stored_summary {
     my $stored = $store->get_message( $chat_id, $message_id );
 
     return $stored ? $stored->{summary} : undef;
+}
+
+sub _timestamp_prefix {
+    my ($message) = @_;
+
+    my $epoch = $message->{date} // time;
+
+    return '[' . strftime( '%Y-%m-%d %H:%M:%S', localtime($epoch) ) . ']';
 }
 
 sub _sanitize_for_stdout {
@@ -330,6 +341,13 @@ C<$@> and prints C<< <error_prefix> [chat_id] sender: <message> >> to
 STDERR, returning C<(0, undef)>; on success it returns
 C<(1, $result)>. The caller is responsible for printing its own
 differently-shaped success line.
+
+Every event line (including C<NEW TG PENDING>) is prefixed with a
+C<[YYYY-MM-DD HH:MM:SS]> timestamp (TGT-061, see C<_timestamp_prefix>),
+sourced from Telegram's own C<message.date> field rather than local
+wall-clock time - it reflects when Telegram itself received the
+message, not when this poller happened to process it, which can lag
+behind by a poll cycle or more.
 
 Every content line also names the message's own C<message_id> as
 C<< (msg #N) >> (TGT-040), when Telegram provided one.
