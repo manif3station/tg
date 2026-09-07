@@ -109,4 +109,45 @@ sub capture_stdout {
     is( $out, '', 'a non-text update produces no stdout line in this ticket\'s scope' );
 }
 
+{
+    # Channel posts and anonymous admins carry no 'from' at all.
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 70,
+                message   => { chat => { id => 2 }, text => 'no sender here' },
+            },
+        ],
+    );
+
+    my $out;
+    eval {
+        $out = capture_stdout( sub {
+            D2TG::Poller::run_once( $tg, undef );
+        } );
+    };
+
+    is( $@, '', 'a message with no from field does not crash the poller' );
+    like( $out, qr/unknown/, 'a missing sender is reported as unknown rather than dying' );
+}
+
+{
+    package Undef::Telegram;
+    sub new { return bless {}, shift }
+    sub get_updates { return ( undef, 99 ) }
+}
+
+{
+    my $tg = Undef::Telegram->new;
+
+    my $out;
+    eval {
+        $out = capture_stdout( sub {
+            D2TG::Poller::run_once( $tg, undef );
+        } );
+    };
+
+    is( $@, '', 'a get_updates implementation returning undef instead of an arrayref does not crash' );
+}
+
 done_testing();

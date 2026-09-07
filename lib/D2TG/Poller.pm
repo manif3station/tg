@@ -37,6 +37,15 @@ D2TG::Poller - the long-poll loop connecting D2TG::Telegram to stdout
         ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset );
     }
 
+=head1 KNOWN LIMITATION
+
+C<SIGTERM>/C<SIGINT> are only checked between C<get_updates> calls, so
+shutdown can be delayed by up to that call's long-poll timeout (default
+30s) if it's mid-request when the signal arrives. Interrupting a
+blocking C<HTTP::Tiny> call cleanly would need an async/select-based
+rewrite, which is out of this ticket's scope - acceptable for now since
+the delay is bounded and short.
+
 =head1 DESCRIPTION
 
 C<run_once> performs a single C<get_updates> call and, for each update
