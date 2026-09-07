@@ -21,13 +21,16 @@ require D2TG::Config;
 }
 
 {
-    local $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} = '';
-    delete $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT};
+    delete local $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT};
 
-    my $db_path = D2TG::Config::state_db_path( default_root => '/tmp/d2tg-test-default-root' );
+    my $default_root = tempdir( CLEANUP => 1 );
+    my $db_path = D2TG::Config::state_db_path( default_root => $default_root );
 
-    like( $db_path, qr{/tmp/d2tg-test-default-root/state/store\.sqlite$},
-        'falls back to the given default_root when the env var is unset' );
+    is(
+        $db_path,
+        File::Spec->catfile( $default_root, 'state', 'store.sqlite' ),
+        'falls back to the given default_root when the env var is unset'
+    );
 }
 
 done_testing();
