@@ -56,14 +56,15 @@ sub run_once {
             next;
         }
 
-        my $reply_ctx = _reply_context_suffix( $message, $store, $chat_id );
+        my $reply_ctx  = _reply_context_suffix( $message, $store, $chat_id );
         my $message_id = $message->{message_id};
+        my $msg_note   = defined $message_id ? " (msg #$message_id)" : '';
 
         if ( defined $text && length $text ) {
             my $safe_text = _sanitize_for_stdout($text);
 
-            print "NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
-            _print_reply_template($chat_id);
+            print "NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
+            _print_reply_template( $chat_id, $message_id );
             $store->record_message( $chat_id, $message_id, $sender, $safe_text )
               if $store && defined $message_id;
         }
@@ -75,8 +76,8 @@ sub run_once {
             if ($ok) {
                 my $safe_transcript = _sanitize_for_stdout($transcript);
 
-                print "NEW TG VOICE [$chat_id] $sender: $safe_transcript$reply_ctx\n";
-                _print_reply_template($chat_id);
+                print "NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
+                _print_reply_template( $chat_id, $message_id );
                 $store->record_message( $chat_id, $message_id, $sender, $safe_transcript )
                   if $store && defined $message_id;
             }
@@ -95,16 +96,16 @@ sub run_once {
                   _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
                 if ($ok) {
-                    print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$reply_ctx\n";
-                    _print_reply_template($chat_id);
+                    print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$msg_note$reply_ctx\n";
+                    _print_reply_template( $chat_id, $message_id );
                     $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path" )
                       if $store && defined $message_id;
                 }
             }
         }
         else {
-            print "NEW TG MEDIA [$chat_id] $sender: $media_kind$reply_ctx\n";
-            _print_reply_template($chat_id);
+            print "NEW TG MEDIA [$chat_id] $sender: $media_kind$msg_note$reply_ctx\n";
+            _print_reply_template( $chat_id, $message_id );
         }
     }
 
@@ -156,8 +157,9 @@ sub _sanitize_for_stdout {
 }
 
 sub _print_reply_template {
-    my ($chat_id) = @_;
-    print qq{REPLY WITH: d2 tg.reply $chat_id "..."\n};
+    my ( $chat_id, $message_id ) = @_;
+    my $flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
+    print qq{REPLY WITH: d2 tg.reply $chat_id "..."$flag\n};
     return;
 }
 
@@ -321,14 +323,20 @@ STDERR, returning C<(0, undef)>; on success it returns
 C<(1, $result)>. The caller is responsible for printing its own
 differently-shaped success line.
 
+Every content line also names the message's own C<message_id> as
+C<< (msg #N) >> (TGT-040), when Telegram provided one.
+
 Every content line (text, a successfully transcribed voice message, or a
 successfully/plainly reported photo/document) is immediately followed by
-a C<< REPLY WITH: d2 tg.reply <chat_id> "..." >> line - a ready-to-run
-reply command template with the chat id filled in, per the owner's
-answered design question (Q-004). This is only ever a template: nothing
-in this module ever calls L<D2TG::Reply> or sends a reply itself. The
-pending-notification line and the two C<*ERROR> lines never get one -
-there is nothing to reply to yet.
+a C<< REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <id> >>
+line - a ready-to-run reply command template with the chat id and
+message id filled in, per the owner's answered design question (Q-004).
+The C<--reply-to-message-id> flag (TGT-040) is only included when
+C<message_id> is known; passing it through to C<d2 tg.reply> makes the
+resulting reply thread natively under the original message in Telegram's
+UI. This is only ever a template: nothing in this module ever calls
+L<D2TG::Reply> or sends a reply itself. The pending-notification line and
+the two C<*ERROR> lines never get one - there is nothing to reply to yet.
 
 If Telegram's C<reply_to_message> field is present on the message (the
 sender used Telegram's native reply-to-message feature), every content

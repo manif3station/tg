@@ -9,8 +9,26 @@ use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Reply;
 
-if ( @ARGV < 2 || $ARGV[0] !~ /^-?\d+$/ ) {
-    print STDERR "Usage: d2 tg.reply <chat_id> <text...>\n";
+my $reply_to_message_id;
+{
+    my @rest;
+    while (@ARGV) {
+        my $arg = shift @ARGV;
+        if ( $arg eq '--reply-to-message-id' ) {
+            $reply_to_message_id = shift @ARGV;
+        }
+        else {
+            push @rest, $arg;
+        }
+    }
+    @ARGV = @rest;
+}
+
+if ( @ARGV < 2
+    || $ARGV[0] !~ /^-?\d+$/
+    || ( defined $reply_to_message_id && $reply_to_message_id !~ /^\d+$/ ) )
+{
+    print STDERR "Usage: d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]\n";
     exit 2;
 }
 
@@ -20,9 +38,10 @@ my $text    = join( ' ', @ARGV );
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 
 D2TG::Reply::send_reply(
-    telegram => $telegram,
-    chat_id  => $chat_id,
-    text     => $text,
+    telegram             => $telegram,
+    chat_id              => $chat_id,
+    text                 => $text,
+    reply_to_message_id  => $reply_to_message_id,
 );
 
 print "Replied to $chat_id\n";
@@ -33,7 +52,7 @@ reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
 
 =head1 SYNOPSIS
 
-    d2 tg.reply <chat_id> <text...>
+    d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]
 
 =head1 DESCRIPTION
 
@@ -47,5 +66,14 @@ C<chat_id> is validated as a numeric value (matching C<d2 tg.approve>'s
 own guard, TGT-027) before anything else runs; a non-numeric first
 argument prints the same C<Usage> message and exits 2, without
 constructing L<D2TG::Telegram> or attempting any network call.
+
+C<--reply-to-message-id <id>> (TGT-040) is optional and may appear
+anywhere in the argument list; when given, both the voice and text sends
+carry Telegram's own C<reply_to_message_id>, so the reply threads
+natively under the original message in Telegram's UI instead of arriving
+as a fresh, unthreaded message. The poller's own C<REPLY WITH> template
+(see L<D2TG::Poller>) already fills this in for you when the inbound
+message it names has a known C<message_id>. Omitting it is unchanged
+from before this ticket - no C<reply_to_message_id> is sent.
 
 =cut

@@ -12,14 +12,18 @@ sub send_reply {
     my $text     = $args{text};
     my $synth    = $args{synthesize} || \&D2TG::TTS::synthesize;
 
+    my %opts = defined $args{reply_to_message_id}
+      ? ( reply_to_message_id => $args{reply_to_message_id} )
+      : ();
+
     my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
 
-    my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path ) };
+    my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
     my $send_voice_error = $@;
     unlink $voice_path if -e $voice_path;
     die $send_voice_error if $send_voice_error;
 
-    my $text_result = $telegram->send_message( $chat_id, $text );
+    my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
 
     return { text => $text_result, voice => $voice_result };
 }
@@ -51,11 +55,17 @@ whether it succeeded or not.
 
 =head1 FUNCTIONS
 
-=head2 send_reply(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash)
+=head2 send_reply(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id)
 
-C<telegram> must respond to C<send_message($chat_id, $text)> and
-C<send_voice($chat_id, $path)>. C<synthesize> is optional and defaults to
+C<telegram> must respond to C<send_message($chat_id, $text, ...)> and
+C<send_voice($chat_id, $path, ...)>. C<synthesize> is optional and defaults to
 L<D2TG::TTS>'s C<synthesize>; tests inject a fake here instead. Returns a
 hashref of C<{ text => ..., voice => ... }> with each call's raw result.
+
+C<reply_to_message_id> (TGT-040) is optional; when given, it is passed
+through to both C<send_voice> and C<send_message>, so the reply threads
+natively under the original message in Telegram's UI instead of arriving
+as a fresh, unthreaded message. Omitting it is unchanged from before
+this ticket.
 
 =cut

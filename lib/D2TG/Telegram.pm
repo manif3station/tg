@@ -111,17 +111,20 @@ sub file_download_url {
 }
 
 sub send_message {
-    my ( $self, $chat_id, $text, $limit ) = @_;
+    my ( $self, $chat_id, $text, $limit, %opts ) = @_;
 
     my @results;
     for my $chunk ( split_text_utf16( $text, $limit ) ) {
-        push @results, $self->_call( 'sendMessage', { chat_id => $chat_id, text => $chunk } );
+        my $payload = { chat_id => $chat_id, text => $chunk };
+        $payload->{reply_to_message_id} = $opts{reply_to_message_id}
+          if defined $opts{reply_to_message_id};
+        push @results, $self->_call( 'sendMessage', $payload );
     }
     return \@results;
 }
 
 sub send_voice {
-    my ( $self, $chat_id, $file_path ) = @_;
+    my ( $self, $chat_id, $file_path, %opts ) = @_;
 
     open my $fh, '<:raw', $file_path
       or die "D2TG::Telegram sendVoice: cannot read $file_path: $!\n";
@@ -134,8 +137,18 @@ sub send_voice {
 
     my $body = "--$boundary\r\n"
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
-      . "$chat_id\r\n"
-      . "--$boundary\r\n"
+      . "$chat_id\r\n";
+
+    if ( defined $opts{reply_to_message_id} ) {
+        die "D2TG::Telegram sendVoice: reply_to_message_id must be numeric\n"
+          unless $opts{reply_to_message_id} =~ /^\d+$/;
+
+        $body .= "--$boundary\r\n"
+          . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
+          . "$opts{reply_to_message_id}\r\n";
+    }
+
+    $body .= "--$boundary\r\n"
       . qq{Content-Disposition: form-data; name="voice"; filename="$filename"\r\n}
       . "Content-Type: audio/ogg\r\n\r\n"
       . $data . "\r\n"
@@ -204,18 +217,27 @@ Builds the full download URL for a C<file_path> previously returned by
 C<get_file> (Telegram's file-download endpoint is separate from, and
 embeds the same bot token as, the regular Bot API endpoint).
 
-=head2 send_message($chat_id, $text, $limit = 4000)
+=head2 send_message($chat_id, $text, $limit = 4000, reply_to_message_id => $id)
 
 Sends C<$text> to C<$chat_id> via C<sendMessage>, splitting it across
 multiple calls if it exceeds C<$limit> UTF-16 code units (Telegram's own
 hard cap is 4096; this defaults to 4000 to leave headroom). Returns an
-arrayref of the raw Telegram result for each call made.
+arrayref of the raw Telegram result for each call made. C<reply_to_message_id>
+(TGT-040) is optional; when given, every chunk's C<sendMessage> call
+carries it, so the message threads natively under the original message
+in Telegram's UI. Omitting it is unchanged from before this ticket.
 
-=head2 send_voice($chat_id, $file_path)
+=head2 send_voice($chat_id, $file_path, reply_to_message_id => $id)
 
 Sends the audio file at C<$file_path> to C<$chat_id> via C<sendVoice>,
 built as a raw C<multipart/form-data> request body (no external multipart
-dependency). Dies if C<$file_path> cannot be read.
+dependency). Dies if C<$file_path> cannot be read. C<reply_to_message_id>
+(TGT-040) is optional; when given, it must be numeric (dies otherwise -
+the multipart body here is hand-built raw string concatenation, unlike
+C<send_message>'s JSON-encoded payload, so this guards against a
+CRLF/boundary-containing value injecting extra multipart fields) and an
+extra C<reply_to_message_id> field is added to the body before the
+C<voice> field.
 
 =head2 split_text_utf16($text, $limit = 4000)
 

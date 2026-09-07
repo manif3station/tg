@@ -265,3 +265,15 @@ Revision history for the tg skill
         \n, strip other control chars) is now extracted into
         _sanitize_for_stdout and applied to the voice-transcript branch
         too, before both printing and storing (TGT-038's record_message).
+
+0.20  2026-09-07
+      - FEATURE (TGT-040, live follow-up question - "where is the message
+        id?"): every content line (NEW TG / NEW TG VOICE / NEW TG MEDIA)
+        and the REPLY WITH template now name the inbound message's own
+        message_id. D2TG::Telegram::send_message/send_voice gain an
+        optional reply_to_message_id; D2TG::Reply::send_reply and
+        cli/reply (new --reply-to-message-id flag) thread it through, so
+        a reply can now be sent as a genuine Telegram-native reply -
+        threaded under the original message in Telegram's UI - instead
+        of always arriving as a fresh, unthreaded message. Omitting the
+        flag is unchanged from before.

@@ -50,6 +50,19 @@ for it (it predates this feature, or its sender was never allow-listed
 at the time) does it fall back to Telegram's own `reply_to_message`
 payload, unchanged from before.
 
+## A reply can thread natively under the original Telegram message
+
+Live follow-up question (TGT-040): "where is the message id?" - every
+content line and the `REPLY WITH` template now name the inbound
+message's own `message_id`, and `d2 tg.reply` accepts an optional
+`--reply-to-message-id <id>` that threads through to Telegram's own
+`reply_to_message_id` on both the voice and text sends. Without it, a
+reply always arrived as a fresh, unthreaded message even when the
+operator was clearly answering a specific prior message - copying the
+poller's own `REPLY WITH` template (which already fills the id in) now
+produces a reply that shows up threaded in Telegram's UI. Omitting the
+flag is unchanged from before this ticket.
+
 ## A voice transcript is always exactly one stdout line, like text is
 
 Code-review bug hunt finding (TGT-039): inbound text messages have their
