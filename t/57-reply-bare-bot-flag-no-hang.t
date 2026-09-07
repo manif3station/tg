@@ -38,8 +38,34 @@ $ENV{D2TG_TEST_DB_DIR}   = tempdir( CLEANUP => 1 );
     waitpid( $pid, 0 ) unless $timed_out;
 
     ok( !$timed_out, 'cli/reply --bot (bare, no value) does not hang - exits within 3s' );
-    like( $out, qr/Usage/i, 'cli/reply --bot (bare, no value) reports the same Usage error as any other malformed invocation' )
-      unless $timed_out;
+    unless ($timed_out) {
+        like( $out, qr/Usage/i, 'cli/reply --bot (bare, no value) reports the same Usage error as any other malformed invocation' );
+        isnt( $? >> 8, 0, 'cli/reply --bot (bare, no value) exits non-zero, like any other malformed invocation' );
+    }
+}
+
+# The bare-trailing case must also hang-free when --bot follows a
+# leading --db (the order the real REPLY WITH template never produces,
+# but cli/reply's own docs say either order is accepted).
+{
+    my $pid = open( my $fh, '-|' );
+    die "fork failed: $!" unless defined $pid;
+
+    if ( $pid == 0 ) {
+        open STDERR, '>&', \*STDOUT or die $!;
+        exec( $reply_cli, '--db', 'testalias', '--bot' ) or exit 127;
+    }
+
+    my $timed_out = 0;
+    local $SIG{ALRM} = sub { $timed_out = 1; kill 'KILL', $pid; };
+    alarm(3);
+    my $out = do { local $/; <$fh> };
+    alarm(0);
+    close $fh;
+    waitpid( $pid, 0 ) unless $timed_out;
+
+    ok( !$timed_out, '--db testalias --bot (bare, no value) does not hang either' );
+    like( $out, qr/Usage/i, '--db testalias --bot (bare, no value) reports Usage' ) unless $timed_out;
 }
 
 # A normal --bot <token> pair must still be consumed correctly and
