@@ -49,3 +49,9 @@ Revision history for the tg skill
         transcribed, printed to stdout; a download/transcription
         failure is reported on stderr and does not stop the poller
         loop (non-fatal, unlike D2TG::TTS's outbound fatal rule).
+      - Tira monitor-job registration verified (TGT-015, docs only): d2
+        tira.job.add --schedule monitor --command "d2 tg.poller" + d2
+        tira.job.start feeds the poller's output to that project's
+        tira.policy.bridge, proven in a developer-dashboard:latest
+        container. Exact commands documented in README.md and
+        docs/commands.md. No code changed.

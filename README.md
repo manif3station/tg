@@ -43,9 +43,22 @@ d2 tg.poller
 ```
 
 The poller is meant to be registered as a Tira monitor-kind job on the
-project it serves (`tira.job.add --schedule monitor --command "d2
-tg.poller"`), not run under systemd or cron — new messages then reach that
-project's `tira.policy.bridge` as monitor-output events.
+project it serves, not run under systemd or cron — new messages then
+reach that project's `tira.policy.bridge` as monitor-output events. On
+the project's board:
+
+```
+d2 tira.policy.add --rule monitor-output --action bridge-reminder   # once, if not already declared
+d2 tira.job.add --schedule monitor --command "d2 tg.poller"
+d2 tira.job.start --id JOB-NNN   # the id tira.job.add just printed
+```
+
+Verified (TGT-015) in a `developer-dashboard:latest` container: with the
+`tg` skill installed and a scratch Tira project, this registers and
+starts `d2 tg.poller` as a monitor job, and its own output — including
+the real startup-guard warning when `D2TG_CHAT_ID` is unset — reaches
+that project's `tira.policy.bridge` as a `monitor-output` event, with no
+systemd or cron involved.
 
 To reply to a chat (text + voice note together, always):
 

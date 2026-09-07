@@ -85,3 +85,11 @@ on the project's Tira board ("D2 TG Skill"), not as markdown files in
   to `D2TG::Download` + `D2TG::Transcribe`, removing the downloaded temp
   file either way. **Not yet implemented**: photo/document download,
   replying to the transcript.
+- Tira monitor-job registration (TGT-015, proof + docs only, no code
+  changed) — verified in a `developer-dashboard:latest` container that
+  `d2 tira.job.add --schedule monitor --command "d2 tg.poller"` +
+  `d2 tira.job.start` feeds the poller's own stdout/stderr (including
+  its real startup-guard warning) into that project's
+  `tira.policy.bridge` as a `monitor-output` event, confirming Q-003's
+  "no systemd/cron" architecture end to end. See `README.md`/
+  `docs/commands.md` for the exact registration commands.

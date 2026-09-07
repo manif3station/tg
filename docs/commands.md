@@ -45,6 +45,21 @@ surrogate pair, is always kept in one chunk).
 Requires `gtts-cli` and `ffmpeg` to be installed on the machine running
 this command.
 
+## Registering as a Tira monitor job
+
+Once installed on a project's board, run the poller as a Tira monitor
+job rather than under systemd or cron (Q-003):
+
+```
+d2 tira.policy.add --rule monitor-output --action bridge-reminder   # once per board
+d2 tira.job.add --schedule monitor --command "d2 tg.poller"
+d2 tira.job.start --id JOB-NNN
+```
+
+Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
+`monitor-output` event - verified end to end in TGT-015 inside a
+`developer-dashboard:latest` container.
+
 ## Environment variables
 
 - `D2TG_TOKEN` — the Telegram bot token.
