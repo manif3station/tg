@@ -1,107 +1,146 @@
-# tg — skill reference
+# tg — onboarding runbook
 
-**Status: early implementation (v0.04).** This file will grow into the
-full command/workflow reference as the skill is implemented (per TGIG-002
-through TGIG-005). See `README.md` for the intended install/config/run
-shape, `docs/commands.md` for the command reference, `docs/POLICIES.md`
-for the operational rules this skill follows; ticket-level status lives
-on the project's Tira board ("D2 TG Skill"), not as markdown files in
-`tickets/`.
+**Status: early implementation (v0.05).** This file is a procedure to
+follow, start to finish, when installing this skill for a new user - not
+a changelog. For the full command/event reference (once running), see
+`docs/commands.md`; for the operational rules it follows, see
+`docs/POLICIES.md`; for ticket-level status, see this project's Tira
+board ("D2 TG Skill"), not markdown files in `tickets/`.
 
-## Implemented so far
+## 1. What this skill is
 
-- `D2TG::Config` (`lib/D2TG/Config.pm`) — reads `D2TG_TOKEN`/`D2TG_CHAT_ID`
-  from the environment; `require_chat_id_or_warn()` is the startup guard
-  that refuses to proceed (warning to STDERR) when `D2TG_CHAT_ID` is
-  unset or empty. `state_db_path()` resolves (and creates) the skill's
-  `state/store.sqlite` path — the single source of truth `cli/poller`
-  and `cli/approve` both call, instead of each duplicating the logic.
-- `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard,
-  then runs `D2TG::Poller`'s real long-poll loop against a `D2TG::Store`
-  access-control gate until `SIGTERM`/`SIGINT`. See the `D2TG::Poller` and
-  `D2TG::Store` entries below for what the loop actually does.
-- `D2TG::Telegram` (`lib/D2TG/Telegram.pm`) — minimal Bot API client:
-  `get_me`, `get_updates(offset, timeout)` (returns updates + next
-  offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK.
-- `D2TG::Poller` (`lib/D2TG/Poller.pm`) — `run_once($telegram, $offset,
-  $store)` does one `get_updates` call and prints one stdout line per
-  inbound text message (`NEW TG [chat_id] sender: text`) from an
-  allow-listed sender only. `cli/poller` runs this in a real loop
-  (SIGTERM/SIGINT for clean shutdown) once the startup guard passes.
-- `D2TG::Store` (`lib/D2TG/Store.pm`) — SQLite-backed (`state/store.sqlite`
-  under the skill's install root) `allow_list`/`pending` tables.
-  `D2TG_CHAT_ID` is auto-seeded as allowed on every start, no secret
-  phrase needed. Anyone else's message is silently recorded pending and
-  never reaches stdout. `approve($chat_id)` moves a chat id from
-  `pending` to `allow_list` (idempotent - returns false, not an error,
-  if the id wasn't actually pending).
-- `cli/approve` (dispatched as `d2 tg.approve <chat_id>`) — the operator
-  entrypoint for `D2TG::Store::approve`. Prints `Approved N` and exits 0
-  on success; exits non-zero on failure with a message distinguishing
-  "already allowed" (nothing to do) from "never pending" (never messaged
-  the bot). **Not yet implemented**: any Telegram-side notification to
-  the admin that someone is pending, non-text media — separate tickets
-  under TGIG-002.
-- `D2TG::Store::get_offset`/`set_offset` — the Telegram update offset is
-  now persisted in the same SQLite file (`meta` table). `cli/poller`
-  restores it at startup and saves it after every loop iteration, so a
-  restart resumes exactly where it left off instead of losing its place.
-- Pending-sender notification — `D2TG::Poller::run_once` now prints a
-  `NEW TG PENDING [chat_id] awaiting approval` line the first time a
-  non-allow-listed sender messages the bot (not on every subsequent
-  message from the same still-pending sender), so the admin sees it on
-  the same watched stream as everything else.
-- Media recognition — a photo/document/voice message from an allow-listed
-  sender now prints `NEW TG MEDIA [chat_id] sender: <type>` instead of
-  being silently skipped. **Not yet implemented**: downloading the file,
-  transcribing voice, or replying to media — separate tickets.
-- `D2TG::Telegram::send_message`/`send_voice`/`split_text_utf16` (TGT-013)
-  — outbound support: `send_message` auto-splits text at 4000 UTF-16
-  units (never breaking a codepoint, so a supplementary-plane character
-  is never split across chunks); `send_voice` uploads an audio file via a
-  hand-built `multipart/form-data` body (no external multipart
-  dependency).
-- `D2TG::TTS::synthesize` (TGT-013) — shells out to `gtts-cli` (cloud
-  gTTS, per Q-001) then `ffmpeg` to produce an Ogg/Opus voice note. Dies
-  on either step's failure - no partial/degraded output is ever returned.
-- `D2TG::Reply::send_reply` + `cli/reply` (dispatched as `d2 tg.reply
-  <chat_id> <text...>`) (TGT-013) — synthesizes the voice note first, and
-  only sends anything to Telegram once synthesis succeeds: a reply is
-  always both a text message and a voice note, never text-only.
-  **Not yet implemented**: automatically wiring an inbound message to a
-  reply (the poller does not call this itself yet) - separate ticket.
-- `D2TG::Download::download_file` (TGT-014) — resolves a Telegram
-  `file_id` via `get_file` + `file_download_url` and saves the bytes to a
-  local temp file, preserving the original extension.
-- `D2TG::Transcribe::transcribe` (TGT-014) — shells out to a local
-  `whisper` CLI (per Q-002) to transcribe an audio file, refusing any
-  `*.en` (English-only) model checkpoint per the blueprint.
-- `D2TG::Poller::run_once`'s new `transcribe_voice` parameter (TGT-014) —
-  when given, a voice message from an allow-listed sender is downloaded
-  and transcribed, printing `NEW TG VOICE [chat_id] sender: <transcript>`
-  to stdout; a failure prints `TRANSCRIBE ERROR [chat_id] sender:
-  <message>` to stderr and the loop continues (non-fatal, unlike
-  `D2TG::TTS`'s outbound fatal-on-failure rule). `cli/poller` wires this
-  to `D2TG::Download` + `D2TG::Transcribe`, removing the downloaded temp
-  file either way. **Not yet implemented**: replying to the transcript
-  (photo/document download landed in TGT-016 below).
-- Tira monitor-job registration (TGT-015, proof + docs only, no code
-  changed) — verified in a `developer-dashboard:latest` container that
-  `d2 tira.job.add --schedule monitor --command "d2 tg.poller"` +
-  `d2 tira.job.start` feeds the poller's own stdout/stderr (including
-  its real startup-guard warning) into that project's
-  `tira.policy.bridge` as a `monitor-output` event, confirming Q-003's
-  "no systemd/cron" architecture end to end. See `README.md`/
-  `docs/commands.md` for the exact registration commands.
-- `D2TG::Poller::run_once`'s new `download_media` parameter (TGT-016) —
-  closes TGIG-002's last deferred item. A photo or document message from
-  an allow-listed sender is downloaded via `D2TG::Download` (reused as-is
-  from TGT-014) and its local path printed:
-  `NEW TG MEDIA [chat_id] sender: <type> <local_path>`. For a photo,
-  Telegram's `photo` field is an array of `PhotoSize` entries
-  smallest-first - the LAST entry is selected for the largest
-  resolution. A download failure prints `MEDIA DOWNLOAD ERROR [chat_id]
-  sender: <message>` to stderr and the loop continues (non-fatal, same
-  pattern as voice transcription). Unlike the transient voice download,
-  the local file is kept, not removed. This completes TGIG-002's
-  original inbound-media scope.
+`tg` is a Telegram bridge for a Developer Dashboard project. Once
+running, it long-polls a Telegram bot, gates every sender through an
+allow-list, and prints new messages (text, voice - transcribed, photo/
+document - downloaded) to stdout with a ready-to-run reply command
+alongside each one. Registered as a Tira monitor job, that stream
+reaches the project's `tira.policy.bridge`, so the agent watching that
+board sees new Telegram messages as board notifications and can reply
+via `d2 tg.reply <chat_id> "..."` - a real text message plus a spoken
+voice note, always both, never text-only.
+
+## 2. Prep before install
+
+Collect these before starting:
+
+1. **A Telegram bot token.** Message `@BotFather` on Telegram, run
+   `/newbot`, follow its prompts. It returns a token that looks like
+   `123456789:AAExampleTokenAAAAAAAAAAAAAAAAAAAAAAA`. This becomes
+   `D2TG_TOKEN`.
+2. **The admin chat id.** The Telegram user id of the person this bot
+   should treat as its owner/admin (auto-allow-listed, never queued for
+   approval). If unknown, message the new bot anything once and check
+   `dashboard tg.poller`'s stdout the first time it runs (unset
+   `D2TG_CHAT_ID` first - see step 4 below) - or ask the user directly
+   for their Telegram numeric user id (e.g. via `@userinfobot`). This
+   becomes `D2TG_CHAT_ID`.
+3. **`gtts-cli` and `ffmpeg`** installed on the machine that will run
+   `d2 tg.reply` - required for the voice half of every reply. Check
+   with `which gtts-cli ffmpeg`.
+4. **A local `whisper` install** with a multilingual (non `*.en`) model,
+   if inbound voice-note transcription is wanted. Check with
+   `which whisper`. Not required for text-only inbound traffic.
+
+## 3. Install
+
+```
+dashboard skills install tg
+```
+
+## 4. Config the agent must collect before first use
+
+After install, the skill has no working config yet. Before running
+`d2 tg.poller` for real, the agent must have obtained from the user (or
+directly from step 2 above) and exported:
+
+```
+export D2TG_TOKEN="<the bot token from step 2.1>"
+export D2TG_CHAT_ID="<the admin chat id from step 2.2>"
+```
+
+Without `D2TG_CHAT_ID` set, `d2 tg.poller` refuses to start and prints a
+warning to stderr - this is a deliberate hard guard, not a bug. If the
+admin chat id is not yet known, run the poller once with `D2TG_TOKEN`
+set and `D2TG_CHAT_ID` unset/empty; it will still refuse to start, but
+the guard's own warning confirms the token itself is wired correctly.
+To actually discover an unknown chat id, message the bot from the
+intended admin's Telegram account and read the id off the Bot API's
+`getUpdates` response (or `@userinfobot`) before setting `D2TG_CHAT_ID`
+and restarting.
+
+## 5. End-to-end onboarding test (agent ↔ user ↔ Telegram)
+
+Do this for real, not as a described-but-unrun procedure - each step
+names what to do and exactly what confirms it worked.
+
+1. **Start the poller.** With both env vars set, run `d2 tg.poller` in a
+   terminal you can watch (foreground, or `d2 exec` if this session
+   drives it). Expect: `d2tg poller starting up (token set: yes)` on
+   stdout, then nothing further until a message arrives.
+2. **Ask the user to send a real Telegram message** to the bot from
+   their own phone/account (the one matching `D2TG_CHAT_ID`) - plain
+   text is enough for the first pass, e.g. "hello from onboarding test".
+3. **Confirm it arrives.** Expect two new stdout lines within the
+   poller's poll cycle:
+   ```
+   NEW TG [<chat_id>] <username>: hello from onboarding test
+   REPLY WITH: d2 tg.reply <chat_id> "..."
+   ```
+   If nothing appears within ~30s, check `D2TG_TOKEN` is the right bot's
+   token and that the user actually messaged that bot (not a different
+   one).
+4. **Send a reply.** Compose real text and run (in a second terminal,
+   the poller keeps running):
+   ```
+   d2 tg.reply <chat_id> "onboarding test received, reply is working"
+   ```
+   Expect: `Replied to <chat_id>` and exit 0.
+5. **Confirm the user received it.** Ask the user to check Telegram:
+   they should see BOTH a text message and a voice note reading the
+   same text, in that order. If only text arrived, or nothing arrived,
+   `d2 tg.reply` would have already exited non-zero with an error - this
+   is not a silent-failure design (see `docs/POLICIES.md`).
+6. **Optional: exercise voice and media.** Ask the user to send a voice
+   note and a photo. Expect `NEW TG VOICE [...]: <transcript>` (needs
+   local `whisper`, step 2.4) and `NEW TG MEDIA [...]: photo
+   <local_path>` respectively, each followed by its own `REPLY WITH`
+   line.
+7. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-5 have
+   both been confirmed by the user. **Onboarding is successful once
+   this whole loop - real message in, real reply out, user confirms
+   both - has actually happened once, not merely been read.**
+
+## 6. Register as a Tira monitor job
+
+Once onboarding (section 5) has succeeded, stop running the poller by
+hand and register it as a Tira monitor job on the **user's own project
+board** (not necessarily this skill's own dev board) so it runs
+continuously and its output reaches that board's bridge:
+
+```
+d2 tira.policy.add --rule monitor-output --action bridge-reminder   # once per board, skip if already declared
+d2 tira.job.add --schedule monitor --command "d2 tg.poller"
+d2 tira.job.start --id JOB-NNN   # use the id tira.job.add just printed
+```
+
+Have the user note the printed `JOB-NNN` id - it's needed for
+`tira.job.stop`/`tira.job.list` later. What to expect once started:
+
+- `dashboard tira.job.list -o json` shows that job with a `pid` and
+  `last_output_at` once at least one message has been processed.
+- New Telegram messages appear as `monitor-output` events on
+  `dashboard tira.policy.bridge` - the same `NEW TG .../REPLY WITH`
+  lines from section 5, now flowing through the board instead of a
+  terminal.
+- No systemd unit, no crontab entry is created or needed anywhere - this
+  is deliberate (Q-003).
+
+This exact wiring was verified live in a `developer-dashboard:latest`
+container (TGT-015).
+
+## Implementation reference
+
+Module-by-module and per-ticket implementation detail (which file
+implements what, exact function signatures) lives in the POD of each
+`lib/D2TG/*.pm` module and in `docs/commands.md`'s command/event
+reference - not here. This file stays a procedure, not a changelog.
