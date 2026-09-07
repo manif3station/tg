@@ -193,6 +193,18 @@ sub is_read {
     return defined $read_at ? 1 : 0;
 }
 
+sub unread_messages {
+    my ($self) = @_;
+
+    my $rows = $self->{dbh}->selectall_arrayref(
+        'SELECT chat_id, message_id, sender, summary, created_at
+         FROM messages WHERE read_at IS NULL ORDER BY created_at',
+        { Slice => {} },
+    );
+
+    return @$rows;
+}
+
 sub disconnect {
     my ($self) = @_;
 
@@ -287,6 +299,13 @@ C<chat_id>+C<message_id> - it simply updates zero rows.
 Returns true if C<mark_read> has been called for that C<chat_id>+
 C<message_id>, false otherwise - including when no row was ever
 recorded for it at all (never dies on an unknown message).
+
+=head2 unread_messages
+
+Returns the list of all stored messages (TGT-047) not yet marked read
+(C<mark_read>), as a list of hashrefs C<{ chat_id, message_id, sender,
+summary, created_at }>, ordered oldest first. Empty list if there are
+none - never dies on an empty store.
 
 =head2 disconnect
 

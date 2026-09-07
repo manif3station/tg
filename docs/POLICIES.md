@@ -223,6 +223,15 @@ send fails, the message stays unread, matching this skill's existing
 themselves. A message nothing has ever replied to stays unread
 indefinitely - there is no separate "mark as seen" action.
 
+## Unread messages are always discoverable, not just visible in scrollback
+
+Live design follow-up (TGT-047): before `d2 tg.unread`, the only way to
+know what was still outstanding was to remember or scroll back through
+the poller's own stdout/monitor-bridge history. `d2 tg.unread` now lists
+every stored message not yet marked read (TGT-046), so "what's still
+waiting for a reply?" always has a direct answer instead of relying on
+scrollback.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

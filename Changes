@@ -341,3 +341,10 @@ Revision history for the tg skill
         sends have actually succeeded (D2TG::Reply::send_reply's new
         optional store param), so a failed reply never marks anything
         read. A message with no reply against it stays unread.
+
+0.27  2026-09-07
+      - FEATURE (TGT-047, live design request following TGT-046): new
+        d2 tg.unread command lists every stored message not yet marked
+        read - chat id, message id, sender, timestamp, summary - oldest
+        first. Prints "No unread messages." when there are none. New
+        D2TG::Store::unread_messages backs it.
