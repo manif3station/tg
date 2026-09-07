@@ -90,6 +90,59 @@ package main;
     my $tg = D2TG::Telegram->new( token => 'bad-token', ua => $ua );
     eval { $tg->get_me };
     like( $@, qr/Unauthorized/, 'a non-ok Telegram response dies with the description' );
+    unlike( $@, qr/bad-token/, 'the error does not leak the bot token' );
+}
+
+{
+    my $ua = Fake::UA->new(
+        responses => [
+            { success => 0, status => 429, reason => 'Too Many Requests' },
+        ],
+    );
+
+    my $tg = D2TG::Telegram->new( token => 'test-token', ua => $ua );
+    eval { $tg->get_me };
+    like( $@, qr/429/,               'an HTTP transport failure dies naming the status' );
+    unlike( $@, qr/test-token/,      'the error does not leak the bot token' );
+}
+
+{
+    my $ua = Fake::UA->new(
+        responses => [
+            { success => 1, content => 'not json at all' },
+        ],
+    );
+
+    my $tg = D2TG::Telegram->new( token => 'test-token', ua => $ua );
+    eval { $tg->get_me };
+    like( $@, qr/not valid JSON/, 'a malformed response dies with a clear message' );
+}
+
+{
+    my $ua = Fake::UA->new(
+        responses => [
+            { success => 1, content => '{"ok":true,"result":[]}' },
+        ],
+    );
+
+    my $tg = D2TG::Telegram->new( token => 'test-token', ua => $ua );
+    my ( $updates, $next_offset ) = $tg->get_updates( offset => 7 );
+
+    is( scalar @$updates, 0, 'an empty update list is returned as an empty array' );
+    is( $next_offset, 7, 'offset is unchanged when no updates arrived' );
+}
+
+{
+    my $ua = Fake::UA->new(
+        responses => [
+            { success => 1, content => '{"ok":true,"result":{}}' },
+        ],
+    );
+
+    my $tg = D2TG::Telegram->new( token => 'test-token', ua => $ua );
+    my $file_path = $tg->get_file('missing-file');
+
+    is( $file_path, undef, 'get_file returns undef when file_path is absent' );
 }
 
 done_testing();

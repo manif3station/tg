@@ -28,9 +28,11 @@ sub _call {
         }
     );
 
-    die "D2TG::Telegram $method: HTTP request failed\n" unless $res->{success};
+    die "D2TG::Telegram $method: HTTP request failed (status $res->{status} $res->{reason})\n"
+      unless $res->{success};
 
-    my $data = decode_json( $res->{content} );
+    my $data = eval { decode_json( $res->{content} ) };
+    die "D2TG::Telegram $method: response was not valid JSON\n" unless $data;
 
     die "D2TG::Telegram $method failed: "
       . ( $data->{description} || 'unknown error' ) . "\n"
