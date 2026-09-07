@@ -14,3 +14,5 @@ Revision history for the tg skill
       - D2TG::Store + access-control gate (TGT-006): SQLite allow_list/
         pending tables; D2TG_CHAT_ID auto-seeded, everyone else silenced
         and recorded pending. cpanfile added (DBI, DBD::SQLite).
+      - D2TG::Store::approve + cli/approve (TGT-007): d2 tg.approve
+        <chat_id> moves a pending sender into the allow-list.

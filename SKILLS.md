@@ -28,6 +28,13 @@ shape; ticket-level status lives on the project's Tira board
   under the skill's install root) `allow_list`/`pending` tables.
   `D2TG_CHAT_ID` is auto-seeded as allowed on every start, no secret
   phrase needed. Anyone else's message is silently recorded pending and
-  never reaches stdout. **Not yet implemented**: any command/workflow to
-  approve a pending sender, non-text media, persisting the poll offset
-  across restarts — separate tickets under TGIG-002.
+  never reaches stdout. `approve($chat_id)` moves a chat id from
+  `pending` to `allow_list` (idempotent - returns false, not an error,
+  if the id wasn't actually pending).
+- `cli/approve` (dispatched as `d2 tg.approve <chat_id>`) — the operator
+  entrypoint for `D2TG::Store::approve`. Prints `Approved N` and exits 0
+  on success; exits non-zero with a clear STDERR message if the chat id
+  was never pending. **Not yet implemented**: any Telegram-side
+  notification to the admin that someone is pending, non-text media,
+  persisting the poll offset across restarts — separate tickets under
+  TGIG-002.
