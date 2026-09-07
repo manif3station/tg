@@ -33,27 +33,41 @@ sub run_once {
             $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
 
             print "NEW TG [$chat_id] $sender: $safe_text\n";
+            _print_reply_template($chat_id);
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
             my $file_id = $message->{voice}{file_id};
             my ( $ok, $transcript ) =
               _run_non_fatal( $transcribe_voice, $telegram, $file_id, $chat_id, $sender, 'TRANSCRIBE ERROR' );
 
-            print "NEW TG VOICE [$chat_id] $sender: $transcript\n" if $ok;
+            if ($ok) {
+                print "NEW TG VOICE [$chat_id] $sender: $transcript\n";
+                _print_reply_template($chat_id);
+            }
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
             my $file_id = _media_file_id( $message, $media_kind );
             my ( $ok, $local_path ) =
               _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
-            print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n" if $ok;
+            if ($ok) {
+                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n";
+                _print_reply_template($chat_id);
+            }
         }
         else {
             print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
+            _print_reply_template($chat_id);
         }
     }
 
     return ( $updates, $next_offset );
+}
+
+sub _print_reply_template {
+    my ($chat_id) = @_;
+    print qq{REPLY WITH: d2 tg.reply $chat_id "..."\n};
+    return;
 }
 
 sub _media_kind {
@@ -166,5 +180,14 @@ C<$@> and prints C<< <error_prefix> [chat_id] sender: <message> >> to
 STDERR, returning C<(0, undef)>; on success it returns
 C<(1, $result)>. The caller is responsible for printing its own
 differently-shaped success line.
+
+Every content line (text, a successfully transcribed voice message, or a
+successfully/plainly reported photo/document) is immediately followed by
+a C<< REPLY WITH: d2 tg.reply <chat_id> "..." >> line - a ready-to-run
+reply command template with the chat id filled in, per the owner's
+answered design question (Q-004). This is only ever a template: nothing
+in this module ever calls L<D2TG::Reply> or sends a reply itself. The
+pending-notification line and the two C<*ERROR> lines never get one -
+there is nothing to reply to yet.
 
 =cut

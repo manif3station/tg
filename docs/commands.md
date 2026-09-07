@@ -26,6 +26,11 @@ Events printed:
   photo/document message's download failed; the poller keeps running.
 - `NEW TG PENDING [chat_id] awaiting approval` — printed once, the first
   time a non-allow-listed chat id sends anything.
+- `REPLY WITH: d2 tg.reply <chat_id> "..."` — printed immediately after
+  every content line above (text/voice-transcript/media, never after the
+  pending notification or an error line): a ready-to-run reply command
+  template with the chat id already filled in, per Q-004. This is only
+  ever a template — the poller never sends a reply itself.
 
 Requires a local `whisper` install (a multilingual, non `.en` model) for
 voice transcription. No extra dependency is needed for photo/document
@@ -72,3 +77,24 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
   to start.
 - `DEVELOPER_DASHBOARD_SKILL_ROOT` — overrides where `state/store.sqlite`
   is resolved from; normally set by Developer Dashboard itself.
+
+## Module reference
+
+Full behavior/signature detail lives in each module's own POD
+(`perldoc lib/D2TG/<Name>.pm`); this is a one-line-each map of what's
+implemented and where:
+
+| Module | What it does |
+| --- | --- |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path. |
+| `D2TG::Telegram` | Raw HTTP Bot API client (`HTTP::Tiny`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines, the `REPLY WITH` template, non-fatal error handling for voice/media. |
+| `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
+| `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure. |
+| `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
+| `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |
+| `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models. |
+
+`cli/poller`, `cli/approve`, `cli/reply` are the thin `d2 tg.*`
+entrypoints described above; each just wires the relevant modules
+together.

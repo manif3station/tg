@@ -85,3 +85,11 @@ Revision history for the tg skill
         object (i.e. the poller's whole run) then died with "Already in
         a transaction". Fixed: any exception now triggers rollback
         before re-throwing.
+
+0.05  2026-09-07
+      - Reply-command template (TGT-022, per Q-004): every content line
+        the poller prints (text, a successfully transcribed voice
+        message, a photo/document line) is now followed by a
+        REPLY WITH: d2 tg.reply <chat_id> "..." template line - never on
+        the pending-notification or error lines. No automatic send;
+        this only makes composing the real reply fast.

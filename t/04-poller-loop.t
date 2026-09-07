@@ -39,7 +39,8 @@ sub capture_stdout {
     like( $out, qr/999/,          'stdout names the chat id' );
     like( $out, qr/ada/,          'stdout names the sender' );
     like( $out, qr/hello there/,  'stdout carries the message text' );
-    is( ( split /\n/, $out ), 1,  'exactly one line was printed for one message' );
+    is( ( split /\n/, $out ), 2,  'exactly one content line plus one REPLY WITH template line was printed' );
+    like( $out, qr/REPLY WITH: d2 tg\.reply 999/, 'the second line is the reply-command template' );
     is( $next_offset, 56,         'offset advances past the processed update' );
 }
 
@@ -67,8 +68,8 @@ sub capture_stdout {
         D2TG::Poller::run_once( $tg, undef );
     } );
 
-    is( ( split /\n/, $out ), 1,
-        'a message containing a newline still produces exactly one stdout line' );
+    is( ( split /\n/, $out ), 2,
+        'a message containing a newline still produces exactly one content line plus one REPLY WITH line' );
     like( $out, qr/line one.*line two/,
         'the embedded newline is escaped/replaced rather than splitting the line' );
 }
