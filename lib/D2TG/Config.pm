@@ -19,6 +19,28 @@ sub require_chat_id_or_warn {
     return 1;
 }
 
+sub skill_version {
+    my (%args) = @_;
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+      // $args{default_root}
+      // '.';
+
+    my $env_path = File::Spec->catfile( $skill_root, '.env' );
+
+    open my $fh, '<', $env_path
+      or die "D2TG::Config::skill_version: cannot read $env_path: $!\n";
+    local $/;
+    my $env = <$fh>;
+    close $fh;
+
+    my ($version) = $env =~ /^VERSION=(\S+)$/m;
+    die "D2TG::Config::skill_version: no VERSION line found in $env_path\n"
+      unless defined $version;
+
+    return $version;
+}
+
 sub state_db_path {
     my (%args) = @_;
 
@@ -79,5 +101,14 @@ otherwise from the given C<default_root> (callers typically pass
 C<File::Spec-E<gt>catdir($Bin, '..')> for this). Both C<cli/poller> and
 C<cli/approve> use this so the resolution logic exists in exactly one
 place.
+
+=head2 skill_version(default_root => $path)
+
+Reads and returns the C<VERSION=...> line from this skill's own
+C<.env> (TGT-036), resolving the skill root the same way
+C<state_db_path> does. Dies with a clear message if C<.env> can't be
+read at all, or if it has no C<VERSION> line. C<cli/poller> uses this
+to detect when a newer version has been installed while it is still
+running, so it can restart itself.
 
 =cut

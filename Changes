@@ -217,3 +217,14 @@ Revision history for the tg skill
         Telegram reply) was very likely caused by the same root cause
         as (1) - the poller's current poll cycle was still blocked and
         had not reached the next cycle to fetch it.
+
+0.16  2026-09-07
+      - FEATURE (TGT-036, owner request): the poller now self-refreshes
+        when a newer version is installed while it's already running.
+        D2TG::Config::skill_version reads the installed VERSION from
+        .env; after each poll cycle cli/poller compares it to the
+        version it started with, and if it changed, cleanly disconnects
+        D2TG::Store's DB handle (new disconnect method) and re-execs
+        itself in place (same PID) - a fresh Perl interpreter then loads
+        the newly-installed code. A pending shutdown always takes
+        priority over a detected version change.

@@ -41,6 +41,9 @@ my $store = D2TG::Store->new(
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 my $offset = $store->get_offset;
 
+my $skill_root      = File::Spec->catdir( $Bin, '..' );
+my $starting_version = D2TG::Config::skill_version( default_root => $skill_root );
+
 my $transcribe_voice = sub {
     my ( $tg, $file_id ) = @_;
     my $local_path = D2TG::Download::download_file( $tg, $file_id );
@@ -63,6 +66,15 @@ until ($shutting_down) {
         download_media   => $download_media,
     );
     $store->set_offset($offset) if defined $offset;
+
+    unless ($shutting_down) {
+        my $current_version = D2TG::Config::skill_version( default_root => $skill_root );
+        if ( $current_version ne $starting_version ) {
+            print "d2tg poller detected version change ($starting_version -> $current_version), restarting...\n";
+            $store->disconnect;
+            exec( $^X, $0, @ARGV ) or die "d2tg poller: exec failed: $!\n";
+        }
+    }
 }
 
 exit 0;
@@ -95,5 +107,24 @@ C<SIGTERM>/C<SIGINT> also call L<D2TG::Transcribe>'s C<kill_current>
 immediately rather than being waited out - previously, since Perl defers
 signal handling until the current blocking syscall returns, Ctrl+C could
 appear completely unresponsive for as long as a slow C<whisper> run took.
+
+After every poll cycle (and only when not already shutting down), the
+poller re-reads its own on-disk C<VERSION> (TGT-036) and compares it to
+the version it started with. If C<dashboard skills install tg> has
+installed a newer version in the meantime, it prints a notice, cleanly
+disconnects L<D2TG::Store>'s DB handle, and re-execs itself in place
+(same PID) - a fresh Perl interpreter then loads the newly-installed
+C<.pm> files from disk, so an already-running poller picks up a new
+release on its own within one poll cycle, with no manual restart and no
+systemd/cron involved.
+
+The SQLite handle is explicitly disconnected before C<exec> to avoid
+leaking that file descriptor; other open descriptors (e.g. a live LWP
+socket connection, if any) are not explicitly closed first, since C<exec>
+happens right after a poll cycle completes with no request in flight.
+Any such descriptor would be closed by the kernel once the re-exec'd
+process no longer references it - a one-off, low-severity resource note
+rather than a correctness issue, since this only happens once per
+version change, not on every poll cycle.
 
 =cut

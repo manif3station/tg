@@ -135,6 +135,14 @@ sub pending_chat_ids {
     return @$rows;
 }
 
+sub disconnect {
+    my ($self) = @_;
+
+    $self->{dbh}->disconnect;
+
+    return;
+}
+
 1;
 
 =head1 NAME
@@ -195,5 +203,12 @@ been saved yet.
 =head2 set_offset($offset)
 
 Persists C<$offset>, overwriting any previously saved value.
+
+=head2 disconnect
+
+Disconnects the underlying DBI handle (TGT-036). C<cli/poller> calls
+this immediately before re-execing itself on a detected version change,
+so the SQLite connection is closed cleanly rather than left open across
+the C<exec> call.
 
 =cut

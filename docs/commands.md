@@ -11,6 +11,12 @@ line per event to **stdout** (`NEW TG ...`), one line per error to
 **stderr** — no log file. Meant to run as a Tira monitor-kind job, not
 under systemd or cron.
 
+Self-refreshes on a new install (TGT-036): after each poll cycle, it
+compares its own on-disk `VERSION` against the one it started with. If
+`dashboard skills install tg` has installed a newer version in the
+meantime, it prints a notice and re-execs itself in place (same PID) -
+no manual restart needed to pick up a new release.
+
 Events printed:
 
 - `NEW TG [chat_id] sender: text` — an allowed sender's text message.
@@ -113,10 +119,10 @@ implemented and where:
 
 | Module | What it does |
 | --- | --- |
-| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path. |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
-| `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
+| `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure; `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |

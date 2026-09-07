@@ -119,3 +119,14 @@ project it serves, not started by systemd or cron. This keeps the
 poller's lifecycle visible on the same board that tracks everything else
 about the project, instead of in an OS-level service list nobody is
 watching (Q-003).
+
+## The poller refreshes itself when a new version is installed
+
+Owner request (TGT-036): since there is deliberately no systemd/cron to
+restart the poller for you, it restarts itself instead. After every poll
+cycle it compares its own on-disk `VERSION` to the one it started with;
+if `dashboard skills install tg` has installed something newer in the
+meantime, it disconnects its DB handle and re-execs itself in place
+(same PID, same Tira monitor-job tracking) - a fresh Perl interpreter
+then loads the newly-installed code. A version change never interrupts
+an in-progress shutdown (`SIGTERM`/`SIGINT` still takes priority).

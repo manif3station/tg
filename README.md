@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.15).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.16).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
