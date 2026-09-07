@@ -33,6 +33,16 @@ sub _ensure_schema {
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)'
     );
+    $self->{dbh}->do(
+        'CREATE TABLE IF NOT EXISTS messages (
+             chat_id    INTEGER NOT NULL,
+             message_id INTEGER NOT NULL,
+             sender     TEXT,
+             summary    TEXT,
+             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             PRIMARY KEY (chat_id, message_id)
+         )'
+    );
 
     return;
 }
@@ -135,6 +145,29 @@ sub pending_chat_ids {
     return @$rows;
 }
 
+sub record_message {
+    my ( $self, $chat_id, $message_id, $sender, $summary ) = @_;
+
+    $self->{dbh}->do(
+        'INSERT INTO messages (chat_id, message_id, sender, summary) VALUES (?, ?, ?, ?)
+         ON CONFLICT(chat_id, message_id) DO UPDATE SET sender = excluded.sender, summary = excluded.summary',
+        undef, $chat_id, $message_id, $sender, $summary,
+    );
+
+    return;
+}
+
+sub get_message {
+    my ( $self, $chat_id, $message_id ) = @_;
+
+    my $row = $self->{dbh}->selectrow_hashref(
+        'SELECT sender, summary FROM messages WHERE chat_id = ? AND message_id = ?',
+        undef, $chat_id, $message_id,
+    );
+
+    return $row;
+}
+
 sub disconnect {
     my ($self) = @_;
 
@@ -203,6 +236,20 @@ been saved yet.
 =head2 set_offset($offset)
 
 Persists C<$offset>, overwriting any previously saved value.
+
+=head2 record_message($chat_id, $message_id, $sender, $summary)
+
+Records a short summary of a processed message (TGT-038) against its own
+C<chat_id>+C<message_id> - the message's own text for a text message, its
+transcript for voice, or C<"<kind> <local_path>"> for an already-
+downloaded photo/document. Idempotent: recording the same C<chat_id>+
+C<message_id> again overwrites the previous C<sender>/C<summary>.
+
+=head2 get_message($chat_id, $message_id)
+
+Returns C<{ sender => ..., summary => ... }> for a previously recorded
+message, or C<undef> if nothing was ever recorded for that
+C<chat_id>+C<message_id>.
 
 =head2 disconnect
 

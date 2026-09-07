@@ -46,11 +46,21 @@ Events printed:
 If the sender used Telegram's native reply-to-message feature, every
 content line above also carries a `(replying to <sender>: <snippet-or-
 kind>)` suffix (TGT-029) naming what the reply targets — the original
-sender's username and either a snippet of the original text (up to 5000
-chars, TGT-035 - comfortably exceeds Telegram's own 4096-char message
-limit, so a quoted message is effectively never truncated in practice)
-or its media kind if the original had none. A fresh message (no reply)
-gets no suffix.
+sender's username and a description of the original message. A fresh
+message (no reply) gets no suffix.
+
+As of TGT-038, that description is looked up first in this skill's own
+stored message history (every processed text/voice-transcript/media line
+is recorded against its own chat_id+message_id) — so a reply to a
+previously downloaded document shows its actual `local_path`, and a
+reply to a previously transcribed voice note shows its actual
+transcript, instead of just the bare word `document`/`voice`. Only when
+nothing was ever stored for the replied-to message (it predates this
+feature, or its sender was never allow-listed at the time) does the
+suffix fall back to Telegram's own payload: a snippet of the original
+text (up to 5000 chars, TGT-035 - comfortably exceeds Telegram's own
+4096-char message limit, so a quoted message is effectively never
+truncated in practice) or its media kind if the original had none.
 
 Requires a local `whisper` install (a multilingual, non `.en` model) for
 voice transcription. No extra dependency is needed for photo/document
@@ -126,8 +136,8 @@ implemented and where:
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
-| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
-| `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure; `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template, non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
+| `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |

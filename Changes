@@ -239,3 +239,18 @@ Revision history for the tg skill
         too large to download" error naming the limit, and the doomed
         getFile call is never attempted at all. Normal-sized files are
         unaffected.
+
+0.18  2026-09-07
+      - FEATURE (TGT-038, live design proposal from Michael): a reply to
+        an uploaded photo/document previously showed only the bare media
+        kind ("document"/"photo") in its reply-context suffix, with no
+        way to tell which one. D2TG::Store gains a messages table plus
+        record_message/get_message; D2TG::Poller now records a short
+        summary of every successfully processed message (its text, its
+        transcript for voice, or "<kind> <local_path>" for a downloaded
+        photo/document) against that message's own chat_id+message_id.
+        _reply_context_suffix looks up the replied-to message's stored
+        summary first; only when nothing was ever stored for it (predates
+        this feature, or the sender was never allow-listed at the time)
+        does it fall back to the original Telegram-payload-only
+        behavior, unchanged.

@@ -36,6 +36,20 @@ snippet of the original text (or its media kind) - so the monitoring
 agent never has to cross-reference an earlier line to know which
 message in the conversation a reply responds to.
 
+## The reply-context prefers our own message history over Telegram's bare payload
+
+Live feedback (TGT-038): replying to an uploaded document previously
+showed only the generic media kind - "(replying to X: document)" - with
+no way to tell which document, even though this skill had already
+downloaded it moments earlier. Every message this skill successfully
+processes (text, a transcribed voice note, or a downloaded photo/
+document) is now recorded in `D2TG::Store` against its own chat_id and
+message_id. When building a reply-context suffix, the poller looks up
+the replied-to message there first; only when nothing was ever stored
+for it (it predates this feature, or its sender was never allow-listed
+at the time) does it fall back to Telegram's own `reply_to_message`
+payload, unchanged from before.
+
 ## CLI commands validate chat_id locally before any network call
 
 Both `d2 tg.approve` and `d2 tg.reply` reject a non-numeric `chat_id`

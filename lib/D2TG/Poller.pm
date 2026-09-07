@@ -56,7 +56,8 @@ sub run_once {
             next;
         }
 
-        my $reply_ctx = _reply_context_suffix($message);
+        my $reply_ctx = _reply_context_suffix( $message, $store, $chat_id );
+        my $message_id = $message->{message_id};
 
         if ( defined $text && length $text ) {
             ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
@@ -64,6 +65,8 @@ sub run_once {
 
             print "NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
             _print_reply_template($chat_id);
+            $store->record_message( $chat_id, $message_id, $sender, $safe_text )
+              if $store && defined $message_id;
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
             my $file_id = $message->{voice}{file_id};
@@ -73,6 +76,8 @@ sub run_once {
             if ($ok) {
                 print "NEW TG VOICE [$chat_id] $sender: $transcript$reply_ctx\n";
                 _print_reply_template($chat_id);
+                $store->record_message( $chat_id, $message_id, $sender, $transcript )
+                  if $store && defined $message_id;
             }
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
@@ -91,6 +96,8 @@ sub run_once {
                 if ($ok) {
                     print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$reply_ctx\n";
                     _print_reply_template($chat_id);
+                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path" )
+                      if $store && defined $message_id;
                 }
             }
         }
@@ -104,26 +111,39 @@ sub run_once {
 }
 
 sub _reply_context_suffix {
-    my ($message) = @_;
+    my ( $message, $store, $chat_id ) = @_;
 
     my $original = $message->{reply_to_message};
     return '' unless $original;
 
     my $original_sender = $original->{from}{username} // 'unknown';
-    my $original_text   = $original->{text};
 
-    my $what;
-    if ( defined $original_text && length $original_text ) {
-        ( my $safe = $original_text ) =~ s/\r?\n/\\n/g;
-        $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
-        $safe = substr( $safe, 0, 5000 ) . '...' if length $safe > 5000;
-        $what = $safe;
-    }
-    else {
-        $what = _media_kind($original) // 'message';
+    my $what = _stored_summary( $store, $chat_id, $original->{message_id} );
+
+    unless ( defined $what ) {
+        my $original_text = $original->{text};
+        if ( defined $original_text && length $original_text ) {
+            ( my $safe = $original_text ) =~ s/\r?\n/\\n/g;
+            $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+            $safe = substr( $safe, 0, 5000 ) . '...' if length $safe > 5000;
+            $what = $safe;
+        }
+        else {
+            $what = _media_kind($original) // 'message';
+        }
     }
 
     return qq{ (replying to $original_sender: $what)};
+}
+
+sub _stored_summary {
+    my ( $store, $chat_id, $message_id ) = @_;
+
+    return undef unless $store && defined $chat_id && defined $message_id;
+
+    my $stored = $store->get_message( $chat_id, $message_id );
+
+    return $stored ? $stored->{summary} : undef;
 }
 
 sub _print_reply_template {
@@ -296,13 +316,23 @@ If Telegram's C<reply_to_message> field is present on the message (the
 sender used Telegram's native reply-to-message feature), every content
 line above also gets a C<< (replying to <sender>: <snippet-or-kind>) >>
 suffix (TGT-029), naming who/what the reply targets: the original
-sender's username, and either a sanitized/truncated (5000 chars, TGT-035
-- raised from an initial 60, which live feedback found far too short to
-be useful context for a real conversation; 5000 comfortably exceeds
-Telegram's own 4096-character message limit, so a quoted message is
-effectively never truncated in practice) snippet of the original text,
-or its media kind if the original had no text. A
-message with no C<reply_to_message> gets no suffix at all - unchanged
-from before this ticket. See C<_reply_context_suffix>.
+sender's username, and a description of the original message. A message
+with no C<reply_to_message> gets no suffix at all. See
+C<_reply_context_suffix>.
+
+As of TGT-038, that description is looked up first in C<$store> (via
+C<get_message>, keyed on the original message's own C<chat_id>+
+C<message_id>) - this is richer than Telegram's own payload for media/
+voice, since it can be the downloaded file's C<local_path> or the actual
+transcript rather than just the bare word C<photo>/C<document>/C<voice>.
+Every successfully processed content line (text, transcribed voice, or
+downloaded photo/document) is itself recorded into C<$store> via
+C<record_message> immediately after being printed, so a later reply to it
+can be looked up this way. Only when nothing is stored (a reply to a
+message from before this feature existed, from a sender never allow-
+listed at the time, or when C<$store> is not given at all) does the
+suffix fall back to the original Telegram-payload-only behavior: a
+sanitized/truncated (5000 chars, TGT-035) snippet of the original text,
+or its media kind if the original had none.
 
 =cut
