@@ -57,11 +57,16 @@ no manual restart needed to pick up a new release.
 
 Events printed:
 
-Every event line below is prefixed with `[YYYY-MM-DD HH:MM:SS]` (TGT-061),
-sourced from Telegram's own `message.date` field rather than local
-wall-clock time - so the printed timestamp always reflects when Telegram
-itself received the message, even if this poller processed it a poll
-cycle or more later.
+Every **stdout** event line below (`NEW TG`/`NEW TG VOICE`/`NEW TG
+MEDIA`/`NEW TG PENDING`) is prefixed with `[YYYY-MM-DD HH:MM:SS]`
+(TGT-061), sourced from Telegram's own `message.date` field rather than
+local wall-clock time - so the printed timestamp always reflects when
+Telegram itself received the message, even if this poller processed it
+a poll cycle or more later. The two **stderr** error lines below
+(`TRANSCRIBE ERROR`, `MEDIA DOWNLOAD ERROR`) are NOT timestamped
+(TGT-065) - the timestamp is sourced from the inbound message being
+reported on, and these lines report a failure to process it, not
+content from it.
 
 - `NEW TG [chat_id] sender: text` — an allowed sender's text message.
   Every content line (this one and the two below) also names the

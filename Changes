@@ -532,3 +532,12 @@ Revision history for the tg skill
         loop for the narrow window where a competing process's file
         exists but hasn't written its PID yet. Verified with a real
         8-process fork-based race: exactly one winner, every run.
+
+0.44  2026-09-07
+      - DOC FIX (TGT-065, found via a scheduled doc-accuracy hunt pass):
+        docs/commands.md and D2TG::Poller's own POD both claimed EVERY
+        event line gets a TGT-061 timestamp prefix - false for the two
+        stderr lines (TRANSCRIBE ERROR, MEDIA DOWNLOAD ERROR), which
+        never receive the timestamp. Both now correctly scope the claim
+        to the 4 stdout event lines and explicitly note the 2 stderr
+        lines are not timestamped. No code change.

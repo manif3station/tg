@@ -342,12 +342,15 @@ STDERR, returning C<(0, undef)>; on success it returns
 C<(1, $result)>. The caller is responsible for printing its own
 differently-shaped success line.
 
-Every event line (including C<NEW TG PENDING>) is prefixed with a
-C<[YYYY-MM-DD HH:MM:SS]> timestamp (TGT-061, see C<_timestamp_prefix>),
-sourced from Telegram's own C<message.date> field rather than local
-wall-clock time - it reflects when Telegram itself received the
-message, not when this poller happened to process it, which can lag
-behind by a poll cycle or more.
+Every **stdout** event line (C<NEW TG>/C<NEW TG VOICE>/C<NEW TG
+MEDIA>/C<NEW TG PENDING>) is prefixed with a C<[YYYY-MM-DD HH:MM:SS]>
+timestamp (TGT-061, see C<_timestamp_prefix>), sourced from Telegram's
+own C<message.date> field rather than local wall-clock time - it
+reflects when Telegram itself received the message, not when this
+poller happened to process it, which can lag behind by a poll cycle or
+more. The C<TRANSCRIBE ERROR>/C<MEDIA DOWNLOAD ERROR> **stderr** lines
+above are NOT timestamped (TGT-065) - C<_run_non_fatal> and the
+oversized-file branch never receive or use C<$ts>.
 
 Every content line also names the message's own C<message_id> as
 C<< (msg #N) >> (TGT-040), when Telegram provided one.
