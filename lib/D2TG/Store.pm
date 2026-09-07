@@ -44,6 +44,9 @@ sub _ensure_schema {
          )'
     );
 
+    eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
+    die $@ if $@ && $@ !~ /duplicate column name/;
+
     return;
 }
 
@@ -168,6 +171,28 @@ sub get_message {
     return $row;
 }
 
+sub mark_read {
+    my ( $self, $chat_id, $message_id ) = @_;
+
+    $self->{dbh}->do(
+        'UPDATE messages SET read_at = CURRENT_TIMESTAMP WHERE chat_id = ? AND message_id = ?',
+        undef, $chat_id, $message_id,
+    );
+
+    return;
+}
+
+sub is_read {
+    my ( $self, $chat_id, $message_id ) = @_;
+
+    my ($read_at) = $self->{dbh}->selectrow_array(
+        'SELECT read_at FROM messages WHERE chat_id = ? AND message_id = ?',
+        undef, $chat_id, $message_id,
+    );
+
+    return defined $read_at ? 1 : 0;
+}
+
 sub disconnect {
     my ($self) = @_;
 
@@ -250,6 +275,18 @@ C<message_id> again overwrites the previous C<sender>/C<summary>.
 Returns C<{ sender => ..., summary => ... }> for a previously recorded
 message, or C<undef> if nothing was ever recorded for that
 C<chat_id>+C<message_id>.
+
+=head2 mark_read($chat_id, $message_id)
+
+Marks a previously recorded message read (TGT-046, stamps a
+C<read_at> timestamp). A no-op (no error) if no row exists yet for that
+C<chat_id>+C<message_id> - it simply updates zero rows.
+
+=head2 is_read($chat_id, $message_id)
+
+Returns true if C<mark_read> has been called for that C<chat_id>+
+C<message_id>, false otherwise - including when no row was ever
+recorded for it at all (never dies on an unknown message).
 
 =head2 disconnect
 

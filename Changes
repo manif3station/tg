@@ -332,3 +332,12 @@ Revision history for the tg skill
         wrong-terminal/stale-env-var situation like TGT-044's incident).
         New D2TG::Config::masked_token helper; chat_id is not a secret
         so it's shown in full.
+
+0.26  2026-09-07
+      - FEATURE (TGT-046, live design request): D2TG::Store's messages
+        table (TGT-038) gains a read_at column, plus mark_read/is_read.
+        Replying via d2 tg.reply --reply-to-message-id <id> now marks
+        that message read - but only after both the voice and text
+        sends have actually succeeded (D2TG::Reply::send_reply's new
+        optional store param), so a failed reply never marks anything
+        read. A message with no reply against it stays unread.

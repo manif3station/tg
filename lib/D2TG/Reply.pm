@@ -25,6 +25,9 @@ sub send_reply {
 
     my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
 
+    $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
+      if $args{store} && defined $args{reply_to_message_id};
+
     return { text => $text_result, voice => $voice_result };
 }
 
@@ -69,7 +72,7 @@ whether it succeeded or not.
 
 =head1 FUNCTIONS
 
-=head2 send_reply(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id)
+=head2 send_reply(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store)
 
 C<telegram> must respond to C<send_message($chat_id, $text, ...)> and
 C<send_voice($chat_id, $path, ...)>. C<synthesize> is optional and defaults to
@@ -81,6 +84,15 @@ through to both C<send_voice> and C<send_message>, so the reply threads
 natively under the original message in Telegram's UI instead of arriving
 as a fresh, unthreaded message. Omitting it is unchanged from before
 this ticket.
+
+C<store> (TGT-046) is optional; when given I<together with>
+C<reply_to_message_id>, that message is marked read
+(L<D2TG::Store/mark_read>) only after both sends have actually
+succeeded - a failed synthesis or a failed C<send_voice>/C<send_message>
+call dies before C<mark_read> is ever reached, so a message is never
+marked read for a reply that didn't actually go out. Omitting C<store>,
+or omitting C<reply_to_message_id>, leaves read status untouched -
+unchanged from before this ticket.
 
 =head2 parse_cli_args(@ARGV)
 

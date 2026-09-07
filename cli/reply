@@ -4,10 +4,12 @@ use strict;
 use warnings;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+use File::Spec;
 
 use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Reply;
+use D2TG::Store;
 
 my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@ARGV);
 
@@ -22,11 +24,19 @@ if ( !defined $chat_id
 
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
 
+my $store = D2TG::Store->new(
+    db_path => D2TG::Config::state_db_path(
+        default_root => File::Spec->catdir( $Bin, '..' )
+    ),
+    admin_chat_id => D2TG::Config::chat_id(),
+);
+
 D2TG::Reply::send_reply(
     telegram             => $telegram,
     chat_id              => $chat_id,
     text                 => $text,
     reply_to_message_id  => $reply_to_message_id,
+    store                => $store,
 );
 
 print "Replied to $chat_id\n";
@@ -64,5 +74,9 @@ natively under the original message in Telegram's UI instead of arriving
 as a fresh, unthreaded message. See L<D2TG::Reply/parse_cli_args>.
 Omitting it is unchanged from before TGT-040 - no C<reply_to_message_id>
 is sent.
+
+When C<--reply-to-message-id> is given, that message is also marked read
+in L<D2TG::Store> (TGT-046) once the reply has actually been sent
+successfully - never for a reply that failed.
 
 =cut

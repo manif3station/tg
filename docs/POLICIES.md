@@ -211,6 +211,18 @@ last 4 characters and the chat_id in full (not a secret, a Telegram user
 id), so an operator can confirm the right credentials without a live
 secret ever appearing in full on the console/monitor feed.
 
+## A message is only marked read once the agent has actually replied to it
+
+Live design request (TGT-046): now that every message has a known id
+(TGT-040) and is recorded in D2TG::Store (TGT-038), it also carries a
+read/unread status. `d2 tg.reply --reply-to-message-id <id>` marks that
+message read - but only *after* the reply has actually been sent
+successfully (both the voice and text sends). If synthesis or either
+send fails, the message stays unread, matching this skill's existing
+"never claim success that didn't happen" principle for replies
+themselves. A message nothing has ever replied to stays unread
+indefinitely - there is no separate "mark as seen" action.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the
