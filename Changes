@@ -348,3 +348,10 @@ Revision history for the tg skill
         read - chat id, message id, sender, timestamp, summary - oldest
         first. Prints "No unread messages." when there are none. New
         D2TG::Store::unread_messages backs it.
+
+0.28  2026-09-07
+      - REFACTOR (TGT-050, found via IMPROVEMENT HUNT): D2TG::Telegram's
+        DEFAULT_HARD_TIMEOUT constant moved from mid-file to sit with
+        the other use statements at the top, matching D2TG::Poller's
+        established convention for compile-time declarations. No
+        behavior change - full suite unaffected.

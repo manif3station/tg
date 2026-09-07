@@ -7,6 +7,8 @@ use HTTP::Request;
 use JSON::PP qw(decode_json encode_json);
 use File::Spec;
 
+use constant DEFAULT_HARD_TIMEOUT => 35;
+
 sub new {
     my ( $class, %args ) = @_;
 
@@ -18,8 +20,6 @@ sub new {
         ua    => $args{ua} || LWP::UserAgent->new( timeout => 35 ),
     }, $class;
 }
-
-use constant DEFAULT_HARD_TIMEOUT => 35;
 
 sub _call {
     my ( $self, $method, $params, %opts ) = @_;
