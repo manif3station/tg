@@ -1,0 +1,15 @@
+#!/usr/bin/env perl
+
+use strict;
+use warnings;
+use FindBin qw($Bin);
+use lib "$Bin/../lib";
+
+use D2TG::Config;
+
+exit 1 unless D2TG::Config::require_chat_id_or_warn();
+
+print "d2tg poller starting up (token set: "
+    . ( defined D2TG::Config::token() ? "yes" : "no" ) . ")\n";
+
+exit 0;
