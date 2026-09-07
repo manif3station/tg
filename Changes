@@ -173,3 +173,10 @@ Revision history for the tg skill
         previously a reply looked identical to a fresh message on
         stdout, giving the monitoring agent no way to tell which prior
         message in a conversation a reply responds to.
+
+0.12  2026-09-07
+      - DOCS (TGT-032): added a Troubleshooting entry for "HTTP request
+        failed (status 409 Conflict)" - non-fatal (handled by
+        run_once_safe/TGT-028), likely caused by a forced (non-clean)
+        poller restart, now less likely since TGT-031's prompt-shutdown
+        fix.

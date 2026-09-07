@@ -142,6 +142,23 @@ Fix: open `@BotFather` on Telegram, `/mybots` → the bot → **API Token**
 else: `curl https://api.telegram.org/bot<token>/getMe` - if that alone
 returns 401, the token is the problem, not this skill.
 
+### `HTTP request failed (status 409 Conflict)`
+
+This means **Telegram briefly saw more than one `getUpdates` consumer**
+for the same bot token - not a code bug, and already handled gracefully
+(logged as `POLL ERROR`, retried by `run_once_safe`, TGT-028). The
+likely cause (TGT-031/TGT-032): the poller was previously stopped by
+force (e.g. `kill -9`, or a terminal closed) rather than a clean
+`Ctrl+C`/`SIGTERM` shutdown, leaving Telegram's long-poll connection
+open a little longer on the old side while a new instance started -
+briefly overlapping. Since TGT-031, `Ctrl+C`/`SIGTERM` kill any
+in-flight work (including a transcription) immediately, so a clean
+shutdown should no longer leave this window open. Fix/avoidance: let
+the poller shut down via `Ctrl+C`/`SIGTERM` rather than force-killing
+it. If 409s continue after a clean shutdown, that would point at a
+second `d2 tg.poller` genuinely running somewhere else with the same
+token - check for that first.
+
 ### `POLL ERROR: ...` lines on stderr, and the poller keeps running
 
 Expected and correct (TGT-028): a transient failure inside one poll
