@@ -405,3 +405,14 @@ Revision history for the tg skill
         token is never persisted in plaintext); D2TG::Store's
         admin_chat_id now also accepts an arrayref to seed every
         declared chat_id allowed. New D2TG::Config::bot_groups.
+
+0.33  2026-09-07
+      - BUGFIX (TGT-053, found via manual smoke-testing during TGT-049):
+        D2TG::Store's read_at column migration (TGT-046) re-runs on
+        every D2TG::Store->new() call and is expected to fail with
+        "duplicate column name" on any already-migrated database - that
+        expected, already-handled case was still printing a raw DBI
+        warning to STDERR every single time (every poller startup or
+        restart after the first). PrintError is now suppressed for just
+        that one statement; a genuinely unexpected failure still dies as
+        before.

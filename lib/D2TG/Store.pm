@@ -49,7 +49,10 @@ sub _ensure_schema {
          )'
     );
 
-    eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
+    }
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     return;
@@ -290,6 +293,13 @@ schema exists, and seeds C<admin_chat_id> into the allow-list if given.
 C<admin_chat_id> may be a single scalar (unchanged from before) or an
 arrayref of chat ids (TGT-049, for multi-group polling) - every id in
 the arrayref is seeded allowed.
+
+Ensuring the schema re-runs the C<messages> table's C<read_at> column
+migration (TGT-046) on every call, which is expected to fail with
+C<duplicate column name> on any database that's already been migrated -
+that specific, already-handled case never reaches C<STDERR> (TGT-053,
+C<PrintError> suppressed just for that one statement); a genuinely
+different, unexpected failure still propagates via C<die> as before.
 
 =head2 is_allowed($chat_id)
 
