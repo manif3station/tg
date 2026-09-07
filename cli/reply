@@ -19,7 +19,18 @@ while (@ARGV) {
         $db_alias = shift @ARGV;
     }
     elsif ( $ARGV[0] eq '--bot' ) {
-        ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag(@ARGV);
+        if ( @ARGV >= 2 ) {
+            ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag(@ARGV);
+        }
+        else {
+            # A bare trailing --bot with no value can't be consumed by
+            # extract_bot_flag (it needs 2 elements) - shift it off
+            # directly so the loop always makes forward progress instead
+            # of spinning forever on the same unconsumed argument. Falls
+            # through to the chat_id/text Usage check below, same as any
+            # other malformed invocation.
+            shift @ARGV;
+        }
     }
     else {
         last;
@@ -87,7 +98,13 @@ relative to C<--db>/C<-d>, and sends via that token instead of
 C<D2TG_TOKEN> - required to reply to a message received under C<d2
 tg.poller>'s multi-bot mode (TGT-049) by a bot other than the one
 C<D2TG_TOKEN> names; the poller's own C<REPLY WITH> template already
-fills this in when it applies. See L<D2TG::Reply/extract_bot_flag>.
+fills this in when it applies. See L<D2TG::Reply/extract_bot_flag>. A
+bare trailing C<--bot> with no value following it is shifted off
+directly (TGT-068) rather than left for C<extract_bot_flag> (which needs
+two elements to consume anything) - falls through to the C<chat_id>/text
+C<Usage> check below like any other malformed invocation, instead of
+looping forever on the same unconsumed argument (a real, live-reproduced
+hang before this fix).
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

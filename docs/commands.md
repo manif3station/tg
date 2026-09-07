@@ -171,7 +171,9 @@ reason, and in either order)
 `D2TG_TOKEN` happens to name; the poller's own `REPLY WITH` template
 already fills this in when it applies. Omitting it is unchanged from
 before this ticket - falls back to `D2TG_TOKEN`, exactly as every
-single-bot-mode reply always has.
+single-bot-mode reply always has. A bare trailing `--bot` with no value
+following it is rejected with the usual `Usage` error instead of
+hanging (TGT-068, a real live-reproduced infinite loop before this fix).
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)

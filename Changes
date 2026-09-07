@@ -566,3 +566,16 @@ Revision history for the tg skill
         behavior), so the margin is a code-level invariant that can't
         silently drift apart again if either constant changes in the
         future.
+
+0.47  2026-09-07
+      - BUGFIX (TGT-068, found via a scheduled bug-hunt pass, live-
+        reproduced): cli/reply hung forever (confirmed: `timeout 3 perl
+        cli/reply --bot` never returned) on a bare trailing --bot with
+        no token following it - D2TG::Reply::extract_bot_flag's own
+        length-2 guard correctly declines to consume anything in that
+        case, but cli/reply's flag-parsing loop kept re-entering the
+        same branch with the same unshrunk argument list forever
+        instead of making forward progress. The --bot branch now shifts
+        a bare trailing --bot directly when there's nothing after it to
+        consume, falling through to the existing Usage error like any
+        other malformed invocation - no more hang.
