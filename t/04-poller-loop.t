@@ -93,6 +93,32 @@ sub capture_stdout {
 }
 
 {
+    # Defense in depth: strip other control/escape characters too, not just
+    # newlines - an ANSI escape sequence in inbound text could otherwise
+    # manipulate a terminal displaying this stream directly.
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 61,
+                message   => {
+                    chat => { id => 1 },
+                    from => { username => 'mallory' },
+                    text => "hello\e[31mRED\e[0mworld\x07",
+                },
+            },
+        ],
+    );
+
+    my $out = capture_stdout( sub {
+        D2TG::Poller::run_once( $tg, undef );
+    } );
+
+    unlike( $out, qr/\e/, 'ESC control characters are stripped from message text before printing' );
+    unlike( $out, qr/\x07/, 'other non-printable control characters are stripped too' );
+    like( $out, qr/hello.*RED.*world/, 'the printable content survives the sanitization' );
+}
+
+{
     my $tg = Fake::Telegram->new(
         [
             {

@@ -22,6 +22,7 @@ sub run_once {
         }
 
         ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
+        $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
 
         print "NEW TG [$chat_id] $sender: $safe_text\n";
     }
