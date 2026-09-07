@@ -519,3 +519,16 @@ Revision history for the tg skill
         token is in use) has no effect on it and never resets it. No
         code change; this skill was already reading message_id straight
         from Telegram's own payload everywhere.
+
+0.43  2026-09-07
+      - BUGFIX (TGT-064, found via a scheduled bug-hunt pass):
+        D2TG::Lock::acquire's original check-then-write sequence was not
+        atomic - two processes racing to start against the same fresh
+        (no pre-existing lock file) --db location could both pass the
+        liveness check before either wrote the file, both proceeding to
+        run, exactly the concurrent-poller scenario TGT-062 exists to
+        prevent. acquire() now uses O_CREAT|O_EXCL as its primary path -
+        a true kernel-atomic file creation - with a small bounded retry
+        loop for the narrow window where a competing process's file
+        exists but hasn't written its PID yet. Verified with a real
+        8-process fork-based race: exactly one winner, every run.
