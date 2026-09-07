@@ -79,4 +79,48 @@ require D2TG::Config;
     like( $@, qr/--bot given before any --chat_id/, '--bot with no preceding --chat_id (CLI or env) dies with a clear message' );
 }
 
+{
+    # TGT-069: a bare trailing --chat_id (no value) must die with a
+    # clear message instead of silently storing chat_id => undef, which
+    # would otherwise reach D2TG::Store's SQL bind as an opaque
+    # DBD::SQLite error several layers away from the actual mistake.
+    eval {
+        D2TG::Config::bot_groups(
+            argv        => [ '--chat_id' ],
+            env_chat_id => undef,
+            env_token   => undef,
+        );
+    };
+    like( $@, qr/--chat_id requires a value/, 'a bare trailing --chat_id (no value) dies with a clear message' );
+}
+
+{
+    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+        argv        => [ '--chat_id', '1234', '--bot', 't1' ],
+        env_chat_id => undef,
+        env_token   => undef,
+    );
+
+    is( $groups->[0]{chat_id}, 1234, 'a normal --chat_id <id> pair is completely unaffected by the new validation' );
+}
+
+{
+    # TGT-069, real live incident: a bare trailing --chat_id with an
+    # env_token ALSO set (bot_groups appends --bot <env_token> to argv
+    # BEFORE parsing, per its own documented merge rule) means @argv is
+    # non-empty right after the dangling --chat_id - the naive "is
+    # anything left" check passes, and --bot itself gets consumed as the
+    # chat_id value instead of a real id. Must still die, not silently
+    # store chat_id => '--bot'.
+    eval {
+        D2TG::Config::bot_groups(
+            argv        => [ '--chat_id' ],
+            env_chat_id => undef,
+            env_token   => 'sometoken',
+        );
+    };
+    like( $@, qr/--chat_id requires a value/,
+        'a bare trailing --chat_id dies even when an env token appends a --bot pair right after it' );
+}
+
 done_testing();

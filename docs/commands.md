@@ -27,7 +27,9 @@ merge rule), which is what makes the plain env-var-only case (no
 `--chat_id`/`--bot` given at all) byte-identical to this skill's
 original single-bot behavior, with no migration step for an existing
 install. Refuses to start if no group ends up with at least one bot
-token.
+token, and (TGT-069) if any `--chat_id` has no usable value following it
+- a bare trailing `--chat_id` now fails with a clear message instead of
+an opaque database error.
 
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
 if `D2TG_CHAT_ID` is not set AND no `--chat_id` was given on the command

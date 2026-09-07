@@ -579,3 +579,19 @@ Revision history for the tg skill
         a bare trailing --bot directly when there's nothing after it to
         consume, falling through to the existing Usage error like any
         other malformed invocation - no more hang.
+
+0.48  2026-09-08
+      - BUGFIX (TGT-069, found via a scheduled bug-hunt pass, live-
+        reproduced): D2TG::Config::bot_groups silently stored an unusable
+        chat_id when --chat_id had no real value following it - a plain
+        bare trailing --chat_id stored undef, and (a subtler variant
+        found during the fix) a bare trailing --chat_id with D2TG_TOKEN
+        also set stored the literal string "--bot" as the chat_id,
+        since the env-token merge appends its own --bot <token> pair
+        right after the dangling --chat_id, satisfying a naive
+        "something is left in argv" check. Either way this eventually
+        reached D2TG::Store's SQL bind as an opaque "DBD::SQLite::db do
+        failed: datatype mismatch" several layers away from the actual
+        mistake. bot_groups now validates the shifted value is defined
+        and isn't itself a recognized flag token, dying immediately with
+        a clear "--chat_id requires a value" message instead.

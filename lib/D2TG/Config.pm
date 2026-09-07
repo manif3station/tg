@@ -117,7 +117,10 @@ sub bot_groups {
         my $arg = shift @argv;
 
         if ( $arg eq '--chat_id' ) {
-            $current = { chat_id => scalar( shift @argv ), bots => [] };
+            my $value = shift @argv;
+            die "D2TG::Config::bot_groups: --chat_id requires a value\n"
+              unless defined $value && $value ne '--chat_id' && $value ne '--bot';
+            $current = { chat_id => $value, bots => [] };
             push @groups, $current;
         }
         elsif ( $arg eq '--bot' ) {
@@ -284,6 +287,18 @@ group.
 
 Dies if a C<--bot> is encountered (from either C<argv> or the appended
 env pair) with no C<--chat_id> having been declared yet.
+
+Dies (TGT-069, a real live-reproduced incident: a bare trailing
+C<--chat_id> reached D2TG::Store's SQL bind as an opaque
+C<DBD::SQLite::db do failed: datatype mismatch>, several layers away
+from the actual mistake) if a C<--chat_id> has no usable value following
+it - either nothing at all, or another recognized flag token
+(C<--chat_id>/C<--bot>). The latter case matters specifically because of
+the env-merge behavior above: if C<env_token> is set, it appends its own
+C<--bot $token> pair to C<argv> I<before> parsing, so a bare trailing
+C<--chat_id> in the caller's own args is never actually the last element
+of the combined stream - a naive "is anything left" check would let
+C<--bot> itself be consumed as the chat_id value instead of failing.
 
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 
