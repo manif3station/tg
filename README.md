@@ -1,8 +1,11 @@
 # tg
 
-**Status: scaffold only (v0.01).** The directory layout, packaging, and
-this README describe the intended design; the poller and its commands
-below are not implemented yet. See `tickets/` for in-progress work.
+**Status: early implementation (v0.01).** `d2 tg.poller` runs for real —
+it long-polls Telegram and prints inbound text messages to stdout — but
+has **no access control yet** (every sender's text reaches stdout), no
+media handling, no reply/voice output, and does not persist its poll
+offset across restarts. See `SKILLS.md` for what's implemented so far and
+this project's Tira board ("D2 TG Skill") for ticket-level status.
 
 Telegram bridge skill for Developer Dashboard. Lets an admin reach a
 project's live agent session over Telegram, and be reached by it — text,

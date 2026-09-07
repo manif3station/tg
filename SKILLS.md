@@ -17,5 +17,11 @@ shape; ticket-level status lives on the project's Tira board
   not implemented yet (see TGIG-002); this only proves the guard wiring.
 - `D2TG::Telegram` (`lib/D2TG/Telegram.pm`) — minimal Bot API client:
   `get_me`, `get_updates(offset, timeout)` (returns updates + next
-  offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK. Not
-  yet wired into `cli/poller`'s loop — that's the next ticket.
+  offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK.
+- `D2TG::Poller` (`lib/D2TG/Poller.pm`) — `run_once($telegram, $offset)`
+  does one `get_updates` call and prints one stdout line per inbound text
+  message (`NEW TG [chat_id] sender: text`). `cli/poller` now runs this
+  in a real loop (SIGTERM/SIGINT for clean shutdown) once the startup
+  guard passes. **Not yet implemented**: access control (every sender's
+  text currently reaches stdout), non-text media, persisting the offset
+  across restarts — all separate tickets under TGIG-002.
