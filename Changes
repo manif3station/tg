@@ -154,3 +154,13 @@ Revision history for the tg skill
         cli/poller's SIGTERM/SIGINT handlers now call the new
         D2TG::Transcribe::kill_current to end an in-flight transcription
         immediately at shutdown time.
+
+0.10  2026-09-07
+      - BUGFIX (TGT-030, live reproduction: Michael sent a voice
+        message): whisper's own console output (FP16/CPU warning,
+        language-detection lines, raw per-segment transcript lines) was
+        inherited straight onto the poller's real stdout, polluting the
+        watched NEW TG stream. Fixed: D2TG::Transcribe::_run's forked
+        child now reopens its own STDOUT/STDERR onto /dev/null before
+        exec - only this project's own structured lines ever reach the
+        real stream.

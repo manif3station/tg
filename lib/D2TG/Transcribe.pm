@@ -55,6 +55,8 @@ sub _run {
     die "D2TG::Transcribe::_run: fork failed: $!\n" unless defined $pid;
 
     if ( $pid == 0 ) {
+        open( STDOUT, '>', File::Spec->devnull ) or POSIX::_exit(127);
+        open( STDERR, '>', File::Spec->devnull ) or POSIX::_exit(127);
         exec(@cmd) or POSIX::_exit(127);
     }
 
@@ -137,6 +139,13 @@ per-call via C<local>), it is sent C<TERM>, given one second to exit,
 then C<KILL>ed if still alive - C<_run> then dies with a
 timeout-specific message rather than returning. On normal exit, returns
 the command's exit status as before.
+
+Before C<exec>, the child reopens its own C<STDOUT>/C<STDERR> onto
+C<File::Spec-E<gt>devnull> (TGT-030: C<whisper>'s own console chatter -
+warnings, language-detection lines, per-segment transcript output - was
+otherwise inherited straight onto the poller's real stdout, polluting
+the watched C<NEW TG> stream). Only the child's descriptors are
+touched; the parent's own C<STDOUT>/C<STDERR> are never redirected.
 
 =head2 kill_current()
 

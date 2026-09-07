@@ -64,6 +64,17 @@ it ran). `D2TG::Transcribe::_run` is bounded by `$TIMEOUT` (default
 in-flight transcription is killed immediately at shutdown time rather
 than waited out.
 
+## A transcription's own console output never reaches the watched stream
+
+`whisper` prints its own chatter (warnings, language-detection lines,
+per-segment transcript output) to its own stdout/stderr by default.
+Confirmed live (TGT-030, Michael sent a voice message): this was
+inherited straight onto the poller's real stdout, polluting the exact
+stream a Tira monitor job's feeder reads. `D2TG::Transcribe::_run`'s
+forked child now reopens its own stdout/stderr onto `/dev/null` before
+exec, so only this project's own structured lines (`NEW TG VOICE`,
+`TRANSCRIBE ERROR`, etc.) ever reach the real stream.
+
 ## The poll loop itself survives transient failures
 
 Beyond individual voice/media failures (above), the poll cycle itself

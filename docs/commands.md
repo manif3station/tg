@@ -45,6 +45,11 @@ Ctrl+C could appear completely unresponsive for as long as a slow
 `whisper` run took, since a blocking subprocess call defers Perl's
 signal handling until it returns.
 
+`whisper`'s own console output (warnings, language-detection lines,
+per-segment transcript lines) never reaches the poller's stdout/stderr
+(TGT-030) - only the structured `NEW TG VOICE`/`REPLY WITH` lines do,
+keeping the watched stream clean.
+
 ## `d2 tg.approve <chat_id>`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
