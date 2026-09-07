@@ -134,6 +134,11 @@ sub send_message {
     my ( $self, $chat_id, $text, $limit, %opts ) = @_;
 
     my @results;
+    if ( defined $opts{reply_to_message_id} ) {
+        die "D2TG::Telegram sendMessage: reply_to_message_id must be numeric\n"
+          unless $opts{reply_to_message_id} =~ /^\d+$/;
+    }
+
     for my $chunk ( split_text_utf16( $text, $limit ) ) {
         my $payload = { chat_id => $chat_id, text => $chunk };
         $payload->{reply_to_message_id} = $opts{reply_to_message_id}
@@ -256,9 +261,13 @@ Sends C<$text> to C<$chat_id> via C<sendMessage>, splitting it across
 multiple calls if it exceeds C<$limit> UTF-16 code units (Telegram's own
 hard cap is 4096; this defaults to 4000 to leave headroom). Returns an
 arrayref of the raw Telegram result for each call made. C<reply_to_message_id>
-(TGT-040) is optional; when given, every chunk's C<sendMessage> call
-carries it, so the message threads natively under the original message
-in Telegram's UI. Omitting it is unchanged from before this ticket.
+(TGT-040) is optional; when given, it must be numeric (dies otherwise,
+TGT-055 - matches C<send_voice>'s own validation below, so both send
+methods enforce the same guarantee uniformly instead of one dying with a
+clear local error and the other forwarding a bad value into Telegram's
+API), and every chunk's C<sendMessage> call carries it, so the message
+threads natively under the original message in Telegram's UI. Omitting
+it is unchanged from before this ticket.
 
 =head2 send_voice($chat_id, $file_path, reply_to_message_id => $id)
 

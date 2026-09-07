@@ -50,6 +50,17 @@ for it (it predates this feature, or its sender was never allow-listed
 at the time) does it fall back to Telegram's own `reply_to_message`
 payload, unchanged from before.
 
+## Both Telegram send methods validate reply_to_message_id the same way
+
+Improvement-hunt finding (TGT-055): `D2TG::Telegram::send_voice` already
+validated `reply_to_message_id` is numeric before use, dying with a
+clear D2TG-level error otherwise; `send_message` did not, and would have
+silently forwarded a bad value into Telegram's API instead, surfacing
+only as an opaque remote error. `send_message` now validates the same
+way `send_voice` always has - both existing callers (`cli/reply`, the
+poller's own `REPLY WITH` template) already validate upstream, so this
+closes a latent gap rather than changing any live caller's behavior.
+
 ## d2 tg.reply's --reply-to-message-id flag only ever means what it looks like
 
 Hourly bug-hunt finding (TGT-042): the flag (TGT-040) was originally

@@ -429,3 +429,14 @@ Revision history for the tg skill
         A dedup hit now calls utime() to mark the file as freshly
         referenced, so repeated re-sends correctly keep a file warm
         against pruning.
+
+0.35  2026-09-07
+      - HARDENING (TGT-055, found via a scheduled improvement-hunt pass):
+        D2TG::Telegram::send_message now validates reply_to_message_id
+        is numeric before use, dying with a clear D2TG-level error
+        instead of forwarding a bad value into Telegram's API and
+        surfacing only as an opaque remote error - matching send_voice's
+        existing validation. No functional change for either current
+        caller (cli/reply and the poller's own template both already
+        validate upstream); this closes a latent asymmetry between the
+        two send methods.
