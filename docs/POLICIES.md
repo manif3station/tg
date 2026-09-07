@@ -188,6 +188,18 @@ an explicit `timeout => 35` on its default `ua`, so a single poll cycle
 - and therefore shutdown delay - is genuinely bounded to about 35s, not
 merely assumed to be.
 
+That bound turned out to still have a gap (TGT-044, a second live
+production incident): `LWP::UserAgent`'s own `timeout` did not reliably
+cover a request stuck in the initial TCP `connect()` phase - the live
+poller was found with its socket wedged in `SYN-SENT` far past 35s, and
+even `SIGTERM` could not stop it (Perl only delivers a pending signal
+once the blocking syscall it's inside of returns - `SIGKILL` was needed).
+`D2TG::Telegram::_call` now wraps its request in an explicit
+`alarm()`/`SIGALRM`-based hard timeout, which reliably interrupts any
+blocking syscall - including a stuck `connect()` - regardless of which
+phase it's stuck in, so the ~35s bound above is now actually enforced in
+every case, not just the ones LWP's own timeout happens to cover.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

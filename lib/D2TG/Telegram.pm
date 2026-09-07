@@ -19,6 +19,8 @@ sub new {
     }, $class;
 }
 
+use constant DEFAULT_HARD_TIMEOUT => 35;
+
 sub _call {
     my ( $self, $method, $params, %opts ) = @_;
 
@@ -29,7 +31,8 @@ sub _call {
     $req->header( %$headers );
     $req->content($content);
 
-    my $res = $self->{ua}->request($req);
+    my $timeout = eval { $self->{ua}->timeout } || DEFAULT_HARD_TIMEOUT;
+    my $res = _with_hard_timeout( $timeout, $method, sub { $self->{ua}->request($req) } );
 
     die "D2TG::Telegram $method: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
       unless $res->is_success;
@@ -42,6 +45,23 @@ sub _call {
       unless $data->{ok};
 
     return $data->{result};
+}
+
+sub _with_hard_timeout {
+    my ( $seconds, $method, $coderef ) = @_;
+
+    my $result;
+    eval {
+        local $SIG{ALRM} = sub { die "D2TG::Telegram $method: request timed out after ${seconds}s\n" };
+        alarm($seconds);
+        $result = $coderef->();
+        alarm(0);
+    };
+    my $error = $@;
+    alarm(0);
+    die $error if $error;
+
+    return $result;
 }
 
 sub _utf16_units {
@@ -181,6 +201,19 @@ the C<~/skills/tg> blueprint's own "no heavy SDK" principle. Uses
 L<LWP::UserAgent> by default (TGT-028); pass C<ua> to the constructor to
 inject a different (or mock) client for testing.
 
+Every C<_call> is additionally wrapped in a hard, C<SIGALRM>-based
+timeout (TGT-044, a real production incident: the underlying C<ua>'s own
+C<timeout> setting - relied on since TGT-035 - was observed to NOT bound
+a request stuck in the initial TCP C<connect()> phase; the live poller
+process hung indefinitely with its socket wedged in C<SYN-SENT>, and
+even C<SIGTERM> could not stop it, since Perl only delivers a signal
+once the blocking syscall it's inside of returns). C<alarm()>/C<SIGALRM>
+reliably interrupts any blocking syscall in Perl, unlike trusting a
+library's own internal timeout implementation to cover every phase. The
+bound used is the C<ua>'s own C<timeout> value if it exposes one (a real
+L<LWP::UserAgent> does), otherwise C<DEFAULT_HARD_TIMEOUT> (35s,
+matching the C<ua>'s own default).
+
 =head1 METHODS
 
 =head2 new(token => $token, ua => $optional_client)
@@ -238,6 +271,16 @@ C<send_message>'s JSON-encoded payload, so this guards against a
 CRLF/boundary-containing value injecting extra multipart fields) and an
 extra C<reply_to_message_id> field is added to the body before the
 C<voice> field.
+
+=head2 _with_hard_timeout($seconds, $method, \&coderef)
+
+Internal helper (TGT-044): runs C<&coderef> under C<alarm($seconds)>, so
+a C<SIGALRM> forcibly interrupts it - including a blocking syscall like
+C<connect()> - if it hasn't returned within C<$seconds>. On timeout,
+dies with C<< D2TG::Telegram <method>: request timed out after
+<seconds>s >>. C<alarm(0)> is always called before returning or
+re-throwing, whether the call succeeded, failed, or timed out, so no
+alarm is ever left pending.
 
 =head2 split_text_utf16($text, $limit = 4000)
 

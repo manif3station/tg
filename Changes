@@ -308,3 +308,16 @@ Revision history for the tg skill
         shown in the example. Updated to match the actual current
         output, matching docs/commands.md's already-accurate
         description.
+
+0.24  2026-09-07
+      - BUGFIX (TGT-044, live production incident: "nothing received" -
+        no matter text, voice, or attachment): the live poller process
+        was found stuck with its Telegram connection wedged in SYN-SENT,
+        well past the 35s bound TGT-035 documented - even SIGTERM
+        couldn't stop it (Perl only delivers a signal once the blocking
+        syscall it's inside of returns), requiring SIGKILL. LWP::
+        UserAgent's own timeout evidently does not reliably bound a
+        stuck TCP connect() phase. D2TG::Telegram::_call now wraps its
+        single blocking request() call in an explicit SIGALRM-based hard
+        timeout, which reliably interrupts any blocking syscall
+        regardless of which phase it's stuck in.

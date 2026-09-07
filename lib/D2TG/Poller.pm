@@ -227,11 +227,15 @@ actually exist - L<D2TG::Telegram>'s default L<LWP::UserAgent> had no
 explicit timeout, so a single call could block for up to LWP's own
 180s default, not the 30s this section used to claim) fixed the actual
 enforcement: D2TG::Telegram's default C<ua> now has an explicit 35s
-timeout, so this delay is genuinely bounded to roughly that, not merely
-assumed to be. Interrupting the blocking HTTP call mid-flight (rather
-than bounding its maximum duration) would still need an async/
+timeout. TGT-044 (a second real production incident - LWP's own timeout
+did not actually cover a request stuck in the TCP C<connect()> phase,
+which not even C<SIGTERM> could interrupt) closed that remaining gap
+with an explicit C<SIGALRM>-based hard timeout inside C<_call> itself -
+so this delay is now genuinely bounded to roughly 35s in every case, not
+merely assumed to be. Interrupting the blocking HTTP call mid-flight
+(rather than bounding its maximum duration) would still need an async/
 select-based rewrite, which remains out of scope - acceptable now that
-the bound is short and, unlike before, actually enforced.
+the bound is short and actually enforced end to end.
 
 =head1 DESCRIPTION
 
