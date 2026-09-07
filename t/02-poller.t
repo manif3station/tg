@@ -4,6 +4,9 @@ use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
 use File::Temp qw(tempfile);
+use IPC::Open3;
+use Symbol qw(gensym);
+use POSIX qw(:sys_wait_h);
 
 my $poller = File::Spec->catfile( $Bin, '..', 'cli', 'poller' );
 
@@ -47,14 +50,30 @@ for my $missing_value ( undef, '' ) {
 }
 
 {
+    # Since TGT-005, once the guard passes cli/poller enters a real
+    # long-poll loop and never exits on its own - it is a long-running
+    # service now, not a one-shot script. This test only proves the guard
+    # passed and the confirmation line printed BEFORE any network call is
+    # made, then kills the process outright; it never waits on the loop
+    # and never talks to the real Telegram API, per this project's
+    # no-real-network-in-tests rule. Loop correctness itself is
+    # unit-tested in t/04-poller-loop.t via D2TG::Poller::run_once against
+    # a mocked client.
     local %ENV = %ENV;
     $ENV{D2TG_TOKEN}   = 'test-token';
     $ENV{D2TG_CHAT_ID} = '12345';
 
-    my ( $out, $rc, undef ) = run_poller();
+    my ( $child_out, $child_err ) = ( gensym, gensym );
+    my $pid = open3( my $in, $child_out, $child_err, $poller );
 
-    is( $rc, 0, 'exits 0 when both env vars are set' );
-    like( $out, qr/\S/, 'prints a startup confirmation to STDOUT' );
+    my $first_line = <$child_out>;
+
+    kill 'KILL', $pid;
+    waitpid( $pid, 0 );
+
+    like( $first_line, qr/\S/, 'prints a startup confirmation to STDOUT before polling' );
+
+    close $_ for grep { defined } ( $in, $child_out, $child_err );
 }
 
 done_testing();

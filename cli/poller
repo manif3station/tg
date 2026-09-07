@@ -6,11 +6,24 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 use D2TG::Config;
+use D2TG::Telegram;
+use D2TG::Poller;
 
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
 print "d2tg poller starting up (token set: "
     . ( defined D2TG::Config::token() ? "yes" : "no" ) . ")\n";
+
+my $shutting_down = 0;
+$SIG{TERM} = sub { $shutting_down = 1 };
+$SIG{INT}  = sub { $shutting_down = 1 };
+
+my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
+my $offset;
+
+until ($shutting_down) {
+    ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset );
+}
 
 exit 0;
 

@@ -1,0 +1,56 @@
+package D2TG::Poller;
+
+use strict;
+use warnings;
+
+sub run_once {
+    my ( $telegram, $offset ) = @_;
+
+    my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
+
+    for my $update (@$updates) {
+        my $message = $update->{message} or next;
+        my $text = $message->{text};
+        next unless defined $text && length $text;
+
+        my $chat_id = $message->{chat}{id};
+        my $sender  = $message->{from}{username} // 'unknown';
+
+        print "NEW TG [$chat_id] $sender: $text\n";
+    }
+
+    return ( $updates, $next_offset );
+}
+
+1;
+
+=head1 NAME
+
+D2TG::Poller - the long-poll loop connecting D2TG::Telegram to stdout
+
+=head1 SYNOPSIS
+
+    my $offset;
+    while (1) {
+        ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset );
+    }
+
+=head1 DESCRIPTION
+
+C<run_once> performs a single C<get_updates> call and, for each update
+carrying a text message, prints one line to STDOUT naming the chat id,
+sender, and text. Non-text updates (photos, documents, voice, etc.) are
+silently skipped in this ticket's scope - handling them is separate,
+later work. Access control (allow-list/pending) is likewise not applied
+here - every sender's text is printed - a following ticket adds the gate
+before this is used for real.
+
+=head1 FUNCTIONS
+
+=head2 run_once($telegram, $offset)
+
+Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
+method matching that signature) and the current offset. Returns the raw
+updates array and the next offset to pass on the following call.
+
+=cut
