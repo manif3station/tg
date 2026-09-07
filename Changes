@@ -3,3 +3,5 @@ Revision history for the tg skill
 0.01  2026-09-07
       - Initial scaffold (TGT-001): lib/, cli/, t/, tickets/, README,
         LICENSE, .env.
+      - D2TG::Config (TGT-002): reads D2TG_TOKEN/D2TG_CHAT_ID, startup
+        guard warns to STDERR and refuses when D2TG_CHAT_ID is unset.
