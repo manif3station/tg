@@ -10,8 +10,10 @@ sub run_once {
 
     for my $update (@$updates) {
         my $message = $update->{message} or next;
-        my $text = $message->{text};
-        next unless defined $text && length $text;
+        my $text       = $message->{text};
+        my $media_kind = _media_kind($message);
+
+        next unless ( defined $text && length $text ) || $media_kind;
 
         my $chat_id = $message->{chat}{id};
         my $sender  = $message->{from}{username} // 'unknown';
@@ -23,13 +25,27 @@ sub run_once {
             next;
         }
 
-        ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
-        $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+        if ( defined $text && length $text ) {
+            ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
+            $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
 
-        print "NEW TG [$chat_id] $sender: $safe_text\n";
+            print "NEW TG [$chat_id] $sender: $safe_text\n";
+        }
+        else {
+            print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
+        }
     }
 
     return ( $updates, $next_offset );
+}
+
+sub _media_kind {
+    my ($message) = @_;
+
+    return 'photo'    if $message->{photo};
+    return 'document' if $message->{document};
+    return 'voice'    if $message->{voice};
+    return undef;
 }
 
 1;
