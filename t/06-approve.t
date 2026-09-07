@@ -82,6 +82,17 @@ sub fresh_db_path {
     my $rc3  = $? >> 8;
     unlink "/tmp/d2tg-approve-stderr3.$$";
     isnt( $rc3, 0, 'cli/approve with no argument exits non-zero' );
+
+    D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 )->add_pending(666);
+
+    my $out4 = `$approve_cli 666 junk 2>/tmp/d2tg-approve-stderr4.$$`;
+    my $rc4  = $? >> 8;
+    unlink "/tmp/d2tg-approve-stderr4.$$";
+    isnt( $rc4, 0, 'cli/approve with a stray extra argument is refused rather than silently ignoring it' );
+
+    my $store_check = D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 );
+    ok( !$store_check->is_allowed(666),
+        '...and the chat id named before the stray argument was NOT approved as a side effect' );
 }
 
 done_testing();

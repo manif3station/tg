@@ -10,12 +10,12 @@ use File::Path qw(make_path);
 use D2TG::Config;
 use D2TG::Store;
 
-my $chat_id = shift @ARGV;
-
-if ( !defined $chat_id || $chat_id !~ /^-?\d+$/ ) {
+if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
     print STDERR "Usage: d2 tg.approve <chat_id>\n";
     exit 2;
 }
+
+my $chat_id = $ARGV[0];
 
 my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
   // File::Spec->catdir( $Bin, '..' );
