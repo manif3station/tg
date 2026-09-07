@@ -200,6 +200,17 @@ blocking syscall - including a stuck `connect()` - regardless of which
 phase it's stuck in, so the ~35s bound above is now actually enforced in
 every case, not just the ones LWP's own timeout happens to cover.
 
+## The startup line confirms which credentials actually loaded, without exposing them
+
+Live request (TGT-045, raised while diagnosing TGT-044's incident): the
+startup line used to only confirm C<D2TG_TOKEN> was non-empty
+("token set: yes"), giving no way to tell WHICH token or chat id
+actually loaded - relevant precisely when debugging a stale-terminal or
+wrong-project situation. It now prints the token masked to its first and
+last 4 characters and the chat_id in full (not a secret, a Telegram user
+id), so an operator can confirm the right credentials without a live
+secret ever appearing in full on the console/monitor feed.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the

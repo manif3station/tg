@@ -321,3 +321,14 @@ Revision history for the tg skill
         single blocking request() call in an explicit SIGALRM-based hard
         timeout, which reliably interrupts any blocking syscall
         regardless of which phase it's stuck in.
+
+0.25  2026-09-07
+      - FEATURE (TGT-045, live request while diagnosing TGT-044): the
+        poller's startup line changes from "d2tg poller starting up
+        (token set: yes)" to "d2tg poller starting up (token:
+        <first4>...<last4>) (chat_id: <chat_id>)" - useful for
+        confirming which bot token and admin chat id actually loaded
+        from the environment (relevant exactly when debugging a
+        wrong-terminal/stale-env-var situation like TGT-044's incident).
+        New D2TG::Config::masked_token helper; chat_id is not a secret
+        so it's shown in full.

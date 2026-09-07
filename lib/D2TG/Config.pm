@@ -8,6 +8,15 @@ use File::Path qw(make_path);
 sub token   { return $ENV{D2TG_TOKEN}; }
 sub chat_id { return $ENV{D2TG_CHAT_ID}; }
 
+sub masked_token {
+    my ($token) = @_;
+
+    return '(not set)' unless defined $token && length $token;
+    return $token if length($token) < 8;
+
+    return substr( $token, 0, 4 ) . '...' . substr( $token, -4 );
+}
+
 sub require_chat_id_or_warn {
     my $chat_id = chat_id();
 
@@ -84,6 +93,15 @@ Returns the value of C<D2TG_TOKEN>, or C<undef> if unset.
 =head2 chat_id
 
 Returns the value of C<D2TG_CHAT_ID>, or C<undef> if unset.
+
+=head2 masked_token($token)
+
+Returns C<$token> masked to its first 4 and last 4 characters joined by
+C<...> (TGT-045), for safe display (e.g. the poller's own startup line)
+without printing a live credential in full. C<undef> or an empty string
+returns C<(not set)>; a token shorter than 8 characters (too short to
+usefully mask) is returned unchanged rather than crashing or producing a
+confusing result.
 
 =head2 require_chat_id_or_warn
 

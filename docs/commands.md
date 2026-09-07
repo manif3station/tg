@@ -6,7 +6,11 @@ All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 ## `d2 tg.poller`
 
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
-if `D2TG_CHAT_ID` is not set. Runs until `SIGTERM`/`SIGINT`. Prints one
+if `D2TG_CHAT_ID` is not set. On startup, prints `d2tg poller starting
+up (token: <first 4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) - the
+token is masked, the chat_id (not a secret) is shown in full, useful for
+confirming the right credentials loaded (e.g. not a stale value from a
+different terminal/project). Runs until `SIGTERM`/`SIGINT`. Prints one
 line per event to **stdout** (`NEW TG ...`), one line per error to
 **stderr** — no log file. Meant to run as a Tira monitor-kind job, not
 under systemd or cron.
@@ -160,7 +164,7 @@ implemented and where:
 
 | Module | What it does |
 | --- | --- |
-| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036). |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035, backed by a real SIGALRM-based hard timeout since a stuck TCP connect() was found to bypass it in production - TGT-044): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split, optional `reply_to_message_id` - TGT-040), `send_voice` (multipart, optional `reply_to_message_id` - TGT-040). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; naming the message's own `message_id` - TGT-040; plus a `(replying to ... [msg #N]: ...)` suffix when the message is itself a reply, naming the original message's own id (TGT-041) and preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template (now including `--reply-to-message-id` - TGT-040), non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |

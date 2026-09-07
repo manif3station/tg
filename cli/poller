@@ -24,8 +24,10 @@ $| = 1;
 
 exit 1 unless D2TG::Config::require_chat_id_or_warn();
 
-print "d2tg poller starting up (token set: "
-    . ( defined D2TG::Config::token() ? "yes" : "no" ) . ")\n";
+print "d2tg poller starting up (token: "
+    . D2TG::Config::masked_token( D2TG::Config::token() )
+    . ") (chat_id: "
+    . D2TG::Config::chat_id() . ")\n";
 
 my $shutting_down = 0;
 $SIG{TERM} = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
@@ -87,7 +89,9 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
 Calls L<D2TG::Config>'s startup guard first and refuses to proceed
 (non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
-the guard passes, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
+the guard passes, prints a startup line naming the masked token
+(L<D2TG::Config/masked_token>, TGT-045) and full chat_id actually
+loaded, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
 allowed), resumes from its persisted poll offset if any, and runs
 L<D2TG::Poller>'s long-poll loop - gated by that store, saving the offset
 back after every iteration - until C<SIGTERM> or C<SIGINT> is received.

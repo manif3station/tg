@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.24).** This file is a procedure to
+**Status: early implementation (v0.25).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -81,8 +81,11 @@ names what to do and exactly what confirms it worked.
 
 1. **Start the poller.** With both env vars set, run `d2 tg.poller` in a
    terminal you can watch (foreground, or `d2 exec` if this session
-   drives it). Expect: `d2tg poller starting up (token set: yes)` on
-   stdout, then nothing further until a message arrives.
+   drives it). Expect: `d2tg poller starting up (token: <first
+   4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) on stdout - confirm the
+   masked token and chat_id match what you expect, not a stale value
+   from another terminal/project - then nothing further until a message
+   arrives.
 2. **Ask the user to send a real Telegram message** to the bot from
    their own phone/account (the one matching `D2TG_CHAT_ID`) - plain
    text is enough for the first pass, e.g. "hello from onboarding test".
