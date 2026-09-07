@@ -48,8 +48,8 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
 Calls L<D2TG::Config>'s startup guard first and refuses to proceed
 (non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
-the guard passes, runs L<D2TG::Poller>'s long-poll loop until C<SIGTERM>
-or C<SIGINT> is received. There is no access control yet - every sender's
-text message reaches STDOUT (see L<D2TG::Poller>).
+the guard passes, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
+allowed) and runs L<D2TG::Poller>'s long-poll loop, gated by that store,
+until C<SIGTERM> or C<SIGINT> is received.
 
 =cut

@@ -12,9 +12,10 @@ shape; ticket-level status lives on the project's Tira board
   from the environment; `require_chat_id_or_warn()` is the startup guard
   that refuses to proceed (warning to STDERR) when `D2TG_CHAT_ID` is
   unset or empty.
-- `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard and
-  refuses to proceed if it fails. The actual Telegram long-poll loop is
-  not implemented yet (see TGIG-002); this only proves the guard wiring.
+- `cli/poller` (dispatched as `d2 tg.poller`) — calls the Config guard,
+  then runs `D2TG::Poller`'s real long-poll loop against a `D2TG::Store`
+  access-control gate until `SIGTERM`/`SIGINT`. See the `D2TG::Poller` and
+  `D2TG::Store` entries below for what the loop actually does.
 - `D2TG::Telegram` (`lib/D2TG/Telegram.pm`) — minimal Bot API client:
   `get_me`, `get_updates(offset, timeout)` (returns updates + next
   offset), `get_file($file_id)`. Raw HTTP via `HTTP::Tiny`, no SDK.
