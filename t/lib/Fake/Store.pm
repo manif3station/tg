@@ -23,6 +23,17 @@ sub add_pending {
     return $already ? 0 : 1;
 }
 
+sub record_message {
+    my ( $self, $chat_id, $message_id, $sender, $summary ) = @_;
+    $self->{messages}{$chat_id}{$message_id} = { sender => $sender, summary => $summary };
+    return;
+}
+
+sub get_message {
+    my ( $self, $chat_id, $message_id ) = @_;
+    return $self->{messages}{$chat_id}{$message_id};
+}
+
 1;
 
 =head1 NAME
@@ -42,5 +53,9 @@ the first time a given id is recorded pending) so tests asserting the
 one-time C<NEW TG PENDING> notification behave correctly; a caller that
 only needs "always allowed to proceed" gets the same result on a single
 call per id.
+
+C<record_message>/C<get_message> (TGT-038/TGT-039) are simple in-memory
+mirrors of L<D2TG::Store>'s same-named methods, keyed by
+C<chat_id>+C<message_id>.
 
 =cut

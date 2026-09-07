@@ -60,8 +60,7 @@ sub run_once {
         my $message_id = $message->{message_id};
 
         if ( defined $text && length $text ) {
-            ( my $safe_text = $text ) =~ s/\r?\n/\\n/g;
-            $safe_text =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+            my $safe_text = _sanitize_for_stdout($text);
 
             print "NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
             _print_reply_template($chat_id);
@@ -74,9 +73,11 @@ sub run_once {
               _run_non_fatal( $transcribe_voice, $telegram, $file_id, $chat_id, $sender, 'TRANSCRIBE ERROR' );
 
             if ($ok) {
-                print "NEW TG VOICE [$chat_id] $sender: $transcript$reply_ctx\n";
+                my $safe_transcript = _sanitize_for_stdout($transcript);
+
+                print "NEW TG VOICE [$chat_id] $sender: $safe_transcript$reply_ctx\n";
                 _print_reply_template($chat_id);
-                $store->record_message( $chat_id, $message_id, $sender, $transcript )
+                $store->record_message( $chat_id, $message_id, $sender, $safe_transcript )
                   if $store && defined $message_id;
             }
         }
@@ -123,8 +124,7 @@ sub _reply_context_suffix {
     unless ( defined $what ) {
         my $original_text = $original->{text};
         if ( defined $original_text && length $original_text ) {
-            ( my $safe = $original_text ) =~ s/\r?\n/\\n/g;
-            $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+            my $safe = _sanitize_for_stdout($original_text);
             $safe = substr( $safe, 0, 5000 ) . '...' if length $safe > 5000;
             $what = $safe;
         }
@@ -144,6 +144,15 @@ sub _stored_summary {
     my $stored = $store->get_message( $chat_id, $message_id );
 
     return $stored ? $stored->{summary} : undef;
+}
+
+sub _sanitize_for_stdout {
+    my ($text) = @_;
+
+    ( my $safe = $text ) =~ s/\r?\n/\\n/g;
+    $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+
+    return $safe;
 }
 
 sub _print_reply_template {
@@ -295,6 +304,15 @@ instead, so the operator can tell this apart from a genuine bug at a
 glance. A message with no declared C<file_size> (Telegram does not
 always send one) falls through to the normal download attempt
 unaffected.
+
+C<_sanitize_for_stdout> (TGT-039) is applied to inbound text I<and> a
+successfully transcribed voice message before either is printed or
+stored via C<record_message>: it escapes any C<\r>/C<\n> to a literal
+C<\n> and strips other control characters, so a C<NEW TG>/C<NEW TG
+VOICE> line - whose content may otherwise legitimately span multiple
+lines, e.g. whisper's own per-segment output for a longer voice note -
+is always exactly one stdout line, matching what every downstream
+consumer (a Tira monitor job's feeder) requires.
 
 C<_run_non_fatal> is the shared internal helper both of the above use:
 it evals a callback, and on failure strips the trailing newline from

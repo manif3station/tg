@@ -26,6 +26,10 @@ Events printed:
 - `NEW TG VOICE [chat_id] sender: <transcript>` — an allowed sender's
   voice message, downloaded and transcribed via a local Whisper install
   (the downloaded audio itself is not kept, only its transcript).
+  `<transcript>` is sanitized the same way inbound text is (TGT-039): any
+  newline whisper's own multi-segment output may contain becomes a
+  literal `\n`, so this is always exactly one stdout line even for a
+  transcript that spans multiple sentences/segments.
 - `TRANSCRIBE ERROR [chat_id] sender: <message>` (stderr) — a voice
   message's download or transcription failed; the poller keeps running.
 - `MEDIA DOWNLOAD ERROR [chat_id] sender: <message>` (stderr) — a
@@ -136,7 +140,7 @@ implemented and where:
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036). |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
-| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template, non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
+| `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; plus a `(replying to ...)` suffix when the message is itself a reply, preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template, non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |

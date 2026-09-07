@@ -254,3 +254,14 @@ Revision history for the tg skill
         this feature, or the sender was never allow-listed at the time)
         does it fall back to the original Telegram-payload-only
         behavior, unchanged.
+
+0.19  2026-09-07
+      - BUGFIX (TGT-039, code-review bug hunt finding): a voice
+        transcript could legitimately contain embedded newlines (whisper
+        emits one line per segment), and unlike text messages it was
+        printed/stored raw - breaking the single-line-per-event stdout
+        contract the whole architecture (Tira monitor job feeder) relies
+        on. D2TG::Poller's text-branch sanitization (newline -> literal
+        \n, strip other control chars) is now extracted into
+        _sanitize_for_stdout and applied to the voice-transcript branch
+        too, before both printing and storing (TGT-038's record_message).

@@ -50,6 +50,19 @@ for it (it predates this feature, or its sender was never allow-listed
 at the time) does it fall back to Telegram's own `reply_to_message`
 payload, unchanged from before.
 
+## A voice transcript is always exactly one stdout line, like text is
+
+Code-review bug hunt finding (TGT-039): inbound text messages have their
+newlines escaped to a literal `\n` before being printed, since every
+`NEW TG` line must be exactly one line for the Tira monitor job's feeder
+to parse correctly - but voice transcripts weren't sanitized the same
+way, even though whisper's own output can legitimately span multiple
+lines (one per segment) for a longer voice note. The same sanitization
+(`_sanitize_for_stdout` in `D2TG::Poller`) now applies to both text and
+voice-transcript content before printing or storing it, so a `NEW TG
+VOICE` line - and the summary it stores for later reply-context lookups
+(TGT-038) - is always single-line.
+
 ## CLI commands validate chat_id locally before any network call
 
 Both `d2 tg.approve` and `d2 tg.reply` reject a non-numeric `chat_id`
