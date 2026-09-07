@@ -36,6 +36,15 @@ Requires a local `whisper` install (a multilingual, non `.en` model) for
 voice transcription. No extra dependency is needed for photo/document
 download - it reuses the same `D2TG::Download` module.
 
+Voice transcription is bounded by `$D2TG::Transcribe::TIMEOUT` (default
+300s, TGT-031): if `whisper` runs longer than that, it is killed and a
+`TRANSCRIBE ERROR` is reported instead of blocking the poll loop
+indefinitely. `SIGTERM`/`SIGINT` also kill any transcription in progress
+immediately, so shutdown is prompt even mid-transcription - previously
+Ctrl+C could appear completely unresponsive for as long as a slow
+`whisper` run took, since a blocking subprocess call defers Perl's
+signal handling until it returns.
+
 ## `d2 tg.approve <chat_id>`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
@@ -97,7 +106,7 @@ implemented and where:
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure. |
 | `D2TG::Reply` | `send_reply` — voice sent first, text only after voice succeeds; never text-only. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local temp file. |
-| `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models. |
+| `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
 
 `cli/poller`, `cli/approve`, `cli/reply` are the thin `d2 tg.*`
 entrypoints described above; each just wires the relevant modules

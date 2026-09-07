@@ -28,8 +28,8 @@ print "d2tg poller starting up (token set: "
     . ( defined D2TG::Config::token() ? "yes" : "no" ) . ")\n";
 
 my $shutting_down = 0;
-$SIG{TERM} = sub { $shutting_down = 1 };
-$SIG{INT}  = sub { $shutting_down = 1 };
+$SIG{TERM} = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
+$SIG{INT}  = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
 
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
@@ -89,5 +89,11 @@ itself runs via C<run_once_safe> (TGT-028), so a transient failure
 inside the poll cycle (e.g. a network blip) is logged as C<POLL ERROR>
 on STDERR and retried after a short backoff, rather than killing the
 whole process.
+
+C<SIGTERM>/C<SIGINT> also call L<D2TG::Transcribe>'s C<kill_current>
+(TGT-031), so a transcription in progress at shutdown time is killed
+immediately rather than being waited out - previously, since Perl defers
+signal handling until the current blocking syscall returns, Ctrl+C could
+appear completely unresponsive for as long as a slow C<whisper> run took.
 
 =cut

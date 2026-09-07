@@ -52,6 +52,18 @@ whole poller loop, since a live bridge processing many messages should
 keep serving the rest of them. `cli/poller` reports such a failure on
 stderr (`TRANSCRIBE ERROR [chat_id] sender: <message>`) and continues.
 
+## A single transcription can never block shutdown, or run unbounded
+
+Voice transcription shells out to `whisper`, which can be slow (TGT-031,
+a real production incident: it was found genuinely blocking the whole
+poll loop, and `cli/poller` was unresponsive to Ctrl+C for as long as
+it ran). `D2TG::Transcribe::_run` is bounded by `$TIMEOUT` (default
+300s) - a run that exceeds it is killed and reported as a normal
+`TRANSCRIBE ERROR`, never blocks forever. `cli/poller`'s `SIGTERM`/
+`SIGINT` handlers also call `D2TG::Transcribe::kill_current` so an
+in-flight transcription is killed immediately at shutdown time rather
+than waited out.
+
 ## The poll loop itself survives transient failures
 
 Beyond individual voice/media failures (above), the poll cycle itself

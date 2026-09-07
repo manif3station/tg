@@ -138,3 +138,19 @@ Revision history for the tg skill
         Usage message. Fixed: cli/reply now uses the same /^-?\d+$/
         guard as cli/approve, exiting 2 with a Usage message on STDERR
         for a non-numeric chat_id, before any Telegram call is attempted.
+
+0.09  2026-09-07
+      - BUGFIX (TGT-031, live production incident, root-caused via direct
+        process inspection): D2TG::Transcribe::_run's system(@cmd) call
+        to whisper was fully blocking with no timeout - one slow voice
+        transcription blocked the entire poll loop (no new messages of
+        any kind fetched) and made the poller unresponsive to Ctrl+C/
+        SIGTERM for as long as it ran, since Perl defers signal handling
+        until a blocking syscall returns. Fixed: _run now forks and
+        polls waitpid every 0.2s instead of blocking on it directly (so
+        pending signals get a chance to run), enforces a configurable
+        $TIMEOUT (default 300s) that kills the child and reports a
+        normal TRANSCRIBE ERROR instead of blocking forever, and
+        cli/poller's SIGTERM/SIGINT handlers now call the new
+        D2TG::Transcribe::kill_current to end an in-flight transcription
+        immediately at shutdown time.
