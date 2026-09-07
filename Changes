@@ -22,3 +22,5 @@ Revision history for the tg skill
         already-allowed from never-pending.
       - Pending-sender notification (TGT-010): the poller prints a
         stdout line the first time a new sender is queued pending.
+      - Media recognition (TGT-011): photo/document/voice messages now
+        announce their type on stdout instead of being silently skipped.

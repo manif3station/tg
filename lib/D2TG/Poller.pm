@@ -73,14 +73,14 @@ the delay is bounded and short.
 =head1 DESCRIPTION
 
 C<run_once> performs a single C<get_updates> call and, for each update
-carrying a text message from an allow-listed sender, prints one line to
-STDOUT naming the chat id, sender, and text. A message from a sender not
-yet allow-listed produces no message-text output, but does print a
-one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
-time that sender is recorded pending (not on subsequent messages from
-the same still-pending sender). Non-text updates (photos, documents,
-voice, etc.) are silently skipped in this ticket's scope - handling them
-is separate, later work.
+carrying a text message or recognized media (photo/document/voice) from
+an allow-listed sender, prints one line to STDOUT: the message text, or
+C<NEW TG MEDIA [chat_id] sender: <type>> for media. A message from a
+sender not yet allow-listed produces no content output at all, but does
+print a one-time C<NEW TG PENDING [chat_id] awaiting approval> line the
+first time that sender is recorded pending (not on subsequent messages
+from the same still-pending sender). Downloading a media file,
+transcribing voice, or replying are all separate, later work.
 
 =head1 FUNCTIONS
 

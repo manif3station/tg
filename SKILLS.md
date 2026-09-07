@@ -47,3 +47,7 @@ shape; ticket-level status lives on the project's Tira board
   non-allow-listed sender messages the bot (not on every subsequent
   message from the same still-pending sender), so the admin sees it on
   the same watched stream as everything else.
+- Media recognition — a photo/document/voice message from an allow-listed
+  sender now prints `NEW TG MEDIA [chat_id] sender: <type>` instead of
+  being silently skipped. **Not yet implemented**: downloading the file,
+  transcribing voice, or replying to media — separate tickets.

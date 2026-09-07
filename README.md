@@ -4,9 +4,10 @@
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
-allowed text messages to stdout. `d2 tg.approve <chat_id>` moves a
-pending sender into the allow-list. The poll offset persists across
-restarts. Still missing: media handling and reply/voice output. See
+allowed text messages (and now recognizes photo/document/voice by name)
+to stdout. `d2 tg.approve <chat_id>` moves a pending sender into the
+allow-list. The poll offset persists across restarts. Still missing:
+actually downloading/transcribing media and reply/voice output. See
 `SKILLS.md` for what's implemented so far and this project's Tira board
 ("D2 TG Skill") for ticket-level status.
 
