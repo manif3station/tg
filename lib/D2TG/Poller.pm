@@ -105,7 +105,7 @@ sub _reply_context_suffix {
     if ( defined $original_text && length $original_text ) {
         ( my $safe = $original_text ) =~ s/\r?\n/\\n/g;
         $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
-        $safe = substr( $safe, 0, 60 ) . '...' if length $safe > 60;
+        $safe = substr( $safe, 0, 5000 ) . '...' if length $safe > 5000;
         $what = $safe;
     }
     else {
@@ -169,11 +169,17 @@ D2TG::Poller - the long-poll loop connecting D2TG::Telegram to stdout
 =head1 KNOWN LIMITATION
 
 C<SIGTERM>/C<SIGINT> are only checked between C<get_updates> calls, so
-shutdown can be delayed by up to that call's long-poll timeout (default
-30s) if it's mid-request when the signal arrives. Interrupting a
-blocking C<HTTP::Tiny> call cleanly would need an async/select-based
-rewrite, which is out of this ticket's scope - acceptable for now since
-the delay is bounded and short.
+shutdown can be delayed if it's mid-request when the signal arrives.
+TGT-035 (a real production incident: this bound previously did not
+actually exist - L<D2TG::Telegram>'s default L<LWP::UserAgent> had no
+explicit timeout, so a single call could block for up to LWP's own
+180s default, not the 30s this section used to claim) fixed the actual
+enforcement: D2TG::Telegram's default C<ua> now has an explicit 35s
+timeout, so this delay is genuinely bounded to roughly that, not merely
+assumed to be. Interrupting the blocking HTTP call mid-flight (rather
+than bounding its maximum duration) would still need an async/
+select-based rewrite, which remains out of scope - acceptable now that
+the bound is short and, unlike before, actually enforced.
 
 =head1 DESCRIPTION
 
@@ -259,8 +265,12 @@ If Telegram's C<reply_to_message> field is present on the message (the
 sender used Telegram's native reply-to-message feature), every content
 line above also gets a C<< (replying to <sender>: <snippet-or-kind>) >>
 suffix (TGT-029), naming who/what the reply targets: the original
-sender's username, and either a sanitized/truncated (60 chars) snippet
-of the original text, or its media kind if the original had no text. A
+sender's username, and either a sanitized/truncated (5000 chars, TGT-035
+- raised from an initial 60, which live feedback found far too short to
+be useful context for a real conversation; 5000 comfortably exceeds
+Telegram's own 4096-character message limit, so a quoted message is
+effectively never truncated in practice) snippet of the original text,
+or its media kind if the original had no text. A
 message with no C<reply_to_message> gets no suffix at all - unchanged
 from before this ticket. See C<_reply_context_suffix>.
 

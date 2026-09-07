@@ -197,3 +197,23 @@ Revision history for the tg skill
         (capture_stdio), matching the same test-infra deduplication
         pattern already applied once (TGT-018). No behavior change -
         all existing assertions in both files pass unchanged.
+
+0.15  2026-09-07
+      - BUGFIX (TGT-035, live E2E screen recording, 3 problems found and
+        fixed): (1) D2TG::Telegram's default LWP::UserAgent had no
+        explicit timeout, defaulting to LWP's own 180s - Ctrl+C/SIGTERM
+        could still be delayed up to 180s even after TGT-031's
+        transcription-timeout fix, since Perl defers signal handling
+        until the current blocking get_updates HTTP call returns. Fixed
+        with an explicit timeout => 35 (a few seconds above
+        get_updates' own 30s server-side hint), genuinely bounding both
+        shutdown delay and new-message latency to ~35s. (2)
+        D2TG::Poller::_reply_context_suffix's 60-char truncation was far
+        too aggressive to be useful context for a real conversation -
+        raised to 5000 chars, comfortably exceeding Telegram's own
+        4096-char message limit so a quoted message is effectively
+        never truncated. (3) A message that appeared to "vanish"
+        (no reply-context notification ever appeared for a genuine
+        Telegram reply) was very likely caused by the same root cause
+        as (1) - the poller's current poll cycle was still blocked and
+        had not reached the next cycle to fetch it.

@@ -35,9 +35,11 @@ Events printed:
 If the sender used Telegram's native reply-to-message feature, every
 content line above also carries a `(replying to <sender>: <snippet-or-
 kind>)` suffix (TGT-029) naming what the reply targets — the original
-sender's username and either a snippet of the original text or its
-media kind if the original had none. A fresh message (no reply) gets no
-suffix.
+sender's username and either a snippet of the original text (up to 5000
+chars, TGT-035 - comfortably exceeds Telegram's own 4096-char message
+limit, so a quoted message is effectively never truncated in practice)
+or its media kind if the original had none. A fresh message (no reply)
+gets no suffix.
 
 Requires a local `whisper` install (a multilingual, non `.en` model) for
 voice transcription. No extra dependency is needed for photo/document
@@ -112,7 +114,7 @@ implemented and where:
 | Module | What it does |
 | --- | --- |
 | `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path. |
-| `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
+| `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 35s timeout - TGT-035): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split), `send_voice` (multipart). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (plus a `(replying to ...)` suffix when the message is itself a reply, TGT-029), the `REPLY WITH` template, non-fatal error handling for voice/media. `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset persistence; `approve` is atomic and rolls back cleanly on any failure. |
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |

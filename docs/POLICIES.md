@@ -97,6 +97,21 @@ poller) catches this, logs `POLL ERROR: <message>` to stderr, waits a
 short backoff, and retries - the poller process itself must never die
 from a failure that will very likely resolve on its own.
 
+## A single poll cycle can never block shutdown for longer than ~35s
+
+Confirmed live (TGT-035, a real production incident caught on screen
+recording): even after TGT-031's transcription-timeout fix, `Ctrl+C`
+still would not stop the poller - Michael had to force-kill it. Root
+cause: `D2TG::Telegram`'s default `LWP::UserAgent` had no explicit
+timeout, so a single `get_updates` call (which Telegram itself may hold
+open for up to its own `timeout` parameter, default 30s) could block
+for LWP's own 180s default instead - and since Perl defers signal
+handling until the current blocking call returns, that also bounded how
+long `SIGINT`/`SIGTERM` could be delayed. `D2TG::Telegram::new` now sets
+an explicit `timeout => 35` on its default `ua`, so a single poll cycle
+- and therefore shutdown delay - is genuinely bounded to about 35s, not
+merely assumed to be.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the
