@@ -78,3 +78,10 @@ Revision history for the tg skill
         POD against the current code - module list, CLI dispatch names,
         VERSION, and every public sub's POD all cross-checked. Reported
         clean, no drift found.
+      - BUGFIX (TGT-021, found via the HOURLY BUG HUNT job, reproduced
+        live): D2TG::Store::approve never rolled back on an exception
+        mid-transaction, leaving the connection with a dangling open
+        transaction - every subsequent approve() call on the same Store
+        object (i.e. the poller's whole run) then died with "Already in
+        a transaction". Fixed: any exception now triggers rollback
+        before re-throwing.

@@ -74,7 +74,9 @@ sub approve {
 
     my $dbh = $self->{dbh};
 
-    return $dbh->begin_work && eval {
+    $dbh->begin_work;
+
+    my $result = eval {
         my $deleted = $dbh->do(
             'DELETE FROM pending WHERE chat_id = ?', undef, $chat_id,
         );
@@ -91,6 +93,14 @@ sub approve {
         $dbh->commit;
         return 1;
     };
+    my $error = $@;
+
+    if ($error) {
+        eval { $dbh->rollback };
+        die $error;
+    }
+
+    return $result;
 }
 
 sub get_offset {
@@ -168,6 +178,10 @@ notify only once per new sender.
 Moves C<$chat_id> from C<pending> to C<allow_list>, atomically. Returns
 true if it was genuinely pending and is now approved; returns false
 (without error) if it was not pending - already approved, or never seen.
+If anything inside the transaction throws (a transient DB error), the
+transaction is always rolled back before the error is re-thrown, so the
+Store's connection is never left in a dangling open-transaction state -
+a subsequent C<approve> call on the same object still works normally.
 
 =head2 pending_chat_ids
 

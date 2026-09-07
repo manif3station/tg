@@ -112,4 +112,37 @@ sub fresh_db_path {
     unlike( $err6, qr/already allowed/i, '...and not the "already allowed" wording' );
 }
 
+{
+    my $db = fresh_db_path();
+    my $store = D2TG::Store->new( db_path => $db, admin_chat_id => 999 );
+    $store->add_pending(888);
+
+    my $real_do = \&DBI::db::do;
+    my ( $result, $error );
+    {
+        no warnings 'redefine';
+        local *DBI::db::do = sub {
+            my ( $self, $sql, @rest ) = @_;
+            die "simulated transient DB error\n"
+              if $sql =~ /INSERT OR IGNORE INTO allow_list/;
+            return $real_do->( $self, $sql, @rest );
+        };
+
+        $result = eval { $store->approve(888) };
+        $error  = $@;
+    }
+
+    ok( !$result || $error, 'approve() does not silently succeed when the transaction fails mid-way' );
+
+    # Whether it died or returned false, the transaction must not be left
+    # open - a fresh approve() call on the SAME Store object must still work.
+    $store->add_pending(999);
+    my $result2 = eval { $store->approve(999) };
+    my $error2  = $@;
+
+    ok( $result2, 'a subsequent approve() call on the same Store object succeeds (no dangling transaction)' )
+      or diag("error2: $error2");
+    ok( $store->is_allowed(999), 'and the chat id it approved is genuinely allow-listed' );
+}
+
 done_testing();
