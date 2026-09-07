@@ -32,10 +32,11 @@ my $store = D2TG::Store->new(
 );
 
 my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
-my $offset;
+my $offset = $store->get_offset;
 
 until ($shutting_down) {
     ( undef, $offset ) = D2TG::Poller::run_once( $telegram, $offset, $store );
+    $store->set_offset($offset) if defined $offset;
 }
 
 exit 0;
@@ -49,7 +50,8 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 Calls L<D2TG::Config>'s startup guard first and refuses to proceed
 (non-zero exit, nothing on STDOUT) when C<D2TG_CHAT_ID> is missing. Once
 the guard passes, opens a L<D2TG::Store> (auto-seeding C<D2TG_CHAT_ID> as
-allowed) and runs L<D2TG::Poller>'s long-poll loop, gated by that store,
-until C<SIGTERM> or C<SIGINT> is received.
+allowed), resumes from its persisted poll offset if any, and runs
+L<D2TG::Poller>'s long-poll loop - gated by that store, saving the offset
+back after every iteration - until C<SIGTERM> or C<SIGINT> is received.
 
 =cut

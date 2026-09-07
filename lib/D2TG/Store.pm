@@ -30,6 +30,9 @@ sub _ensure_schema {
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS pending (chat_id INTEGER PRIMARY KEY)'
     );
+    $self->{dbh}->do(
+        'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)'
+    );
 
     return;
 }
@@ -88,6 +91,28 @@ sub approve {
         $dbh->commit;
         return 1;
     };
+}
+
+sub get_offset {
+    my ($self) = @_;
+
+    my ($value) = $self->{dbh}->selectrow_array(
+        "SELECT value FROM meta WHERE key = 'offset'"
+    );
+
+    return defined $value ? $value : undef;
+}
+
+sub set_offset {
+    my ( $self, $offset ) = @_;
+
+    $self->{dbh}->do(
+        "INSERT INTO meta (key, value) VALUES ('offset', ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        undef, $offset,
+    );
+
+    return;
 }
 
 sub pending_chat_ids {
