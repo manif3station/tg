@@ -138,7 +138,9 @@ sub resolve_alias_dir {
     my (%args) = @_;
 
     my $alias = $args{alias} // $ENV{D2TG_DB};
-    return undef unless defined $alias && length $alias;
+    die "D2TG_DB (or --db/-d <alias>) is not set - refusing to start. "
+      . "Run 'd2 paths' to see valid aliases.\n"
+      unless defined $alias && length $alias;
 
     my $paths = $args{paths} || _developer_dashboard_paths();
     my $dir   = $paths->{$alias};
@@ -280,14 +282,21 @@ Resolves a Developer Dashboard path alias (TGT-051 - the left column of
 C<d2 paths>) to its filesystem directory, for use as C<state_db_path>/
 C<attachments_dir>'s C<base_dir>. C<alias> is optional and falls back to
 C<$ENV{D2TG_DB}> when not given directly (an explicit C<alias> always
-wins over the env var). Returns C<undef> - meaning "no override, use the
-default resolution" - when neither is set. Dies with a clear message
-(naming the unknown alias and pointing at C<d2 paths>) if an alias I<is>
-given but isn't a recognized path. C<paths> is optional and defaults to
-a live call into C<Developer::Dashboard>'s C<d2()-E<gt>paths>; tests
-inject a plain hashref here instead, so this function - and every
-caller of it - never needs a real Developer Dashboard environment to be
-unit-tested.
+wins over the env var). C<paths> is optional and defaults to a live call
+into C<Developer::Dashboard>'s C<d2()-E<gt>paths>; tests inject a plain
+hashref here instead, so this function - and every caller of it - never
+needs a real Developer Dashboard environment to be unit-tested.
+
+Dies with a clear message pointing at C<d2 paths> in two cases (TGT-059):
+when neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all -
+mandatory, matching C<D2TG_CHAT_ID>'s existing hard-guard pattern; the
+owner's original request, which TGT-051's first shipped version missed
+by silently returning C<undef> (falling back to the skill's own install
+directory) in this exact case - or when an alias I<is> given but isn't a
+recognized path (unchanged since TGT-051). There is no longer any input
+that returns C<undef> - every C<d2 tg.*> command's C<eval { ... }>
+wrapper around this call turns either die into a clean refusal (STDERR
+message, exit 1) before any state is ever touched.
 
 =head2 skill_version(default_root => $path)
 

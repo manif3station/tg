@@ -461,3 +461,16 @@ Revision history for the tg skill
         mode is unchanged, no --bot printed. d2 tg.reply gains a
         leading --bot <token> flag (alongside the existing --db/-d) to
         act on it; omitting it is unchanged (falls back to D2TG_TOKEN).
+
+0.38  2026-09-07
+      - BREAKING BUGFIX (TGT-059, live design gap found by the owner):
+        --db/-d/D2TG_DB is now mandatory on every d2 tg.* command,
+        matching D2TG_CHAT_ID's existing hard-guard pattern exactly -
+        this closes a gap where TGT-051's shipped implementation
+        silently fell back to storing state under the skill's own
+        install directory when the flag/env var was omitted entirely,
+        contradicting the owner's original request that omitting it
+        should refuse to start. Any invocation without --db/-d/D2TG_DB
+        now refuses (STDERR message, exit 1, points at 'd2 paths') -
+        an existing install relying on the old silent-fallback behavior
+        must now set D2TG_DB (or pass --db/-d) before upgrading.

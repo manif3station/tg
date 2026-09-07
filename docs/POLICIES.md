@@ -263,7 +263,7 @@ window." `d2 tg.history` fills that gap: defaults to the 10 most recent
 stored messages, or an explicit `--since`/`--until` range, independent of
 read/unread status.
 
-## Storage can relocate, per invocation, to a named Developer Dashboard path
+## Storage must relocate to a named Developer Dashboard path - there is no default
 
 Live design request (TGT-051): every `d2 tg.*` command accepts
 `--db <alias>`/`-d <alias>` (or `D2TG_DB=<alias>` as a fallback), naming
@@ -271,8 +271,17 @@ one of `d2 paths`' own entries. When given, both the SQLite state file
 and downloaded attachments relocate under that alias's directory
 instead of the skill's own install location - an unknown alias refuses
 to start rather than silently falling back to the default, so a typo
-can never silently write to the wrong place. Omitting it entirely is
-unchanged from before this ticket.
+can never silently write to the wrong place.
+
+Live follow-up (TGT-059): the owner's original request was that omitting
+`--db`/`-d`/`D2TG_DB` entirely should also refuse to start, matching
+`D2TG_CHAT_ID`'s existing hard guard - TGT-051's shipped implementation
+missed this, silently falling back to the skill's own install directory
+instead. Every `d2 tg.*` command now refuses to start (same STDERR
+message shape, pointing at `d2 paths`) whenever neither the flag nor the
+env var is given at all, not only when a given alias is unknown. There
+is no longer any way to run a `d2 tg.*` command without an explicit
+storage location.
 
 ## Downloaded attachments are deduplicated by content, not just by name
 

@@ -7,9 +7,12 @@ All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 
 `--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a
 fallback) relocates both the SQLite state file and downloaded
-attachments under that Developer Dashboard path alias's directory - an
-unknown alias refuses to start (exit 1, clear STDERR message pointing at
-`d2 paths`). See the Environment variables section below.
+attachments under that Developer Dashboard path alias's directory -
+**mandatory** (TGT-059): every `d2 tg.*` command refuses to start
+(exit 1, clear STDERR message pointing at `d2 paths`) when neither this
+flag nor `D2TG_DB` is given at all, and the same happens when an alias
+*is* given but isn't a known one. There is no default-storage-location
+fallback. See the Environment variables section below.
 
 `--chat_id <id>`/`--bot <token>` (TGT-049, both repeatable) declare one
 or more bot/chat groups: each `--chat_id` starts a new group, and every
@@ -230,7 +233,9 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
 - `D2TG_DB` (TGT-051) — a Developer Dashboard path alias (see `d2 paths`)
   whose directory relocates both the SQLite state file and downloaded
   attachments; fallback for every `d2 tg.*` command's `--db`/`-d` flag
-  when the flag isn't given. An unknown alias refuses to start.
+  when the flag isn't given. **Required** (TGT-059) — every `d2 tg.*`
+  command refuses to start if neither this nor `--db`/`-d` is given at
+  all, the same as an unknown alias already refused.
 
 ## Module reference
 

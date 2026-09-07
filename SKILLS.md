@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.37).** This file is a procedure to
+**Status: early implementation (v0.38).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -62,6 +62,7 @@ directly from step 2 above) and exported:
 ```
 export D2TG_TOKEN="<the bot token from step 2.1>"
 export D2TG_CHAT_ID="<the admin chat id from step 2.2>"
+export D2TG_DB="<a Developer Dashboard path alias - run 'd2 paths' to see the choices>"
 ```
 
 Without `D2TG_CHAT_ID` set, `d2 tg.poller` refuses to start and prints a
@@ -74,12 +75,21 @@ intended admin's Telegram account and read the id off the Bot API's
 `getUpdates` response (or `@userinfobot`) before setting `D2TG_CHAT_ID`
 and restarting.
 
+Without `D2TG_DB` (or `--db <alias>`/`-d <alias>` passed to any `d2
+tg.*` command instead) set, every `d2 tg.*` command refuses to start the
+same way, printing which flag/env var is missing and pointing at `d2
+paths` (TGT-059) - this is deliberate and mandatory, not an optional
+convenience: it names which Developer Dashboard path alias (the left
+column of `d2 paths`) the skill's SQLite state and downloaded
+attachments live under, so a fresh install is never left silently
+writing state into the skill's own install directory.
+
 ## 5. End-to-end onboarding test (agent ↔ user ↔ Telegram)
 
 Do this for real, not as a described-but-unrun procedure - each step
 names what to do and exactly what confirms it worked.
 
-1. **Start the poller.** With both env vars set, run `d2 tg.poller` in a
+1. **Start the poller.** With all three env vars set, run `d2 tg.poller` in a
    terminal you can watch (foreground, or `d2 exec` if this session
    drives it). Expect: `d2tg poller starting up (token: <first
    4>...<last 4>) (chat_id: <chat_id>)` (TGT-045) on stdout - confirm the

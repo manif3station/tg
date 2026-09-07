@@ -6,6 +6,16 @@ use File::Spec;
 
 my $reply_cli = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
 
+# TGT-059: --db/-d/D2TG_DB is now mandatory, so every subprocess spawned
+# below needs it resolvable without a real Developer Dashboard install -
+# see t/lib/Developer/Dashboard.pm. These tests exercise argument
+# validation that happens after the --db guard, so it must pass first.
+use File::Temp qw(tempdir);
+$ENV{PERL5LIB} = join( ':', File::Spec->catdir( $Bin, 'lib' ), $ENV{PERL5LIB} // '' );
+$ENV{D2TG_DB}            = 'testalias';
+$ENV{D2TG_TEST_DB_ALIAS} = 'testalias';
+$ENV{D2TG_TEST_DB_DIR}   = tempdir( CLEANUP => 1 );
+
 {
     my $out = `$reply_cli abc hello 2>/tmp/d2tg-reply-stderr.$$`;
     my $rc  = $? >> 8;

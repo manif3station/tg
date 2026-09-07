@@ -52,4 +52,28 @@ my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
     unlike( $out, qr/Replied to/, 'cli/reply never claims success when the --db alias is unknown' );
 }
 
+{
+    local $ENV{D2TG_DB};
+    my $out = `$approve_cli 123456 2>/tmp/d2tg-approve-nodb-stderr.$$`;
+    my $rc  = $? >> 8;
+    my $err = do { open my $fh, '<', "/tmp/d2tg-approve-nodb-stderr.$$" or die $!; local $/; <$fh> };
+    unlink "/tmp/d2tg-approve-nodb-stderr.$$";
+
+    is( $rc, 1, 'cli/approve with no --db/-d and no D2TG_DB refuses to start (TGT-059)' );
+    like( $err, qr/D2TG_DB.*--db.*-d/i, 'the STDERR message names the missing flag/env var' );
+    unlike( $out, qr/Approved/, 'cli/approve never claims success with no --db anywhere' );
+}
+
+{
+    local $ENV{D2TG_DB};
+    my $out = `$reply_cli 123456 hello 2>/tmp/d2tg-reply-nodb-stderr.$$`;
+    my $rc  = $? >> 8;
+    my $err = do { open my $fh, '<', "/tmp/d2tg-reply-nodb-stderr.$$" or die $!; local $/; <$fh> };
+    unlink "/tmp/d2tg-reply-nodb-stderr.$$";
+
+    is( $rc, 1, 'cli/reply with no --db/-d and no D2TG_DB refuses to start (TGT-059)' );
+    like( $err, qr/D2TG_DB.*--db.*-d/i, 'the STDERR message names the missing flag/env var' );
+    unlike( $out, qr/Replied to/, 'cli/reply never claims success with no --db anywhere' );
+}
+
 done_testing();

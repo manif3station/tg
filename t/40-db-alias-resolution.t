@@ -9,7 +9,9 @@ require D2TG::Config;
 
 {
     local $ENV{D2TG_DB};
-    is( D2TG::Config::resolve_alias_dir(), undef, 'no --db flag and no D2TG_DB env var: resolves to undef (unchanged default behavior)' );
+    eval { D2TG::Config::resolve_alias_dir() };
+    like( $@, qr/D2TG_DB.*--db.*-d/i, 'no --db flag and no D2TG_DB env var: dies naming the missing flag/env var (TGT-059)' );
+    like( $@, qr/d2 paths/i, 'the refusal message points at d2 paths to see valid aliases' );
 }
 
 {

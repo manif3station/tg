@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.37).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.38).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -38,6 +38,11 @@ Set these environment variables before starting the poller:
 - `D2TG_TOKEN` — the Telegram bot token (from @BotFather).
 - `D2TG_CHAT_ID` — the admin/owner's Telegram chat id. **Required** — the
   poller refuses to start and prints a warning if this is not set.
+- `D2TG_DB` — a Developer Dashboard path alias (run `d2 paths` to see the
+  choices) naming where the skill's SQLite state and downloaded
+  attachments live. **Required** (TGT-059) — every `d2 tg.*` command
+  refuses to start and prints a warning if neither this nor `--db
+  <alias>`/`-d <alias>` is given.
 
 ## Running
 
