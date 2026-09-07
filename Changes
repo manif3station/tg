@@ -55,3 +55,12 @@ Revision history for the tg skill
         tira.policy.bridge, proven in a developer-dashboard:latest
         container. Exact commands documented in README.md and
         docs/commands.md. No code changed.
+
+0.04  2026-09-07
+      - D2TG::Poller download_media wiring + cli/poller (TGT-016): a
+        photo or document message from an allow-listed sender is now
+        downloaded (reusing D2TG::Download) and its local path printed;
+        a download failure is reported on stderr, non-fatal to the
+        poller loop. For photos, the largest PhotoSize (Telegram's last
+        array entry) is selected. This closes TGIG-002's original
+        inbound-media scope.

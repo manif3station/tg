@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.03).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.04).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -10,13 +10,14 @@ allow-list. The poll offset persists across restarts. `d2 tg.reply
 <chat_id> <text>` sends a reply as BOTH a text message and a gTTS voice
 note — never text-only; if speech synthesis or the voice-note send
 itself fails, the text message is never sent either. An allow-listed
-sender's voice message is now downloaded and transcribed via a local
-Whisper install, printed to stdout as its text; a transcription failure
-is reported on stderr without stopping the poller. Still missing:
-automatically wiring an inbound transcript to a reply, and downloading
-photo/document media. See `SKILLS.md` for what's implemented so far,
-`docs/commands.md` for the command reference, and this project's Tira
-board ("D2 TG Skill") for ticket-level status.
+sender's voice message is downloaded and transcribed via a local
+Whisper install, printed to stdout as its text; a photo/document message
+is downloaded to a local file and its path printed. Either kind of
+download/transcription failure is reported on stderr without stopping
+the poller. Still missing: automatically wiring an inbound message to a
+reply. See `SKILLS.md` for what's implemented so far, `docs/commands.md`
+for the command reference, and this project's Tira board ("D2 TG Skill")
+for ticket-level status.
 
 Telegram bridge skill for Developer Dashboard. Lets an admin reach a
 project's live agent session over Telegram, and be reached by it — text,

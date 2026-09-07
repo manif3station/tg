@@ -1,6 +1,6 @@
 # tg — skill reference
 
-**Status: early implementation (v0.03).** This file will grow into the
+**Status: early implementation (v0.04).** This file will grow into the
 full command/workflow reference as the skill is implemented (per TGIG-002
 through TGIG-005). See `README.md` for the intended install/config/run
 shape, `docs/commands.md` for the command reference, `docs/POLICIES.md`
@@ -83,8 +83,8 @@ on the project's Tira board ("D2 TG Skill"), not as markdown files in
   <message>` to stderr and the loop continues (non-fatal, unlike
   `D2TG::TTS`'s outbound fatal-on-failure rule). `cli/poller` wires this
   to `D2TG::Download` + `D2TG::Transcribe`, removing the downloaded temp
-  file either way. **Not yet implemented**: photo/document download,
-  replying to the transcript.
+  file either way. **Not yet implemented**: replying to the transcript
+  (photo/document download landed in TGT-016 below).
 - Tira monitor-job registration (TGT-015, proof + docs only, no code
   changed) — verified in a `developer-dashboard:latest` container that
   `d2 tira.job.add --schedule monitor --command "d2 tg.poller"` +
@@ -93,3 +93,15 @@ on the project's Tira board ("D2 TG Skill"), not as markdown files in
   `tira.policy.bridge` as a `monitor-output` event, confirming Q-003's
   "no systemd/cron" architecture end to end. See `README.md`/
   `docs/commands.md` for the exact registration commands.
+- `D2TG::Poller::run_once`'s new `download_media` parameter (TGT-016) —
+  closes TGIG-002's last deferred item. A photo or document message from
+  an allow-listed sender is downloaded via `D2TG::Download` (reused as-is
+  from TGT-014) and its local path printed:
+  `NEW TG MEDIA [chat_id] sender: <type> <local_path>`. For a photo,
+  Telegram's `photo` field is an array of `PhotoSize` entries
+  smallest-first - the LAST entry is selected for the largest
+  resolution. A download failure prints `MEDIA DOWNLOAD ERROR [chat_id]
+  sender: <message>` to stderr and the loop continues (non-fatal, same
+  pattern as voice transcription). Unlike the transient voice download,
+  the local file is kept, not removed. This completes TGIG-002's
+  original inbound-media scope.

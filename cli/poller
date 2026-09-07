@@ -42,10 +42,16 @@ my $transcribe_voice = sub {
     return $text;
 };
 
+my $download_media = sub {
+    my ( $tg, $file_id ) = @_;
+    return D2TG::Download::download_file( $tg, $file_id );
+};
+
 until ($shutting_down) {
     ( undef, $offset ) = D2TG::Poller::run_once(
         $telegram, $offset, $store,
         transcribe_voice => $transcribe_voice,
+        download_media   => $download_media,
     );
     $store->set_offset($offset) if defined $offset;
 }
@@ -66,7 +72,9 @@ L<D2TG::Poller>'s long-poll loop - gated by that store, saving the offset
 back after every iteration - until C<SIGTERM> or C<SIGINT> is received.
 An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
 and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
-downloaded temp file is removed either way. A download or transcription
+downloaded temp file is removed either way. A photo or document message
+is downloaded via L<D2TG::Download> and its local path printed (kept,
+unlike the transient voice download). A download or transcription
 failure is reported on STDERR and does not stop the loop.
 
 =cut

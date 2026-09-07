@@ -7,6 +7,7 @@ sub run_once {
     my ( $telegram, $offset, $store, %opts ) = @_;
 
     my $transcribe_voice = $opts{transcribe_voice};
+    my $download_media   = $opts{download_media};
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
@@ -46,6 +47,19 @@ sub run_once {
                 print "NEW TG VOICE [$chat_id] $sender: $transcript\n";
             }
         }
+        elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
+            my $file_id = _media_file_id( $message, $media_kind );
+            my $local_path = eval { $download_media->( $telegram, $file_id ) };
+
+            if ($@) {
+                my $error = $@;
+                $error =~ s/\n\z//;
+                print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: $error\n";
+            }
+            else {
+                print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path\n";
+            }
+        }
         else {
             print "NEW TG MEDIA [$chat_id] $sender: $media_kind\n";
         }
@@ -61,6 +75,14 @@ sub _media_kind {
     return 'document' if $message->{document};
     return 'voice'    if $message->{voice};
     return undef;
+}
+
+sub _media_file_id {
+    my ( $message, $media_kind ) = @_;
+
+    return $media_kind eq 'document'
+      ? $message->{document}{file_id}
+      : $message->{photo}[-1]{file_id};
 }
 
 1;
@@ -91,16 +113,16 @@ C<run_once> performs a single C<get_updates> call and, for each update
 carrying a text message or recognized media (photo/document/voice) from
 an allow-listed sender, prints one line to STDOUT: the message text, or
 C<NEW TG MEDIA [chat_id] sender: <type>> for photo/document (and voice
-too, when no C<transcribe_voice> callback is given). A message from a
-sender not yet allow-listed produces no content output at all, but does
-print a one-time C<NEW TG PENDING [chat_id] awaiting approval> line the
-first time that sender is recorded pending (not on subsequent messages
-from the same still-pending sender). Downloading photo/document media or
-replying are separate, later work.
+too, when no C<transcribe_voice> callback is given; photo/document too,
+when no C<download_media> callback is given). A message from a sender
+not yet allow-listed produces no content output at all, but does print a
+one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
+time that sender is recorded pending (not on subsequent messages from
+the same still-pending sender). Replying is separate, later work.
 
 =head1 FUNCTIONS
 
-=head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef)
+=head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef, download_media => \&coderef)
 
 Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
 method matching that signature), the current offset, and an optional
@@ -121,5 +143,18 @@ prints C<TRANSCRIBE ERROR [chat_id] sender: <message>> to STDERR and the
 loop continues - one bad voice note never crashes the poller. Without
 C<transcribe_voice>, a voice message falls back to the plain
 C<NEW TG MEDIA> line.
+
+C<download_media>, if given, is called as
+C<< $download_media->($telegram, $file_id) >> for a photo or document
+message and should return the local path it was downloaded to (typically
+wrapping L<D2TG::Download>). For a photo, C<$file_id> is taken from the
+I<last> entry of Telegram's C<photo> array (Telegram lists C<PhotoSize>
+entries smallest-first, so the last is the largest); for a document, it
+is C<< $message->{document}{file_id} >> directly. Success prints
+C<NEW TG MEDIA [chat_id] sender: <type> <local_path>> to STDOUT; failure
+prints C<MEDIA DOWNLOAD ERROR [chat_id] sender: <message>> to STDERR and
+the loop continues, matching C<transcribe_voice>'s non-fatal handling.
+Without C<download_media>, photo/document messages fall back to the
+plain C<NEW TG MEDIA> line.
 
 =cut

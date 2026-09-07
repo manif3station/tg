@@ -14,17 +14,22 @@ under systemd or cron.
 Events printed:
 
 - `NEW TG [chat_id] sender: text` — an allowed sender's text message.
-- `NEW TG MEDIA [chat_id] sender: <photo|document>` — an allowed
-  sender's photo/document message (not yet downloaded).
+- `NEW TG MEDIA [chat_id] sender: <photo|document> <local_path>` — an
+  allowed sender's photo/document message, downloaded to `local_path`.
+  For a photo, the largest available resolution is downloaded.
 - `NEW TG VOICE [chat_id] sender: <transcript>` — an allowed sender's
-  voice message, downloaded and transcribed via a local Whisper install.
+  voice message, downloaded and transcribed via a local Whisper install
+  (the downloaded audio itself is not kept, only its transcript).
 - `TRANSCRIBE ERROR [chat_id] sender: <message>` (stderr) — a voice
   message's download or transcription failed; the poller keeps running.
+- `MEDIA DOWNLOAD ERROR [chat_id] sender: <message>` (stderr) — a
+  photo/document message's download failed; the poller keeps running.
 - `NEW TG PENDING [chat_id] awaiting approval` — printed once, the first
   time a non-allow-listed chat id sends anything.
 
 Requires a local `whisper` install (a multilingual, non `.en` model) for
-voice transcription.
+voice transcription. No extra dependency is needed for photo/document
+download - it reuses the same `D2TG::Download` module.
 
 ## `d2 tg.approve <chat_id>`
 
