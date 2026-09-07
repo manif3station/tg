@@ -74,3 +74,7 @@ Revision history for the tg skill
         each). t/14 and t/15's differently-shaped same-named local
         mocks are untouched (different capabilities). Zero test
         assertions changed.
+      - Doc-accuracy pass (TGT-019): verified SKILLS.md/README.md/docs/
+        POD against the current code - module list, CLI dispatch names,
+        VERSION, and every public sub's POD all cross-checked. Reported
+        clean, no drift found.
