@@ -36,6 +36,7 @@ sub run_once {
 
     my $transcribe_voice = $opts{transcribe_voice};
     my $download_media   = $opts{download_media};
+    my $bot_token        = $opts{bot_token};
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
@@ -64,7 +65,7 @@ sub run_once {
             my $safe_text = _sanitize_for_stdout($text);
 
             print "NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
-            _print_reply_template( $chat_id, $message_id );
+            _print_reply_template( $chat_id, $message_id, $bot_token );
             $store->record_message( $chat_id, $message_id, $sender, $safe_text )
               if $store && defined $message_id;
         }
@@ -77,7 +78,7 @@ sub run_once {
                 my $safe_transcript = _sanitize_for_stdout($transcript);
 
                 print "NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
-                _print_reply_template( $chat_id, $message_id );
+                _print_reply_template( $chat_id, $message_id, $bot_token );
                 $store->record_message( $chat_id, $message_id, $sender, $safe_transcript )
                   if $store && defined $message_id;
             }
@@ -97,7 +98,7 @@ sub run_once {
 
                 if ($ok) {
                     print "NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$msg_note$reply_ctx\n";
-                    _print_reply_template( $chat_id, $message_id );
+                    _print_reply_template( $chat_id, $message_id, $bot_token );
                     $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path" )
                       if $store && defined $message_id;
                 }
@@ -105,7 +106,7 @@ sub run_once {
         }
         else {
             print "NEW TG MEDIA [$chat_id] $sender: $media_kind$msg_note$reply_ctx\n";
-            _print_reply_template( $chat_id, $message_id );
+            _print_reply_template( $chat_id, $message_id, $bot_token );
         }
     }
 
@@ -159,9 +160,10 @@ sub _sanitize_for_stdout {
 }
 
 sub _print_reply_template {
-    my ( $chat_id, $message_id ) = @_;
-    my $flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
-    print qq{REPLY WITH: d2 tg.reply $chat_id "..."$flag\n};
+    my ( $chat_id, $message_id, $bot_token ) = @_;
+    my $bot_flag = defined $bot_token ? " --bot $bot_token" : '';
+    my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
+    print qq{REPLY WITH: d2 tg.reply $chat_id "..."$bot_flag$reply_flag\n};
     return;
 }
 
@@ -266,7 +268,7 @@ returns the I<unchanged> C<$offset> so the next call retries from the
 same place. All other C<%opts> (C<transcribe_voice>, C<download_media>)
 pass through to C<run_once> unchanged.
 
-=head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef, download_media => \&coderef)
+=head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef, download_media => \&coderef, bot_token => $token)
 
 Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
 method matching that signature), the current offset, and an optional
@@ -334,12 +336,18 @@ C<< (msg #N) >> (TGT-040), when Telegram provided one.
 
 Every content line (text, a successfully transcribed voice message, or a
 successfully/plainly reported photo/document) is immediately followed by
-a C<< REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <id> >>
+a C<< REPLY WITH: d2 tg.reply <chat_id> "..." [--bot <token>] --reply-to-message-id <id> >>
 line - a ready-to-run reply command template with the chat id and
 message id filled in, per the owner's answered design question (Q-004).
 The C<--reply-to-message-id> flag (TGT-040) is only included when
-C<message_id> is known; passing it through to C<d2 tg.reply> makes the
-resulting reply thread natively under the original message in Telegram's
+C<message_id> is known. C<--bot <token>> (TGT-057) is only included when
+C<bot_token> is given to C<run_once> - C<cli/poller> passes its own
+receiving bot's token here whenever it's running in multi-bot mode
+(TGT-049), since C<d2 tg.reply>'s C<D2TG_TOKEN> fallback can't know which
+of a pool of bots to use; single-bot/env-only mode never passes
+C<bot_token>, so its template is unchanged. Passing C<--reply-to-message-id>
+through to C<d2 tg.reply> makes the resulting reply thread natively under
+the original message in Telegram's
 UI. This is only ever a template: nothing in this module ever calls
 L<D2TG::Reply> or sends a reply itself. The pending-notification line and
 the two C<*ERROR> lines never get one - there is nothing to reply to yet.

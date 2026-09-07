@@ -448,3 +448,16 @@ Revision history for the tg skill
         A new t/50-status-line-version-match.t regression test asserts
         both files' Status line always matches .env's VERSION, so this
         can't silently drift again.
+
+0.37  2026-09-07
+      - BUGFIX (TGT-057, found via a scheduled bug-hunt pass):
+        d2 tg.reply had no way to select a bot token other than
+        D2TG_TOKEN, so a message from a chat served only by a
+        TGT-049 multi-bot CLI-declared --bot (D2TG_TOKEN left unset)
+        produced a REPLY WITH template that died immediately when run
+        ("D2TG::Telegram->new requires a token"). d2 tg.poller's
+        REPLY WITH template now names the receiving bot (--bot <token>)
+        whenever it's running in multi-bot mode - single-bot/env-only
+        mode is unchanged, no --bot printed. d2 tg.reply gains a
+        leading --bot <token> flag (alongside the existing --db/-d) to
+        act on it; omitting it is unchanged (falls back to D2TG_TOKEN).

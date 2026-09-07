@@ -21,6 +21,11 @@ sub new {
     }, $class;
 }
 
+sub token {
+    my ($self) = @_;
+    return $self->{token};
+}
+
 sub _call {
     my ( $self, $method, $params, %opts ) = @_;
 
@@ -233,6 +238,14 @@ C<cli/poller>'s C<SIGINT>/C<SIGTERM> handlers could be delayed by up to
 different blocking call). 35s comfortably covers C<get_updates>' own
 30s server-side hint with a small margin, bounding both shutdown delay and
 new-message latency to a known, short maximum.
+
+=head2 token
+
+Returns the token this object was constructed with (TGT-057) - used by
+C<cli/poller> to thread a multi-bot pair's own receiving bot token
+through to L<D2TG::Poller>'s C<REPLY WITH> template, so an operator
+replying to a message from a non-default bot knows which C<--bot> to
+pass to C<d2 tg.reply>.
 
 =head2 get_me
 

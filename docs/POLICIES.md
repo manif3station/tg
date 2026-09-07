@@ -5,6 +5,18 @@ the Tira board's own SDLC/delivery policies (see this project's board,
 "D2 TG Skill", for those). They come from the owner's original design
 brief for this skill.
 
+## The multi-bot reply path names its own bot, not just its own chat
+
+Bug-hunt finding (TGT-057): TGT-049's multi-bot mode (`d2 tg.poller
+--chat_id ... --bot ...`) can serve chats purely via CLI flags, with
+`D2TG_TOKEN` left entirely unset - but `d2 tg.reply` always sent via
+`D2TG_TOKEN` alone, so replying to a message from such a chat died
+immediately (`D2TG::Telegram->new requires a token`). The poller's
+`REPLY WITH` template now names the receiving bot (`--bot <token>`)
+whenever it's running in multi-bot mode, and `d2 tg.reply` accepts that
+flag to send via the named bot instead. Single-bot/env-only mode is
+completely unaffected - no `--bot` is ever printed or required there.
+
 ## Access control: not everyone can talk to the bot
 
 `D2TG_CHAT_ID` is auto-seeded as allowed on every start. Any other chat

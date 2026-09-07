@@ -12,9 +12,18 @@ use D2TG::Reply;
 use D2TG::Store;
 
 my $db_alias;
-if ( @ARGV && ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) ) {
-    shift @ARGV;
-    $db_alias = shift @ARGV;
+my $bot_token;
+while (@ARGV) {
+    if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
+        shift @ARGV;
+        $db_alias = shift @ARGV;
+    }
+    elsif ( $ARGV[0] eq '--bot' ) {
+        ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag(@ARGV);
+    }
+    else {
+        last;
+    }
 }
 
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
@@ -34,7 +43,7 @@ if ( !defined $chat_id
     exit 2;
 }
 
-my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
+my $telegram = D2TG::Telegram->new( token => $bot_token // D2TG::Config::token() );
 
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
@@ -60,7 +69,7 @@ reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
 
 =head1 SYNOPSIS
 
-    d2 tg.reply [--db <alias> | -d <alias>] <chat_id> <text...> [--reply-to-message-id <id>]
+    d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <text...> [--reply-to-message-id <id>]
 
 =head1 DESCRIPTION
 
@@ -72,7 +81,13 @@ C<cli/tg.*> entrypoints. This is deliberate, for the same reason
 C<--reply-to-message-id> is trailing-only (TGT-042): a whole-list scan
 here could misinterpret reply text that happens to contain the literal
 token C<--db> as multiple unquoted shell words. Resolution otherwise
-matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>.
+matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>. C<--bot
+<token>> (TGT-057) is recognized the same leading way, in either order
+relative to C<--db>/C<-d>, and sends via that token instead of
+C<D2TG_TOKEN> - required to reply to a message received under C<d2
+tg.poller>'s multi-bot mode (TGT-049) by a bot other than the one
+C<D2TG_TOKEN> names; the poller's own C<REPLY WITH> template already
+fills this in when it applies. See L<D2TG::Reply/extract_bot_flag>.
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

@@ -78,13 +78,20 @@ Events printed:
   download is never attempted at all.
 - `NEW TG PENDING [chat_id] awaiting approval` — printed once, the first
   time a non-allow-listed chat id sends anything.
-- `REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <id>` —
+- `REPLY WITH: d2 tg.reply <chat_id> "..." [--bot <token>] --reply-to-message-id <id>` —
   printed immediately after every content line above (text/voice-
   transcript/media, never after the pending notification or an error
   line): a ready-to-run reply command template with the chat id and,
   since TGT-040, the message's own `message_id` already filled in, per
   Q-004. This is only ever a template — the poller never sends a reply
-  itself.
+  itself. In multi-bot mode (TGT-049, more than one `--chat_id`/`--bot`
+  group configured) the template also names the exact bot that received
+  the message (`--bot <token>`, TGT-057) - `d2 tg.reply` has no other way
+  to know which of the pool's bots to send through, since single-bot
+  mode's `D2TG_TOKEN` fallback doesn't apply when the poller was
+  configured purely via CLI flags. Single-bot/env-only mode is
+  unchanged - no `--bot` is ever printed there, since `D2TG_TOKEN` alone
+  is already unambiguous.
 
 If the sender used Telegram's native reply-to-message feature, every
 content line above also carries a `(replying to <sender> [msg #N]:
@@ -131,12 +138,20 @@ and exits 0 on success. Exits 1 (message on STDERR) if `chat_id` was
 already allowed, or was never pending at all. `--db`/`-d` (TGT-051)
 resolves the same way `d2 tg.poller`'s does.
 
-## `d2 tg.reply [--db <alias> | -d <alias>] <chat_id> <text...> [--reply-to-message-id <id>]`
+## `d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <text...> [--reply-to-message-id <id>]`
 
 (`--reply-to-message-id`, when given, must be the last two arguments -
-see below; `--db`/`-d` is the opposite - recognized only in the
-*leading* position, before `chat_id`, for the same collision-avoidance
-reason)
+see below; `--db`/`-d` and `--bot` are the opposite - recognized only in
+the *leading* position, before `chat_id`, for the same collision-avoidance
+reason, and in either order)
+
+`--bot <token>` (TGT-057) sends via that bot token instead of
+`D2TG_TOKEN` - required when replying to a message received under
+`d2 tg.poller`'s multi-bot mode (TGT-049) by a bot other than the one
+`D2TG_TOKEN` happens to name; the poller's own `REPLY WITH` template
+already fills this in when it applies. Omitting it is unchanged from
+before this ticket - falls back to `D2TG_TOKEN`, exactly as every
+single-bot-mode reply always has.
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)

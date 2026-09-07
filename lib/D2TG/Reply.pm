@@ -31,6 +31,17 @@ sub send_reply {
     return { text => $text_result, voice => $voice_result };
 }
 
+sub extract_bot_flag {
+    my (@args) = @_;
+
+    my $bot_token;
+    if ( @args >= 2 && $args[0] eq '--bot' ) {
+        ( undef, $bot_token ) = splice( @args, 0, 2 );
+    }
+
+    return ( $bot_token, @args );
+}
+
 sub parse_cli_args {
     my (@args) = @_;
 
@@ -93,6 +104,19 @@ call dies before C<mark_read> is ever reached, so a message is never
 marked read for a reply that didn't actually go out. Omitting C<store>,
 or omitting C<reply_to_message_id>, leaves read status untouched -
 unchanged from before this ticket.
+
+=head2 extract_bot_flag(@args)
+
+Parses a leading C<--bot <token>> pair off the front of C<@args> (TGT-057),
+returning C<($bot_token, @remaining_args)>. C<$bot_token> is C<undef> when
+C<--bot> isn't the first argument (or C<@args> is too short to hold both
+the flag and its value) - C<cli/reply> falls back to C<D2TG::Config::token>
+(C<D2TG_TOKEN>) in that case, unchanged from before this ticket. Leading,
+not whole-list, for the same collision-avoidance reason as
+C<D2TG::Config::extract_db_flag> and C<--reply-to-message-id>'s
+trailing-only recognition (TGT-042): free reply text passed as multiple
+unquoted shell words could otherwise contain the literal token C<--bot>
+and be misread as the flag.
 
 =head2 parse_cli_args(@ARGV)
 
