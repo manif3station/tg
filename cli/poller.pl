@@ -330,6 +330,17 @@ to reach a stopped process. The lock releases on a clean C<SIGTERM>/
 C<SIGINT> shutdown; a stale lock left by an unclean death is reclaimed
 automatically on the next start.
 
+Immediately after acquiring that lock, also checks
+L<D2TG::Lock/find_other_pollers> and warns on STDERR, naming any PID(s)
+found, if another live process's command line looks like a poller
+instance (TGT-113, a live-experienced incident: a poller crashed
+mid-restart and left an orphaned second instance under a different PID
+still running, undetected, competing for the same bot token's
+C<getUpdates> queue - the lock-eviction above only ever sees whichever
+single PID the lock FILE currently names, not every process actually
+polling). This is a report only, never a kill - see
+L<D2TG::Lock/find_other_pollers> for why.
+
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each
 following C<--bot> attaches to it, so multiple bots can be polled under
