@@ -130,6 +130,21 @@ flag's own name as the alias instead of erroring - e.g. `cli/history
 missing, empty, or itself flag-like - the same validation shape already
 applied to `--chat_id` (TGT-069) and `--since`/`--until` (TGT-070).
 
+## The flag-value-requires-a-value check now lives in one place
+
+Improvement-hunt finding (TGT-072), filed immediately after TGT-071
+shipped: the "shift a flag's value and validate it isn't
+missing/empty/flag-like" pattern had been independently hand-rolled at
+4 separate call sites across TGT-068 (`cli/reply`'s `--db`), TGT-069
+(`bot_groups`'s `--chat_id`), TGT-070 (`cli/history`'s
+`--since`/`--until`), and TGT-071 (`extract_db_flag`'s `--db`/`-d`) -
+each with slightly different predicate logic, two checking a generic
+"looks like a flag" pattern and two hardcoding the exact sibling flag
+names instead. Extracted into `D2TG::Config::shift_flag_value`, now the
+single implementation all 4 call sites share - any future flag added
+anywhere in this skill gets the same guard for free instead of needing
+its own copy.
+
 ## A reply can thread natively under the original Telegram message
 
 Live follow-up question (TGT-040): "where is the message id?" - every

@@ -15,13 +15,12 @@ my $db_alias;
 my $bot_token;
 while (@ARGV) {
     if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
-        my $flag = shift @ARGV;
-        my $value = shift @ARGV;
-        if ( !defined $value || $value eq '' || $value =~ /^-/ ) {
-            print STDERR "--db/-d requires a value\n";
+        shift @ARGV;
+        $db_alias = eval { D2TG::Config::shift_flag_value( \@ARGV, '--db/-d' ) };
+        if ($@) {
+            print STDERR $@;
             exit 1;
         }
-        $db_alias = $value;
     }
     elsif ( $ARGV[0] eq '--bot' ) {
         if ( @ARGV >= 2 ) {
@@ -116,7 +115,8 @@ as TGT-068/069/070): if it's missing, empty, or itself looks like a flag
 (starts with C<->) - e.g. a bare trailing C<--db>, or C<--db> immediately
 followed by C<--bot> - the command dies with C<--db/-d requires a value>
 instead of silently treating that flag's own name as the alias and
-failing later with a misleading C<Unknown --db/-d alias '--bot'>.
+failing later with a misleading C<Unknown --db/-d alias '--bot'>. This
+validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072).
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

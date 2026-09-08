@@ -105,6 +105,21 @@ require D2TG::Config;
 }
 
 {
+    # TGT-072 regression, caught by Codex review during the
+    # shift_flag_value consolidation: a Telegram group/supergroup chat
+    # id is always negative (e.g. -1001234567890) - the shared helper's
+    # flag-like check must not reject a negative number, only a value
+    # that starts with a dash immediately followed by a letter.
+    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+        argv        => [ '--chat_id', '-1001234567890', '--bot', 't1' ],
+        env_chat_id => undef,
+        env_token   => undef,
+    );
+
+    is( $groups->[0]{chat_id}, '-1001234567890', 'a negative Telegram group/supergroup --chat_id is accepted, not rejected as flag-like' );
+}
+
+{
     # TGT-069, real live incident: a bare trailing --chat_id with an
     # env_token ALSO set (bot_groups appends --bot <env_token> to argv
     # BEFORE parsing, per its own documented merge rule) means @argv is

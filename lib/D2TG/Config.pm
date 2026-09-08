@@ -81,6 +81,16 @@ sub attachments_dir {
     return $dir;
 }
 
+sub shift_flag_value {
+    my ( $args, $flag_label ) = @_;
+
+    my $value = shift @$args;
+    die "$flag_label requires a value\n"
+      unless defined $value && $value ne '' && $value !~ /^--?[A-Za-z]/;
+
+    return $value;
+}
+
 sub extract_db_flag {
     my (@args) = @_;
 
@@ -89,10 +99,7 @@ sub extract_db_flag {
     while (@args) {
         my $arg = shift @args;
         if ( $arg eq '--db' || $arg eq '-d' ) {
-            my $value = shift @args;
-            die "--db/-d requires a value\n"
-              unless defined $value && $value ne '' && $value !~ /^-/;
-            $alias = $value;
+            $alias = shift_flag_value( \@args, '--db/-d' );
         }
         else {
             push @rest, $arg;
@@ -120,9 +127,7 @@ sub bot_groups {
         my $arg = shift @argv;
 
         if ( $arg eq '--chat_id' ) {
-            my $value = shift @argv;
-            die "D2TG::Config::bot_groups: --chat_id requires a value\n"
-              unless defined $value && $value ne '--chat_id' && $value ne '--bot';
+            my $value = shift_flag_value( \@argv, '--chat_id' );
             $current = { chat_id => $value, bots => [] };
             push @groups, $current;
         }
@@ -241,6 +246,27 @@ C<files/> under the skill root (C<DEVELOPER_DASHBOARD_SKILL_ROOT> or
 C<default_root>) - and, like C<state_db_path>, the C<base_dir>-omitted
 branch is test-only as of TGT-059, for the same reason.
 
+=head2 shift_flag_value($args_arrayref, $flag_label)
+
+Shared helper (TGT-072) extracted after TGT-068/069/070/071
+independently rediscovered and hand-patched the same bug four times:
+shifts the next value off C<$args_arrayref> and dies with
+C<"$flag_label requires a value\n"> unless it's defined, non-empty, and
+doesn't itself look like a I<flag> - one or two leading dashes followed
+by a letter (C<--since>, C<-d>), not merely anything starting with a
+dash. A Codex review during TGT-072 caught that the original, simpler
+C<!~ /^-/> check would have rejected a legitimate negative Telegram
+group/supergroup chat id (e.g. C<-1001234567890>, always negative for
+those chat types) passed to C<--chat_id>, which would have been a real
+regression despite passing every then-existing test (none exercised a
+negative chat id). C<-100...> and similar numeric-negative values pass
+through fine; only a dash immediately followed by a letter is rejected.
+Used by L</extract_db_flag>, L</bot_groups>'s C<--chat_id> handling,
+C<cli/reply>'s own C<--db> extraction, and C<cli/history>'s
+C<--since>/C<--until> handling - one implementation instead of four,
+so a fifth call site (or a fifth future flag) gets this guard for free
+instead of needing its own copy.
+
 =head2 extract_db_flag(@ARGV)
 
 Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
@@ -272,7 +298,10 @@ identical validation added directly in its own loop, since it doesn't
 call this function. A consequence (flagged in TGT-071's Codex review):
 a Developer Dashboard path alias can no longer itself begin with C<->
 - not a real-world constraint, since C<d2 paths> aliases are plain
-names, not flag-like strings.
+names, not flag-like strings. The validation itself is now delegated to
+L</shift_flag_value> (TGT-072), which also backs L</bot_groups>'s
+C<--chat_id> handling and C<cli/history>'s C<--since>/C<--until>
+handling - one implementation instead of four.
 
 =head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
 
@@ -321,6 +350,9 @@ C<--bot $token> pair to C<argv> I<before> parsing, so a bare trailing
 C<--chat_id> in the caller's own args is never actually the last element
 of the combined stream - a naive "is anything left" check would let
 C<--bot> itself be consumed as the chat_id value instead of failing.
+This validation is now delegated to L</shift_flag_value> (TGT-072),
+which checks generically for any flag-like value (starts with C<->)
+rather than only the two specific sibling flag names.
 
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 

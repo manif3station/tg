@@ -29,9 +29,9 @@ my ( $since, $until );
     while (@ARGV) {
         my $arg = shift @ARGV;
         if ( $arg eq '--since' || $arg eq '--until' ) {
-            my $value = shift @ARGV;
-            if ( !defined $value || $value eq '--since' || $value eq '--until' ) {
-                print STDERR "d2 tg.history: $arg requires a value\n";
+            my $value = eval { D2TG::Config::shift_flag_value( \@ARGV, $arg ) };
+            if ($@) {
+                print STDERR "d2 tg.history: $@";
                 exit 2;
             }
             if ( $arg eq '--since' ) { $since = $value }
@@ -98,6 +98,9 @@ C<D2TG::Config::bot_groups> fix): a bare trailing flag with nothing
 following it, or one immediately followed by the other flag (which
 would otherwise silently swallow that flag's own name as the value),
 exits 2 with a clear C<requires a value> message instead of silently
-running the query unscoped or mis-scoped to match nothing.
+running the query unscoped or mis-scoped to match nothing. This
+validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072),
+shared with C<--db>/C<-d>'s own validation and C<D2TG::Config::bot_groups>'s
+C<--chat_id> validation.
 
 =cut

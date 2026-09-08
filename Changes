@@ -627,3 +627,29 @@ Revision history for the tg skill
         instead. All four extract_db_flag callers now eval-wrap the call
         and report the failure the same way they already do for
         resolve_alias_dir's own die.
+
+0.51  2026-09-08
+      - IMPROVEMENT (TGT-072, found via a scheduled improvement-hunt
+        pass, filed immediately after TGT-071 shipped the 4th
+        independent instance of the same validation pattern): the
+        "shift a flag's value and validate it isn't missing/empty/
+        flag-like" logic had been hand-rolled at 4 separate call sites
+        (TGT-068's cli/reply --db loop, TGT-069's bot_groups --chat_id,
+        TGT-070's cli/history --since/--until, TGT-071's
+        extract_db_flag --db/-d), two checking a generic "looks like a
+        flag" pattern and two hardcoding specific sibling flag names
+        instead. Extracted into a new D2TG::Config::shift_flag_value,
+        now the single shared implementation all 4 call sites use -
+        behavior-preserving (existing error messages/exit codes
+        unchanged, full suite green with zero regressions) except that
+        bot_groups's --chat_id and cli/history's --since/--until now
+        use the same generic flag-like check the other two already
+        did, instead of only recognizing their own specific sibling
+        flag names. A Codex review caught that the initial generic
+        check (any leading dash) would have wrongly rejected a
+        negative Telegram group/supergroup chat id (always negative,
+        e.g. -1001234567890) passed to --chat_id - a real regression
+        despite passing every then-existing test, none of which
+        exercised a negative chat id. Narrowed to only reject a dash
+        immediately followed by a letter (an actual flag name), with
+        new regression tests covering the negative-chat-id case.
