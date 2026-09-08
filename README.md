@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.76).** The multi-bot allow-list is
+**Status: early implementation (v0.77).** The multi-bot allow-list is
 now scoped per bot (`chat_id`, `bot_key`) rather than by `chat_id`
 alone - a Telegram group shared by more than one of this skill's
 configured bots no longer leaks an approval from one bot to another

@@ -30,6 +30,21 @@ sub acquire {
         # left by an unclean death).
         my $pid = _read_pid($path);
 
+        # TGT-102 (bug-hunt finding): re-acquiring our own already-held
+        # lock (exactly what cli/poller.pl's version-triggered
+        # self-restart does every time, since exec() preserves the PID)
+        # must be an immediate no-op success - it must never fall
+        # through into the fallback reclaim path below and
+        # unlink+recreate a file that was never actually stale. Without
+        # this explicit check, the narrow window between that unlink and
+        # the atomic recreate let an independently-started second
+        # poller's own acquire() land in between, read the
+        # just-recreated PID as a live conflict, and SIGKILL the
+        # legitimately self-restarting process.
+        if ( defined $pid && $pid == $$ ) {
+            return 1;
+        }
+
         if ( defined $pid && $pid != $$ && kill( 0, $pid ) ) {
 
             # TGT-084 (live user request + live production incident):
@@ -169,12 +184,21 @@ processes racing to acquire a fresh C<$lock_path> at once cannot both
 succeed; a genuine check-then-write race existed here before TGT-064
 (verified with a real 8-process fork-based race test, C<t/54-*.t>).
 
+If C<$lock_path> already exists and names the caller's own C<$$>
+(exactly what C<cli/poller.pl>'s version-triggered self-restart,
+TGT-036, produces every time - C<exec> keeps the same PID), C<acquire>
+returns success immediately without touching the file at all (TGT-102 -
+a bug-hunt finding: before this explicit fast-path, the own-PID case
+fell through into the fallback reclaim path below and
+unlinked+recreated a file that was never actually stale, opening a
+narrow window where an independently-started second poller could land
+between the unlink and the recreate and C<SIGKILL> the legitimately
+self-restarting process).
+
 When C<$lock_path> already exists and names a still-live process (checked
 via C<kill(0, $pid)>, which sends no signal but confirms the process
-exists) other than the caller's own C<$$> - the own-PID case is treated
-as already-held-successfully, not a conflict, since C<cli/poller.pl>'s
-version-triggered self-restart (TGT-036) C<exec>s in place, keeping the
-same PID - TGT-084's "last one wins" takes over: sends that process
+exists) other than the caller's own C<$$>, TGT-084's "last one wins"
+takes over: sends that process
 C<SIGKILL> (not C<SIGTERM>: L<D2TG::Poller>'s own known limitation means
 graceful shutdown handling can be delayed up to C<DEFAULT_HARD_TIMEOUT>
 by an in-flight long-poll call, which would make a "last one wins"

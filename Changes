@@ -998,3 +998,21 @@ Revision history for the tg skill
         (D2TG::Poller's TELEGRAM_GETFILE_MAX_BYTES, D2TG::Lock's
         constants, D2TG::Telegram's DEFAULT_HARD_TIMEOUT). Pure refactor,
         no behavior change - full 612-test suite passes unchanged.
+
+0.77  2026-09-08
+      - BUGFIX (TGT-102, found via a scheduled hourly bug-hunt (JOB-003)
+        investigating D2TG::Lock.pm fresh): if an existing lock names
+        the caller's own PID - exactly what cli/poller.pl's
+        version-triggered self-restart produces every time, since
+        exec() preserves the PID - acquire() now succeeds immediately
+        without unlinking or recreating the lock file. Previously,
+        own-PID re-entry reached the fallback reclaim path (intended
+        for a dead/unreadable PID) and briefly churned the lock file,
+        opening a window where a competing poller could apply the
+        normal live-conflict takeover policy (TGT-084) against the
+        legitimately self-restarting process. Reproduced live in a
+        developer-dashboard:latest-equivalent Docker container; may
+        also explain some of this session's earlier unexplained
+        "poller monitor job died silently" incidents. TGT-084's
+        existing reclaim/live-conflict-kill behavior for a genuinely
+        different PID is unchanged (t/52/54/66/67 all green).

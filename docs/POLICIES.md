@@ -802,6 +802,35 @@ directory for the current `poller.pl` basename at restart time -
 resilient to a rename because only the filename changed, not the
 directory - falling back to `$0` only if that lookup fails.
 
+## Re-acquiring the poller's own lock never touches the lock file (TGT-102)
+
+Bug-hunt finding (JOB-003, investigating `D2TG::Lock.pm` fresh): the
+version-triggered self-restart above (TGT-036/TGT-094) `exec()`s in
+place, keeping the same PID - which means every such restart re-enters
+`D2TG::Lock::acquire` holding a lock file that already names its own
+`$$`. Before this fix, `acquire` had no explicit fast-path for that case:
+it fell through into the fallback reclaim path and
+unlinked+recreated the lock file even though the PID was neither stale
+nor dead. That opened a narrow race window - between the unlink and the
+atomic `O_CREAT|O_EXCL` recreate - where an independently-started second
+poller instance's own `acquire()` could land, read the just-recreated
+PID as a live conflict, and (per TGT-084's own "last one wins" policy)
+correctly issue a real `SIGKILL` against the legitimately self-restarting
+process. Reproduced live in a `developer-dashboard:latest`-equivalent
+Docker container: one process repeatedly re-acquiring its own held lock,
+a second timed to land mid-churn - it read the recreated PID and killed
+the first, exactly as designed for a genuine conflict, but this was not
+one. This is plausibly the real root cause of this project's earlier,
+previously-unexplained "poller monitor job died silently, no Perl-level
+error" incidents.
+
+`acquire` now returns success immediately when the lock file already
+names the caller's own PID, before ever reaching the reclaim or
+live-conflict-kill logic - the file is never unlinked, recreated, or
+otherwise touched on that path. TGT-084's existing behavior for a
+genuinely different, live PID (kill-and-take-over) and for a genuinely
+dead PID (atomic reclaim) is unchanged.
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then
