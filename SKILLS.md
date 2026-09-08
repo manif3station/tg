@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.82).** This file is a procedure to
+**Status: early implementation (v0.83).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -30,7 +30,14 @@ version and whether the poller is currently alive, without reaching into
 Tira job metadata from outside - and also its heartbeat age, flagged
 stale past 20 minutes (TGT-116), since "alive" and "still genuinely
 cycling" turned out to be different questions after a real 80+ minute
-silent-message-loss incident.
+silent-message-loss incident. `d2 tg.poller` also warns on stderr if it
+detects another live process whose command line looks like a poller
+instance (TGT-113) - a real incident where a poller
+crashed mid-restart, left an orphaned second instance running under a
+different PID, and nothing noticed it was still competing for the same
+bot token's `getUpdates` queue. This is a report, not a kill - a cmdline
+pattern match alone isn't strong enough evidence for this skill to act
+on unprompted.
 
 ## 2. Prep before install
 

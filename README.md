@@ -1,6 +1,20 @@
 # tg
 
-**Status: early implementation (v0.82).** `d2 tg.poller` now writes a
+**Status: early implementation (v0.83).** `d2 tg.poller` now warns on
+stderr if it detects another live process whose command line looks like
+a poller instance, right after acquiring its own lock (TGT-113, a
+live-experienced incident: a poller crashed mid-restart and left an
+orphaned second instance under a different PID still running,
+undetected, competing for the same bot token's `getUpdates` queue -
+TGT-084's own "last one wins" lock-eviction never sees this shape, since
+it only ever looks at whichever single PID the lock FILE currently
+names). This is a report, not a kill - a `/proc` cmdline pattern match
+alone isn't strong enough evidence to justify an unprompted kill, so
+`D2TG::Lock::find_other_pollers` only ever warns; a Codex review caught
+that its first draft matched an unanchored substring against a
+NUL-joined cmdline (false-positiving on names like `not-a-poller.pl`),
+fixed by matching each argv element individually against an anchored
+pattern. `d2 tg.poller` also writes a
 heartbeat after each bot/chat pair's own poll cycle, atomically (temp
 file + rename), and `d2 tg.status` reports its age, flagging it stale
 past 20 minutes (TGT-116, a live-experienced incident: a poller stayed

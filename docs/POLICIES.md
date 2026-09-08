@@ -1009,3 +1009,31 @@ hypothetical. Fixed: a present caption is sanitized the same way
 inbound text already is (TGT-039) and appended to both the printed line
 and the stored message summary; a message with no caption (the common
 case) is unaffected.
+
+## An orphaned poller instance is reported, never silently killed on a guess
+
+Live-experienced incident (TGT-113): a poller crashed mid-version-bump
+race, never auto-restarted, and a SEPARATE orphaned instance - under a
+different PID, with a stale command line missing `-d tira` - was found
+still running the entire time, competing for the same bot token's
+`getUpdates` queue. TGT-084's own "last one wins" lock-eviction only
+ever sees whichever single PID the lock FILE currently names; it has no
+way to notice a second live process that never touched that file at all.
+
+`D2TG::Lock::find_other_pollers` scans `/proc/<pid>/cmdline` for other
+live processes whose argv contains an element matching a poller-shaped
+pattern (default `(?:^|/)poller\.pl$`, anchored to a whole basename or
+path ending in it), excluding the caller's own PID. `cli/poller.pl` runs
+this check immediately after acquiring its own lock and, if it finds
+anything, warns on STDERR naming the PID(s) - it deliberately never acts
+on this by killing anything itself: a cmdline pattern match is a
+point-in-time, best-effort signal, not proof of identity (a matching
+process can start or exit around the scan, and PIDs can be reused), so
+this skill only ever surfaces the finding for a human to investigate.
+
+A Codex review caught that the first draft matched an unanchored
+substring against the whole cmdline joined with spaces (replacing the
+kernel's own NUL separators) - false-positiving on `not-a-poller.pl`,
+`poller.pl.bak`, `--note=poller.pl`, and even a match spanning two
+unrelated argv elements. Fixed by matching each NUL-split argv element
+on its own against the anchored pattern.

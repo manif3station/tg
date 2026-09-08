@@ -1102,3 +1102,24 @@ Revision history for the tg skill
         deliberately avoids, Q-003) or a Tira-scheduled job doing the
         restarting - an operational/architecture decision, flagged as a
         follow-up.
+
+0.83  2026-09-09
+      - FEATURE (TGT-113, live-experienced incident: a poller crashed
+        mid-version-bump race, never auto-restarted, and a SEPARATE
+        orphaned instance under a different PID - with a stale command
+        line missing '-d tira' - was found still running the entire
+        time, competing for the same bot token's getUpdates queue):
+        `d2 tg.poller` now warns on STDERR, immediately after acquiring
+        its own lock, if it detects another live process whose command
+        line looks like a poller instance - via new
+        `D2TG::Lock::find_other_pollers`, a `/proc/<pid>/cmdline` scan
+        independent of TGT-084's own lock-eviction (which only ever sees
+        whichever single PID the lock FILE currently names). Report
+        only, never a kill - a cmdline pattern match alone isn't strong
+        enough evidence for this skill to act on unprompted. Codex
+        review caught the first draft's pattern matching was an
+        unanchored substring against a NUL-joined-as-spaces cmdline,
+        false-positiving on names like `not-a-poller.pl`/
+        `poller.pl.bak`/`--note=poller.pl` - fixed by matching each
+        split argv element individually against an anchored
+        `(?:^|/)poller\.pl$` pattern.
