@@ -11,7 +11,7 @@ use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
-my $poller = File::Spec->catfile( $Bin, '..', 'cli', 'poller' );
+my $poller = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
 my $fake_db_dir = tempdir( CLEANUP => 1 );
 setup_mandatory_db_env( $Bin, $fake_db_dir );

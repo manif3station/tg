@@ -10,7 +10,7 @@ use File::Spec;
 # install path on disk. Requires no env vars/flags at all - it touches
 # no state, just prints static files.
 
-my $help_cli = File::Spec->catfile( $Bin, '..', 'cli', 'help' );
+my $help_cli = File::Spec->catfile( $Bin, '..', 'cli', 'help.pl' );
 
 {
     local %ENV = %ENV;

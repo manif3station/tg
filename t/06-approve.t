@@ -53,7 +53,7 @@ sub fresh_db_path {
 }
 
 {
-    my $approve_cli = File::Spec->catfile( $Bin, '..', 'cli', 'approve' );
+    my $approve_cli = File::Spec->catfile( $Bin, '..', 'cli', 'approve.pl' );
     my $skill_root  = tempdir( CLEANUP => 1 );
 
     local %ENV = %ENV;

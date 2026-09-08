@@ -172,7 +172,7 @@ succeed; a genuine check-then-write race existed here before TGT-064
 When C<$lock_path> already exists and names a still-live process (checked
 via C<kill(0, $pid)>, which sends no signal but confirms the process
 exists) other than the caller's own C<$$> - the own-PID case is treated
-as already-held-successfully, not a conflict, since C<cli/poller>'s
+as already-held-successfully, not a conflict, since C<cli/poller.pl>'s
 version-triggered self-restart (TGT-036) C<exec>s in place, keeping the
 same PID - TGT-084's "last one wins" takes over: sends that process
 C<SIGKILL> (not C<SIGTERM>: L<D2TG::Poller>'s own known limitation means

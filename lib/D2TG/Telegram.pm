@@ -234,7 +234,7 @@ DEFAULT_HARD_TIMEOUT> (originally 35, TGT-035, a real production incident:
 LWP's own default is 180s, so a single C<get_updates> long-poll call -
 default C<timeout =E<gt> 30> - could block for up to 180s with no explicit
 bound. Since Perl defers signal handling until the current blocking
-syscall returns, this meant C<cli/poller>'s C<SIGINT>/C<SIGTERM> handlers
+syscall returns, this meant C<cli/poller.pl>'s C<SIGINT>/C<SIGTERM> handlers
 could be delayed by up to 180s even after TGT-031's transcription-timeout
 fix, which only bounded a different blocking call). Widened to 50s
 (TGT-066, another real production incident: a 35s bound left only a 5s
@@ -248,7 +248,7 @@ false-positive timeouts on ordinary long-poll responses.
 =head2 token
 
 Returns the token this object was constructed with (TGT-057) - used by
-C<cli/poller> to thread a multi-bot pair's own receiving bot token
+C<cli/poller.pl> to thread a multi-bot pair's own receiving bot token
 through to L<D2TG::Poller>'s C<REPLY WITH> template, so an operator
 replying to a message from a non-default bot knows which C<--bot> to
 pass to C<d2 tg.reply>.

@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.68).** This file is a procedure to
+**Status: early implementation (v0.69).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -199,3 +199,12 @@ Module-by-module and per-ticket implementation detail (which file
 implements what, exact function signatures) lives in the POD of each
 `lib/D2TG/*.pm` module and in `docs/commands.md`'s command/event
 reference - not here. This file stays a procedure, not a changelog.
+
+Every `cli/*` entrypoint file carries a `.pl` extension internally
+(`cli/poller.pl`, `cli/reply.pl`, `cli/approve.pl`, `cli/unread.pl`,
+`cli/history.pl`, `cli/help.pl` - TGT-093). This is purely a source-tree
+naming convention and does not change how you run the skill: `d2
+tg.<command>` (e.g. `d2 tg.poller`) dispatches exactly as documented
+above, because Developer Dashboard's `SkillDispatcher` already tries a
+`.pl` fallback for an extensionless command name, confirmed empirically
+in a `tira:latest` container before the rename shipped.

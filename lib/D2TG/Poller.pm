@@ -329,7 +329,7 @@ methods). When C<$store> is given, a sender not in its allow-list is
 recorded via C<add_pending>, printing the one-time pending notification
 described above but never the message text; when omitted, every
 sender's text is printed unconditionally (used by earlier tests only -
-C<cli/poller> always passes a real store). Returns the raw updates array
+C<cli/poller.pl> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
 
 Every printed sender name (the main content line and any reply-context
@@ -421,12 +421,12 @@ line - a ready-to-run reply command template with the chat id and
 message id filled in, per the owner's answered design question (Q-004).
 The C<--reply-to-message-id> flag (TGT-040) is only included when
 C<message_id> is known. C<--bot <masked_token>> (TGT-057) is only
-included when C<bot_token> is given to C<run_once> - C<cli/poller> passes
+included when C<bot_token> is given to C<run_once> - C<cli/poller.pl> passes
 its own receiving bot's token here whenever it's running in multi-bot
 mode (TGT-049), since C<d2 tg.reply>'s C<D2TG_TOKEN> fallback can't know
 which of a pool of bots to use; single-bot/env-only mode never passes
 C<bot_token>, so its template is unchanged. The token is masked (TGT-086,
-via L<D2TG::Config/masked_token>, the same masking C<cli/poller>'s own
+via L<D2TG::Config/masked_token>, the same masking C<cli/poller.pl>'s own
 startup line already uses, TGT-045) rather than printed in full - this
 line reaches the target project's C<tira.policy.bridge> as a
 C<monitor-output> event on a shared board, and the real token is a

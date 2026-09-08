@@ -69,14 +69,14 @@ validated `reply_to_message_id` is numeric before use, dying with a
 clear D2TG-level error otherwise; `send_message` did not, and would have
 silently forwarded a bad value into Telegram's API instead, surfacing
 only as an opaque remote error. `send_message` now validates the same
-way `send_voice` always has - both existing callers (`cli/reply`, the
+way `send_voice` always has - both existing callers (`cli/reply.pl`, the
 poller's own `REPLY WITH` template) already validate upstream, so this
 closes a latent gap rather than changing any live caller's behavior.
 
 ## d2 tg.reply's --reply-to-message-id flag only ever means what it looks like
 
 Hourly bug-hunt finding (TGT-042): the flag (TGT-040) was originally
-recognized anywhere in `cli/reply`'s argument list, which made it
+recognized anywhere in `cli/reply.pl`'s argument list, which made it
 ambiguous with free reply text - text passed as multiple unquoted shell
 words could, in principle, contain the literal token
 `--reply-to-message-id` and have it (and the following word) silently
@@ -117,15 +117,15 @@ multi-bot mode), never resets or changes where a given bot's own
 ## --db/-d always requires a real value, everywhere it's recognized
 
 Hourly bug-hunt finding (TGT-071): `D2TG::Config::extract_db_flag` - the
-shared `--db`/`-d` parser used by `cli/poller`, `cli/approve`,
-`cli/unread`, and `cli/history` - shifted the token immediately after
-`--db`/`-d` with no validation, same as `cli/reply`'s own separate
+shared `--db`/`-d` parser used by `cli/poller.pl`, `cli/approve.pl`,
+`cli/unread.pl`, and `cli/history.pl` - shifted the token immediately after
+`--db`/`-d` with no validation, same as `cli/reply.pl`'s own separate
 leading-position `--db` extraction. A bare trailing `--db`, or `--db`
 immediately followed by another real flag, silently swallowed that
-flag's own name as the alias instead of erroring - e.g. `cli/history
+flag's own name as the alias instead of erroring - e.g. `cli/history.pl
 --db --since 2026-01-01` dropped `--since` entirely and failed with
 `Unknown --db/-d alias '--since'`, naming the wrong problem. Both
-`extract_db_flag` and `cli/reply`'s own loop now die/exit with a clear
+`extract_db_flag` and `cli/reply.pl`'s own loop now die/exit with a clear
 `--db/-d requires a value` message whenever the shifted value is
 missing, empty, or itself flag-like - the same validation shape already
 applied to `--chat_id` (TGT-069) and `--since`/`--until` (TGT-070).
@@ -135,8 +135,8 @@ applied to `--chat_id` (TGT-069) and `--since`/`--until` (TGT-070).
 Improvement-hunt finding (TGT-072), filed immediately after TGT-071
 shipped: the "shift a flag's value and validate it isn't
 missing/empty/flag-like" pattern had been independently hand-rolled at
-4 separate call sites across TGT-068 (`cli/reply`'s `--db`), TGT-069
-(`bot_groups`'s `--chat_id`), TGT-070 (`cli/history`'s
+4 separate call sites across TGT-068 (`cli/reply.pl`'s `--db`), TGT-069
+(`bot_groups`'s `--chat_id`), TGT-070 (`cli/history.pl`'s
 `--since`/`--until`), and TGT-071 (`extract_db_flag`'s `--db`/`-d`) -
 each with slightly different predicate logic, two checking a generic
 "looks like a flag" pattern and two hardcoding the exact sibling flag
@@ -318,7 +318,7 @@ first, text only once voice succeeded).
 
 There is still deliberately no flag or code path that skips voice, and a
 synthesis or `send_voice` failure still fails the whole reply loudly
-(`cli/reply` exits non-zero) rather than silently reporting success. What
+(`cli/reply.pl` exits non-zero) rather than silently reporting success. What
 changed: because the text message is now sent *before* synthesis/voice
 can fail, a failure at either of those later steps can no longer prevent
 the text from having already reached the user — Telegram messages can't
@@ -394,17 +394,17 @@ divergent copy of the same information.
 partially happen. Inbound voice transcription is the opposite: a single
 voice note that fails to download or transcribe must not take down the
 whole poller loop, since a live bridge processing many messages should
-keep serving the rest of them. `cli/poller` reports such a failure on
+keep serving the rest of them. `cli/poller.pl` reports such a failure on
 stderr (`TRANSCRIBE ERROR [chat_id] sender: <message>`) and continues.
 
 ## A single transcription can never block shutdown, or run unbounded
 
 Voice transcription shells out to `whisper`, which can be slow (TGT-031,
 a real production incident: it was found genuinely blocking the whole
-poll loop, and `cli/poller` was unresponsive to Ctrl+C for as long as
+poll loop, and `cli/poller.pl` was unresponsive to Ctrl+C for as long as
 it ran). `D2TG::Transcribe::_run` is bounded by `$TIMEOUT` (default
 300s) - a run that exceeds it is killed and reported as a normal
-`TRANSCRIBE ERROR`, never blocks forever. `cli/poller`'s `SIGTERM`/
+`TRANSCRIBE ERROR`, never blocks forever. `cli/poller.pl`'s `SIGTERM`/
 `SIGINT` handlers also call `D2TG::Transcribe::kill_current` so an
 in-flight transcription is killed immediately at shutdown time rather
 than waited out.
@@ -604,7 +604,7 @@ the target project's `tira.policy.bridge` as `monitor-output` events -
 a shared board, not a private log - so this broadcast a real credential
 (whoever has it can send/receive as that bot) far more often than the
 one place this project had already taken care to mask a token
-(`cli/poller`'s own startup line, TGT-045).
+(`cli/poller.pl`'s own startup line, TGT-045).
 
 Fixed by routing the `--bot <token>` value in the printed template
 through the same `D2TG::Config::masked_token` helper the startup line
@@ -616,9 +616,9 @@ that chat must supply the real token themselves (their own
 design that would keep the template fully self-contained (e.g. `d2
 tg.reply` resolving a masked value back to the real token from a locally
 known bot pool) was considered and rejected for this ticket's scope -
-`cli/reply` runs as its own fresh process with no access to the poller's
+`cli/reply.pl` runs as its own fresh process with no access to the poller's
 own `--chat_id`/`--bot` CLI arguments, which today exist only in that
-other, already-exited process's argv, not in anything `cli/reply` could
+other, already-exited process's argv, not in anything `cli/reply.pl` could
 read. Single-bot/env-only mode (`D2TG_TOKEN` alone) was never affected -
 it never printed `--bot` at all.
 

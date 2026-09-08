@@ -877,3 +877,14 @@ Revision history for the tg skill
         way inbound text already is (TGT-039) and appended to both the
         printed NEW TG MEDIA line and the stored message summary; a
         message with no caption (the common case) is unaffected.
+
+0.69  2026-09-08
+      - CHANGE (TGT-093, live user request via Telegram): every cli/*
+        entrypoint now carries a .pl extension (cli/poller.pl,
+        cli/reply.pl, cli/approve.pl, cli/unread.pl, cli/history.pl,
+        cli/help.pl). Confirmed first, before renaming anything, that
+        Developer Dashboard's SkillDispatcher (_runnable_path_candidates
+        in Platform.pm) already tries a .pl fallback for an extensionless
+        command name, so d2 tg.<command> dispatch is unaffected - verified
+        empirically in a tira:latest container both before and after the
+        rename. Pure file-naming change; no script logic/content changed.

@@ -39,7 +39,7 @@ require D2TG::Config;
     my $work_dir = tempdir( CLEANUP => 1 );
 
     for my $name (qw(unread history approve)) {
-        my $cli = File::Spec->catfile( $Bin, '..', 'cli', $name );
+        my $cli = File::Spec->catfile( $Bin, '..', 'cli', "$name.pl" );
 
         local %ENV = %ENV;
         delete $ENV{D2TG_DB};

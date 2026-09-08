@@ -17,11 +17,11 @@ use File::Spec;
 # here - every case exits immediately on the parse failure, well before
 # any network call, so a plain backtick capture is safe).
 
-my $history_cli = File::Spec->catfile( $Bin, '..', 'cli', 'history' );
-my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
-my $approve_cli  = File::Spec->catfile( $Bin, '..', 'cli', 'approve' );
-my $unread_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'unread' );
-my $poller_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'poller' );
+my $history_cli = File::Spec->catfile( $Bin, '..', 'cli', 'history.pl' );
+my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply.pl' );
+my $approve_cli  = File::Spec->catfile( $Bin, '..', 'cli', 'approve.pl' );
+my $unread_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'unread.pl' );
+my $poller_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
 sub run_capturing_stderr {
     my (@cmd) = @_;

@@ -292,8 +292,8 @@ C<resolve_alias_dir>), the file is C<telegram.messages.db> under a
 C<.tira/> subdirectory of C<base_dir> (TGT-081, a live user request -
 was C<store.sqlite> directly under C<base_dir>, no subdirectory, before
 this ticket). Creates whichever directory it resolves to if missing. All of
-C<cli/poller>, C<cli/reply>, C<cli/approve>, C<cli/unread>,
-C<cli/history> use this so the resolution logic exists in exactly one
+C<cli/poller.pl>, C<cli/reply.pl>, C<cli/approve.pl>, C<cli/unread.pl>,
+C<cli/history.pl> use this so the resolution logic exists in exactly one
 place.
 
 Since TGT-059 made C<resolve_alias_dir> always either die or return a
@@ -317,7 +317,7 @@ TGT-059, for the same reason.
 
 =head2 lock_path(default_root => $path, base_dir => $path)
 
-Resolves and returns the path to C<cli/poller>'s single-instance PID
+Resolves and returns the path to C<cli/poller.pl>'s single-instance PID
 lock file (L<D2TG::Lock>), creating whichever directory it resolves to
 if missing. Mirrors C<state_db_path>/C<attachments_dir>'s own
 resolution exactly: with an explicit C<base_dir>, the file is
@@ -327,7 +327,7 @@ C<poller.pid> directly under C<base_dir>, no subdirectory, before this
 ticket); with no C<base_dir>, C<state/poller.pid> under the skill root
 (C<DEVELOPER_DASHBOARD_SKILL_ROOT> or the given C<default_root>). As
 with the other two resolvers, the C<base_dir>-omitted branch is
-test-only as of TGT-059 - C<cli/poller> always supplies C<base_dir> in
+test-only as of TGT-059 - C<cli/poller.pl> always supplies C<base_dir> in
 practice.
 
 =head2 shift_flag_value($args_arrayref, $flag_label)
@@ -346,7 +346,7 @@ regression despite passing every then-existing test (none exercised a
 negative chat id). C<-100...> and similar numeric-negative values pass
 through fine; only a dash immediately followed by a letter is rejected.
 Used by L</extract_db_flag>, L</bot_groups>'s C<--chat_id> handling,
-C<cli/reply>'s own C<--db> extraction, and C<cli/history>'s
+C<cli/reply.pl>'s own C<--db> extraction, and C<cli/history.pl>'s
 C<--since>/C<--until> handling - one implementation instead of four,
 so a fifth call site (or a fifth future flag) gets this guard for free
 instead of needing its own copy.
@@ -355,9 +355,9 @@ instead of needing its own copy.
 
 Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
 (TGT-051), recognized anywhere in the list. Used as-is by
-C<cli/poller>/C<cli/approve>/C<cli/unread>/C<cli/history>, none of which
+C<cli/poller.pl>/C<cli/approve.pl>/C<cli/unread.pl>/C<cli/history.pl>, none of which
 take free-form text arguments that could collide with this flag's own
-name, so a whole-list scan is safe for them. C<cli/reply> does I<not>
+name, so a whole-list scan is safe for them. C<cli/reply.pl> does I<not>
 use this function - it has its own leading-position-only extraction
 instead (see its own POD), for the same reason
 C<D2TG::Reply::parse_cli_args>'s C<--reply-to-message-id> is
@@ -369,14 +369,14 @@ Dies with C<--db/-d requires a value> (TGT-071, a real live-reproduced
 incident, same bug class as TGT-069/070) if the token immediately after
 C<--db>/C<-d> is missing, empty, or itself looks like a flag (starts
 with C<->) - a bare trailing C<--db>, or C<--db> immediately followed by
-another real flag (e.g. C<cli/history --db --since 2026-01-01>, C<cli/reply
---db --bot TOKEN ...>, C<cli/history --db --chat_id>), would otherwise
+another real flag (e.g. C<cli/history.pl --db --since 2026-01-01>, C<cli/reply.pl
+--db --bot TOKEN ...>, C<cli/history.pl --db --chat_id>), would otherwise
 silently swallow that flag's own name as the alias and fail later with a
 misleading C<Unknown --db/-d alias '--since'>-style message instead of
-naming the real problem. Every caller (C<cli/poller>/C<cli/approve>/
-C<cli/unread>/C<cli/history>) wraps this call in C<eval { ... }>,
+naming the real problem. Every caller (C<cli/poller.pl>/C<cli/approve.pl>/
+C<cli/unread.pl>/C<cli/history.pl>) wraps this call in C<eval { ... }>,
 printing C<$@> to STDERR and exiting 1 on failure - the same pattern
-already used around C<resolve_alias_dir>'s own die. C<cli/reply>'s
+already used around C<resolve_alias_dir>'s own die. C<cli/reply.pl>'s
 separate leading-position-only C<--db> extraction (see above) has the
 identical validation added directly in its own loop, since it doesn't
 call this function. A consequence (flagged in TGT-071's Codex review):
@@ -384,7 +384,7 @@ a Developer Dashboard path alias can no longer itself begin with C<->
 - not a real-world constraint, since C<d2 paths> aliases are plain
 names, not flag-like strings. The validation itself is now delegated to
 L</shift_flag_value> (TGT-072), which also backs L</bot_groups>'s
-C<--chat_id> handling and C<cli/history>'s C<--since>/C<--until>
+C<--chat_id> handling and C<cli/history.pl>'s C<--since>/C<--until>
 handling - one implementation instead of four.
 
 =head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
@@ -515,7 +515,7 @@ pre-exist.
 Reads and returns the C<VERSION=...> line from this skill's own
 C<.env> (TGT-036), resolving the skill root the same way
 C<state_db_path> does. Dies with a clear message if C<.env> can't be
-read at all, or if it has no C<VERSION> line. C<cli/poller> uses this
+read at all, or if it has no C<VERSION> line. C<cli/poller.pl> uses this
 to detect when a newer version has been installed while it is still
 running, so it can restart itself.
 

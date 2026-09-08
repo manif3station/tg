@@ -130,7 +130,7 @@ exercise the fork-failure path, since a real C<fork()> is not something
 a test can reliably make fail on demand) - never via a shell, so no
 injection risk - polling C<waitpid> every 0.2s instead of blocking on
 it directly, so a
-pending signal in the caller (e.g. C<cli/poller>'s C<SIGINT>/C<SIGTERM>
+pending signal in the caller (e.g. C<cli/poller.pl>'s C<SIGINT>/C<SIGTERM>
 handler) gets a chance to run promptly rather than being deferred until
 the child exits (TGT-031: this was the root cause of the poller
 appearing unresponsive to Ctrl+C while transcribing). If C<@cmd> has not
@@ -152,7 +152,7 @@ touched; the parent's own C<STDOUT>/C<STDERR> are never redirected.
 Sends C<TERM> to the process currently running under C<_run>, if any
 (tracked in the package variable C<$CURRENT_PID>, correctly visible to a
 signal handler that fires during C<_run>'s poll loop since it is set via
-C<local>). A no-op when nothing is running. C<cli/poller> calls this
+C<local>). A no-op when nothing is running. C<cli/poller.pl> calls this
 from its own shutdown signal handlers so an in-flight transcription is
 killed immediately instead of being waited out.
 

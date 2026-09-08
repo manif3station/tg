@@ -5,7 +5,7 @@ use FindBin qw($Bin);
 use File::Spec;
 use File::Temp qw(tempdir);
 
-my $history_cli = File::Spec->catfile( $Bin, '..', 'cli', 'history' );
+my $history_cli = File::Spec->catfile( $Bin, '..', 'cli', 'history.pl' );
 
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);

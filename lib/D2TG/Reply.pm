@@ -87,7 +87,7 @@ TGT-083, a synthesis or C<send_voice> failure happened I<before>
 C<send_message> was ever called, so a failure at either point could
 never produce a text-only reply. Under the new order, C<send_message>
 has already run by the time synthesis or C<send_voice> could fail;
-C<send_reply> still dies loudly in that case (so C<cli/reply> exits
+C<send_reply> still dies loudly in that case (so C<cli/reply.pl> exits
 non-zero and never claims success), but it can no longer prevent the
 text from having already reached the user - Telegram messages can't be
 unsent by this code. This is a deliberate, explicit reversal of the
@@ -126,7 +126,7 @@ unchanged from before this ticket.
 Parses a leading C<--bot <token>> pair off the front of C<@args> (TGT-057),
 returning C<($bot_token, @remaining_args)>. C<$bot_token> is C<undef> when
 C<--bot> isn't the first argument (or C<@args> is too short to hold both
-the flag and its value) - C<cli/reply> falls back to C<D2TG::Config::token>
+the flag and its value) - C<cli/reply.pl> falls back to C<D2TG::Config::token>
 (C<D2TG_TOKEN>) in that case, unchanged from before this ticket. Leading,
 not whole-list, for the same collision-avoidance reason as
 C<D2TG::Config::extract_db_flag> and C<--reply-to-message-id>'s
@@ -141,12 +141,12 @@ requires a value> if it's missing, empty, or itself flag-like, instead
 of silently returning another flag's own name as the bot token (e.g.
 C<extract_bot_flag('--bot','--db','myalias',...)> previously returned
 C<'--db'> as the token). A bare trailing C<--bot> with I<no> value at
-all (C<@args> too short) is unaffected here - C<cli/reply>'s own caller
+all (C<@args> too short) is unaffected here - C<cli/reply.pl>'s own caller
 already handles that case directly (TGT-068).
 
 =head2 parse_cli_args(@ARGV)
 
-Parses C<cli/reply>'s raw argument list into C<($chat_id, $text,
+Parses C<cli/reply.pl>'s raw argument list into C<($chat_id, $text,
 $reply_to_message_id)> (TGT-042). C<--reply-to-message-id <id>> is
 recognized I<only> in the trailing position - the last two elements of
 the argument list, matching exactly how the poller's own C<REPLY WITH>
@@ -158,7 +158,7 @@ itself), which a whole-list scan would misinterpret as the flag and
 silently corrupt the text. C<$reply_to_message_id> is C<undef> when the
 flag isn't given (or isn't trailing) - unchanged from before this
 ticket. Does not validate that C<$chat_id> or C<$reply_to_message_id>
-are numeric; C<cli/reply> does that itself before using the parsed
+are numeric; C<cli/reply.pl> does that itself before using the parsed
 result.
 
 Decodes every argument as UTF-8 before doing anything else (TGT-073, a
@@ -170,16 +170,16 @@ C<JSON::PP::encode_json> treats as Latin-1 codepoints and re-encodes as
 UTF-8, double-encoding every multi-byte character into mojibake (e.g.
 C<h\x{e9}llo> arrived on Telegram as C<hÃ©llo>). Decoding here, once,
 before C<$chat_id>/C<$reply_to_message_id> are even split off, fixes it
-at the single chokepoint every C<cli/reply> invocation passes through -
+at the single chokepoint every C<cli/reply.pl> invocation passes through -
 C<$chat_id>/C<$reply_to_message_id> are always plain ASCII digits, so
-decoding them as UTF-8 is a harmless no-op. Only C<cli/reply> reaches
+decoding them as UTF-8 is a harmless no-op. Only C<cli/reply.pl> reaches
 this function via raw C<@ARGV>; no other C<cli/*> command's own
 argv (C<--since>/C<--until> ISO timestamps, chat/message ids) carries
 free-form user text through a similar chokepoint, so this is the only
 place that needed the fix. A caller that ever passed an
 I<already-decoded> wide-character Perl string here (rather than raw
 bytes, which is what real C<@ARGV> always is) could in principle see
-C<decode> mis-handle it - not a concern for the actual C<cli/reply>
+C<decode> mis-handle it - not a concern for the actual C<cli/reply.pl>
 invocation path today, since C<@ARGV> is never pre-decoded.
 
 =cut

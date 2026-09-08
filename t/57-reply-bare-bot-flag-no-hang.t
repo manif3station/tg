@@ -4,7 +4,7 @@ use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
 
-my $reply_cli = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
+my $reply_cli = File::Spec->catfile( $Bin, '..', 'cli', 'reply.pl' );
 
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";

@@ -396,7 +396,7 @@ returns every stored message, oldest first.
 
 =head2 disconnect
 
-Disconnects the underlying DBI handle (TGT-036). C<cli/poller> calls
+Disconnects the underlying DBI handle (TGT-036). C<cli/poller.pl> calls
 this immediately before re-execing itself on a detected version change,
 so the SQLite connection is closed cleanly rather than left open across
 the C<exec> call.

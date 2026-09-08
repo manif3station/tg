@@ -13,8 +13,8 @@ unless ( eval { require Developer::Dashboard; Developer::Dashboard->can('d2') } 
       . 'a real Developer Dashboard install is available.';
 }
 
-my $approve_cli = File::Spec->catfile( $Bin, '..', 'cli', 'approve' );
-my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
+my $approve_cli = File::Spec->catfile( $Bin, '..', 'cli', 'approve.pl' );
+my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply.pl' );
 
 {
     local $ENV{D2TG_DB};
