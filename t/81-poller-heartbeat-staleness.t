@@ -102,6 +102,31 @@ require D2TG::Config;
 
         unlink $heartbeat_path;
     }
+
+    # Codex review finding: pin down the exact 1200s boundary, not just
+    # "an hour is stale" - a heartbeat exactly at the threshold is still
+    # ok, one second past it flips to STALE.
+    {
+        open my $fh, '>', $heartbeat_path or die $!;
+        print {$fh} time() - 1200;
+        close $fh;
+
+        my $out = `$status_cli`;
+        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'a heartbeat exactly 1200s old is still ok, not STALE' );
+
+        unlink $heartbeat_path;
+    }
+
+    {
+        open my $fh, '>', $heartbeat_path or die $!;
+        print {$fh} time() - 1201;
+        close $fh;
+
+        my $out = `$status_cli`;
+        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat 1201s old flips to STALE' );
+
+        unlink $heartbeat_path;
+    }
 }
 
 # Codex review finding: write_heartbeat's non-atomic '>' truncate could

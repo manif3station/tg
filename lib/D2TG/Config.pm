@@ -610,8 +610,12 @@ falling back to C<$0> only if that lookup itself fails.
 
 =head2 heartbeat_path(default_root => $path, base_dir => $path)
 
-Mirrors L</lock_path>'s own C<.tira/> vault resolution exactly, returning
-C<.tira/telegram.heartbeat> for a resolved C<base_dir> (TGT-116).
+Mirrors L</lock_path>'s own resolution exactly (TGT-116): given a
+resolved C<base_dir>, returns C<base_dir/.tira/telegram.heartbeat>;
+given no C<base_dir> at all, falls back to
+C<default_root/state/poller.heartbeat> (or C<$ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}>
+in place of C<default_root> when set), the same two-branch shape
+L</lock_path> itself uses for C<telegram.pid>/C<poller.pid>.
 
 =head2 write_heartbeat($path)
 
