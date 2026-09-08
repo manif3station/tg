@@ -189,6 +189,11 @@ Have the user note the printed `JOB-NNN` id - it's needed for
   "last one wins": it kills the still-live previous instance rather than
   failing to acquire the lock and looping on
   `D2TG::Lock: could not acquire ... - contended for too long`).
+- The poller's own version-triggered self-restart re-acquires its own
+  lock without ever briefly dropping it (TGT-102, found via a scheduled
+  bug-hunt) - closing a narrow window where an independently-started
+  second poller could otherwise mistake the mid-restart lock churn for a
+  genuine conflict and kill the legitimately restarting instance.
 
 This exact wiring was verified live in a `developer-dashboard:latest`
 container (TGT-015).

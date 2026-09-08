@@ -27,7 +27,13 @@ transient-shaped error (a network timeout or a 5xx status) - a
 permanent failure (bad token, invalid chat_id) is reported as before,
 with no misleading retry suggestion (TGT-096, live user request). The
 poller's own version-change
-self-restart (TGT-036) no longer trusts a stale `$0` - live production
+self-restart no longer briefly drops and recreates its own lock file
+either (TGT-102, found via a scheduled bug-hunt): re-acquiring a lock
+already held by its own PID - exactly what that self-restart produces,
+since `exec()` keeps the same PID - now succeeds immediately instead of
+falling through into the fallback reclaim path, closing a narrow
+window where a second poller could otherwise `SIGKILL` the legitimately
+restarting one. Also (TGT-036) no longer trusts a stale `$0` - live production
 incident, TGT-094: a running poller mid-restart during TGT-093's own
 install died because `$0` pointed at the just-renamed-away `cli/poller`
 path. It now re-checks its own bin directory for the current
