@@ -145,6 +145,18 @@ single implementation all 4 call sites share - any future flag added
 anywhere in this skill gets the same guard for free instead of needing
 its own copy.
 
+## --bot's own token needed the same shared validation, found right after
+
+Bug-hunt finding (TGT-074), same class as TGT-069/071/072: `bot_groups`'s
+`--bot` branch and `D2TG::Reply::extract_bot_flag` both spliced/shifted
+the next token as the bot token with zero validation, even after
+`shift_flag_value` existed - `bot_groups(argv=>['--chat_id','1234',
+'--bot'])` silently produced `{chat_id=>1234, bots=>[undef]}`, and
+`extract_bot_flag('--bot','--db','myalias',...)` silently returned
+`'--db'` as the token. Both now route through
+`D2TG::Config::shift_flag_value`, same as every other flag this skill
+validates.
+
 ## Non-ASCII reply text needs a UTF-8 decode before it reaches JSON
 
 Hourly bug-hunt finding (TGT-073): `@ARGV` is always raw bytes - Perl

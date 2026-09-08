@@ -132,9 +132,9 @@ sub bot_groups {
             push @groups, $current;
         }
         elsif ( $arg eq '--bot' ) {
-            my $token = shift @argv;
             die "D2TG::Config::bot_groups: --bot given before any --chat_id\n"
               unless $current;
+            my $token = shift_flag_value( \@argv, '--bot' );
             push @{ $current->{bots} }, $token;
         }
         else {
@@ -337,7 +337,13 @@ group.
 =back
 
 Dies if a C<--bot> is encountered (from either C<argv> or the appended
-env pair) with no C<--chat_id> having been declared yet.
+env pair) with no C<--chat_id> having been declared yet. Also dies
+(TGT-074, same bug class as TGT-069/071/072's C<--chat_id>/C<--db>
+fixes) if C<--bot>'s own shifted value is missing or itself flag-like -
+a bare trailing C<--bot>, or C<--bot> immediately followed by another
+flag, would otherwise silently push C<undef> (or that flag's own name)
+into the group's C<bots> list instead of erroring. Delegated to
+L</shift_flag_value>, same as C<--chat_id>'s own validation above.
 
 Dies (TGT-069, a real live-reproduced incident: a bare trailing
 C<--chat_id> reached D2TG::Store's SQL bind as an opaque

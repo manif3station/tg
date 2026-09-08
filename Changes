@@ -666,3 +666,15 @@ Revision history for the tg skill
         "hÃ©llo"). parse_cli_args now decodes every argument as UTF-8
         first, fixing it at the one chokepoint every d2 tg.reply
         invocation passes through.
+
+0.53  2026-09-08
+      - BUGFIX (TGT-074, found via a code-review pass immediately
+        following the TGT-073 bug-hunt, live-reproduced): bot_groups's
+        --bot branch and D2TG::Reply::extract_bot_flag both didn't
+        validate their shifted token, even after TGT-072's
+        shift_flag_value helper existed for exactly this - bot_groups(
+        argv=>['--chat_id','1234','--bot']) silently produced
+        {chat_id=>1234, bots=>[undef]}, and extract_bot_flag('--bot',
+        '--db','myalias',...) silently returned '--db' as the token.
+        Both now route through D2TG::Config::shift_flag_value, dying
+        with a clear "--bot requires a value" message instead.

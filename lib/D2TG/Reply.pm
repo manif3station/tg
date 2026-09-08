@@ -3,6 +3,7 @@ package D2TG::Reply;
 use strict;
 use warnings;
 use D2TG::TTS;
+use D2TG::Config;
 use Encode qw(decode);
 
 sub send_reply {
@@ -37,7 +38,8 @@ sub extract_bot_flag {
 
     my $bot_token;
     if ( @args >= 2 && $args[0] eq '--bot' ) {
-        ( undef, $bot_token ) = splice( @args, 0, 2 );
+        shift @args;
+        $bot_token = D2TG::Config::shift_flag_value( \@args, '--bot' );
     }
 
     return ( $bot_token, @args );
@@ -120,6 +122,16 @@ C<D2TG::Config::extract_db_flag> and C<--reply-to-message-id>'s
 trailing-only recognition (TGT-042): free reply text passed as multiple
 unquoted shell words could otherwise contain the literal token C<--bot>
 and be misread as the flag.
+
+When C<--bot> I<is> present with at least one more argument following
+it, that value is validated via L<D2TG::Config/shift_flag_value>
+(TGT-074, same bug class as TGT-071's C<--db> fix): dies with C<--bot
+requires a value> if it's missing, empty, or itself flag-like, instead
+of silently returning another flag's own name as the bot token (e.g.
+C<extract_bot_flag('--bot','--db','myalias',...)> previously returned
+C<'--db'> as the token). A bare trailing C<--bot> with I<no> value at
+all (C<@args> too short) is unaffected here - C<cli/reply>'s own caller
+already handles that case directly (TGT-068).
 
 =head2 parse_cli_args(@ARGV)
 
