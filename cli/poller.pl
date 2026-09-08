@@ -353,6 +353,20 @@ inside the poll cycle (e.g. a network blip) is logged as C<POLL ERROR>
 on STDERR and retried after a short backoff, rather than killing the
 whole process.
 
+After each bot/chat pair's own poll cycle within the loop (TGT-116),
+this process writes a heartbeat (L<D2TG::Config/write_heartbeat>) to the
+same C<.tira/> vault as the lock file, unconditionally - regardless of
+whether a message arrived or an error occurred that pair. C<d2 tg.status>
+reads its age to distinguish "still genuinely cycling" from "alive but
+silently wedged", per a real 80+ minute incident where a poller held its
+lock and stayed alive but produced no output and silently lost a
+message. The write happens per pair, not once after the whole
+C<for>-loop finishes, because a single slow voice transcription's own
+retry ladder (L<D2TG::Transcribe>'s medium->small->base tiers, up to
+~900s total) can by itself exceed a naive once-per-full-cycle
+heartbeat's staleness threshold even while the poller is healthy - a gap
+a Codex review caught.
+
 After every poll cycle, C<D2TG::Download::prune_vault> (TGT-052) keeps
 the attachment vault at or under a 100MB cap, deleting the oldest files
 first once it's exceeded - cheap enough to run unconditionally (a

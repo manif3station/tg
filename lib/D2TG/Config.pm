@@ -608,6 +608,36 @@ doesn't change - re-checking there for the known current basename
 (C<poller.pl>) finds the live file regardless of what C<$0> says,
 falling back to C<$0> only if that lookup itself fails.
 
+=head2 heartbeat_path(default_root => $path, base_dir => $path)
+
+Mirrors L</lock_path>'s own C<.tira/> vault resolution exactly, returning
+C<.tira/telegram.heartbeat> for a resolved C<base_dir> (TGT-116).
+
+=head2 write_heartbeat($path)
+
+Writes the current epoch time to C<$path>, atomically: writes to a temp
+file (C<$path.tmp.$$>) in the same directory, then C<rename>s it over
+C<$path>. A Codex review caught that the original implementation opened
+C<$path> directly with C<< '>' >>, truncating it before the new
+timestamp was written - a concurrent L</heartbeat_age> read (from C<d2
+tg.status>) or a crash between truncate and write could see an empty
+file (misread as C<never>) or permanently lose the last valid
+timestamp. C<rename> on the same filesystem is atomic, so a reader never
+observes a partial write. Called by C<cli/poller.pl> after each bot/chat
+pair's own poll cycle completes, not once per full multi-pair cycle - a
+single voice transcription's retry ladder alone (L<D2TG::Transcribe>'s
+medium->small->base tiers, 300s each) can take up to ~900s, so writing
+only once per full cycle could report a healthy, actively-transcribing
+poller as stale.
+
+=head2 heartbeat_age($path)
+
+Returns the number of seconds since C<$path> was last written via
+L</write_heartbeat>, or C<undef> if the file doesn't exist or doesn't
+contain a bare integer timestamp. C<cli/status.pl> flags this stale past
+a fixed threshold (1200 seconds), kept safely above the worst-case time
+a single bot/chat pair's own poll cycle can legitimately take.
+
 =head2 is_transient_error($error)
 
 Returns true if C<$error> looks like a transient failure - matches
