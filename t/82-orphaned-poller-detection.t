@@ -194,6 +194,17 @@ sub _fake_proc {
         select( undef, undef, undef, 0.01 );
     }
 
+    # Codex review finding: the loop above must be an explicit gate, not
+    # a delay that silently proceeds either way - an exec() failure or
+    # an unusually slow child would otherwise still let the test run and
+    # reproduce the exact false-negative flake this fix exists to close.
+    unless ( $child_cmdline =~ /\Q$fake_poller\E/ ) {
+        kill 'KILL', $child_pid;
+        waitpid( $child_pid, 0 );
+        ( my $shown_cmdline = $child_cmdline ) =~ s/\0/ /g;
+        BAIL_OUT("fake poller child (PID $child_pid) never exec()'d into $fake_poller - last seen cmdline: '$shown_cmdline'");
+    }
+
     my $fake_db_dir = tempdir( CLEANUP => 1 );
     setup_mandatory_db_env( $Bin, $fake_db_dir );
     local %ENV = %ENV;
