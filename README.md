@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.70).** The poller's own version-change
+**Status: early implementation (v0.71).** The poller's own version-change
 self-restart (TGT-036) no longer trusts a stale `$0` - live production
 incident, TGT-094: a running poller mid-restart during TGT-093's own
 install died because `$0` pointed at the just-renamed-away `cli/poller`

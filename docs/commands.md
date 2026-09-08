@@ -369,7 +369,7 @@ implemented and where:
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. A dedup hit refreshes the existing file's modification time to now (TGT-054), so a repeatedly re-sent file counts as recently used. `prune_vault` keeps a directory at or under a byte cap (100MB default), deleting oldest-modified files first (TGT-052). |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
 
-`cli/poller.pl`, `cli/approve.pl`, `cli/reply.pl`, `cli/unread.pl`, `cli/history.pl`
+`cli/poller.pl`, `cli/approve.pl`, `cli/reply.pl`, `cli/unread.pl`, `cli/history.pl`, `cli/help.pl`
 are the thin `d2 tg.*` entrypoints described above; each just wires the
 relevant modules together.
 
