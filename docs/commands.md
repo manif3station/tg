@@ -356,6 +356,24 @@ a valid upload, and a FIFO could block the read indefinitely) before any
 network call is attempted - a missing/non-regular file or a bad chat_id
 refuses with a clear message rather than an opaque Telegram API error.
 
+## `d2 tg.status [--db <alias> | -d <alias>]`
+
+TGT-111 (user-supplied feature-gap analysis): reports the installed
+version and whether the poller is currently alive, without reaching into
+Tira job metadata (`pid`/`last_output_at`) from outside this skill.
+Prints `d2tg version: <version>` and either `poller: running (pid <pid>)`
+or `poller: not running`.
+
+Read-only - touches no state, sends no network request, and deliberately
+never calls `D2TG::Lock::acquire` to answer the question: doing so could
+evict a genuinely live poller under this skill's own "last one wins"
+lock policy (TGT-084), which is exactly the kind of side effect a status
+check must never risk. `D2TG::Lock::is_held` instead sends only a
+harmless `kill(0, $pid)` liveness probe (no real signal delivered) and
+never touches the lock file itself. `--db`/`-d` resolves the same
+storage location the poller itself would use, so this reports on the
+right instance.
+
 ## `d2 tg.unread [--db <alias> | -d <alias>]`
 
 Lists every stored message (TGT-038) not yet marked read (TGT-046),
@@ -445,9 +463,9 @@ implemented and where:
 | `D2TG::Reply` | `send_reply` — text sent first, then the voice note is synthesized and sent (TGT-083; reversed from the original voice-first order). No flag or code path skips voice, and a synthesis/`send_voice` failure still fails the whole reply loudly, but it can no longer prevent the text half from having already reached the user. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040); given a `store` too, marks that message read only after both sends succeed (TGT-046). `parse_cli_args` — parses `cli/reply.pl`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042); decodes every argument as UTF-8 first (TGT-073), fixing a real bug where non-ASCII reply text (accents, CJK, emoji) arrived on Telegram as mojibake since `@ARGV`'s raw bytes were never decoded before reaching `encode_json`. `format_send_error` (TGT-096) appends an explicit "try again" instruction to a `send_reply` failure's error text when it looks transient (a network timeout or a `5\d\d` status, matching `D2TG::Telegram`'s own die message shapes) - a permanent failure (bad token, invalid chat_id) is returned unchanged, with no misleading retry suggestion; `cli/reply.pl` now wraps `send_reply` in `eval` and routes any failure through this before printing to STDERR. `resend_voice` (TGT-109) - same arguments minus `store`, synthesizes and sends only the voice half, never calling `send_message` - recovers a reply whose text already delivered but whose voice failed, without duplicating the text; exposed as `cli/reply.pl --voice-only`. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. A dedup hit refreshes the existing file's modification time to now (TGT-054), so a repeatedly re-sent file counts as recently used. `prune_vault` keeps a directory at or under a byte cap (100MB default), deleting oldest-modified files first (TGT-052). |
 | `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). `select_model($duration_seconds)` (TGT-100) tiers the model by audio length - `<=300s` 'medium', `<=900s` 'small', longer 'base' - as a starting-point guess; `transcribe()` probes duration via `_probe_duration` (an `ffprobe` list-form pipe open, no shell) unless an explicit `model` argument is given. Per-host Whisper throughput varies too much for the duration guess alone to guarantee correctness (measured: `medium` at ~5.6x real time on one host, no GPU) - so `transcribe()` also automatically retries at the next faster tier (`medium` → `small` → `base`, via `_next_tier`) whenever an automatically-selected model times out, dying with `TRANSCRIBE ERROR` only if even `base` times out. An explicitly-passed `model` is never automatically retried. |
-| `D2TG::Lock` | `acquire`/`release` — single-instance PID-file lock for `cli/poller.pl`, so a stopped/suspended or otherwise still-live previous instance never silently competes for the same bot's `getUpdates` slot (TGT-062). `acquire` re-acquiring the caller's own already-held lock (exactly what `cli/poller.pl`'s version-triggered self-restart produces every time, since `exec()` preserves the PID) returns success immediately without ever touching the lock file (TGT-102 - previously fell through into the fallback reclaim path and unlinked+recreated the file even though it wasn't stale, opening a narrow race window where an independently-started second poller could SIGKILL the legitimately self-restarting one). A lock held by a genuinely different, still-live PID is taken over "last one wins" - `SIGKILL`, then a short bounded wait for death (TGT-084). A lock naming a dead PID is reclaimed via an atomic unlink+`O_CREAT|O_EXCL` retry, never a non-atomic in-place overwrite. `release` only removes the file if it still names the caller's own PID. |
+| `D2TG::Lock` | `acquire`/`release` — single-instance PID-file lock for `cli/poller.pl`, so a stopped/suspended or otherwise still-live previous instance never silently competes for the same bot's `getUpdates` slot (TGT-062). `acquire` re-acquiring the caller's own already-held lock (exactly what `cli/poller.pl`'s version-triggered self-restart produces every time, since `exec()` preserves the PID) returns success immediately without ever touching the lock file (TGT-102 - previously fell through into the fallback reclaim path and unlinked+recreated the file even though it wasn't stale, opening a narrow race window where an independently-started second poller could SIGKILL the legitimately self-restarting one). A lock held by a genuinely different, still-live PID is taken over "last one wins" - `SIGKILL`, then a short bounded wait for death (TGT-084). A lock naming a dead PID is reclaimed via an atomic unlink+`O_CREAT|O_EXCL` retry, never a non-atomic in-place overwrite. `release` only removes the file if it still names the caller's own PID. `is_held` (TGT-111) is a pure, read-only liveness probe for `d2 tg.status` - returns the PID if a live process holds the lock, `undef` otherwise, via a harmless `kill(0, $pid)` check that never touches the lock file and never calls `acquire` (which could evict a live poller just to answer a status question). |
 
-`cli/poller.pl`, `cli/approve.pl`, `cli/reply.pl`, `cli/send.pl`, `cli/unread.pl`, `cli/history.pl`, `cli/help.pl`
+`cli/poller.pl`, `cli/approve.pl`, `cli/reply.pl`, `cli/send.pl`, `cli/status.pl`, `cli/unread.pl`, `cli/history.pl`, `cli/help.pl`
 are the thin `d2 tg.*` entrypoints described above; each just wires the
 relevant modules together.
 

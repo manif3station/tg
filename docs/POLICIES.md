@@ -898,6 +898,23 @@ type via `sendDocument` regardless of what it actually contains.
 checked before any network call, matching this skill's existing
 fail-fast conventions (the same shape as `cli/reply.pl`'s own guards).
 
+## Checking whether the poller is alive never risks evicting it (TGT-111)
+
+User-supplied feature-gap analysis, 2026-09-08: the only way to know
+whether the poller was actually alive used to be reaching into Tira job
+metadata (`pid`/`last_output_at`) from outside this skill entirely -
+useful, but not something the skill itself could answer.
+
+`d2 tg.status` answers it directly via a new `D2TG::Lock::is_held` - a
+pure, read-only liveness probe. This deliberately does **not** reuse
+`D2TG::Lock::acquire` to check: doing so would risk evicting a
+genuinely live poller under this skill's own "last one wins" policy
+(TGT-084) just to answer a status question, which would make checking
+status itself a way to take the bot offline - exactly the class of
+danger TGT-107 already closed for `cli/poller.pl`'s own argv handling.
+`is_held` only ever sends a harmless `kill(0, $pid)` probe (no real
+signal delivered) and never touches the lock file itself.
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

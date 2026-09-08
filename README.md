@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.80).** `d2 tg.send <chat_id>
+**Status: early implementation (v0.81).** `d2 tg.status` reports the
+installed version and whether the poller is currently alive (TGT-111,
+user-supplied feature-gap analysis), without reaching into Tira job
+metadata from outside - read-only, never calls the lock's own `acquire`
+(which could evict a live poller just to answer a status question).
+`d2 tg.send <chat_id>
 <file_path>` pushes a local file to a chat as a Telegram photo or
 document (TGT-103, user-supplied feature-gap analysis) - the outbound
 counterpart to inbound media, which already worked fully. `d2 tg.reply --voice-only

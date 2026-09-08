@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.80).** This file is a procedure to
+**Status: early implementation (v0.81).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -25,7 +25,9 @@ text half. If just the voice half fails, `d2 tg.reply --voice-only
 `send_message`, so it can't duplicate the text that already went out.
 `d2 tg.send <chat_id> <file_path>` (TGT-103) pushes a local file back as
 a photo or document, the outbound counterpart to inbound media (which
-already worked fully).
+already worked fully). `d2 tg.status` (TGT-111) reports the installed
+version and whether the poller is currently alive, without reaching into
+Tira job metadata from outside.
 
 ## 2. Prep before install
 

@@ -126,6 +126,21 @@ sub release {
     return;
 }
 
+sub is_held {
+    my ($path) = @_;
+
+    my $pid = _read_pid($path);
+    return undef unless defined $pid;
+
+    # TGT-111: a pure liveness probe - kill(0, $pid) sends no signal, it
+    # only asks the kernel whether $pid exists. This must NEVER call
+    # acquire() to answer a status question - acquire() would try to
+    # evict a genuinely live poller per TGT-084's own "last one wins"
+    # policy, which is exactly the kind of side effect a read-only
+    # status check must not risk causing.
+    return kill( 0, $pid ) ? $pid : undef;
+}
+
 sub _read_pid {
     my ($path) = @_;
 
