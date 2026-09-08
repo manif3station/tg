@@ -33,10 +33,7 @@ sub download_file {
             utime $now, $now, $local_path;
         }
         else {
-            open my $fh, '>:raw', $local_path
-              or die "D2TG::Download::download_file: cannot write $local_path: $!\n";
-            print {$fh} $content;
-            close $fh;
+            _atomic_write( $local_path, $content );
         }
 
         return $local_path;
@@ -48,6 +45,39 @@ sub download_file {
     close $fh;
 
     return $local_path;
+}
+
+sub _atomic_write {
+    my ( $path, $content, %opts ) = @_;
+
+    my ($dir) = $path =~ m{^(.*)/[^/]+$};
+    $dir = '.' unless defined $dir;
+
+    my ( $fh, $tmp_path ) = tempfile( DIR => $dir, SUFFIX => '.tmp', UNLINK => 0 );
+    binmode $fh, ':raw';
+    print {$fh} $content
+      or die "D2TG::Download::_atomic_write: cannot write $tmp_path: $!\n";
+    close $fh
+      or die "D2TG::Download::_atomic_write: cannot close $tmp_path: $!\n";
+
+    # File::Temp creates its file mode 0600, unlike the plain open('>')
+    # this replaces (which got the usual 0666 & ~umask, typically 0644) -
+    # match that original, more permissive default so downloaded
+    # attachments remain as readable as they always were (a Codex review
+    # catch during TGT-080).
+    chmod( 0666 & ~umask(), $tmp_path );
+
+    # Test-only synchronization point (TGT-080): lets a test deterministically
+    # kill this process strictly between "content fully written" and "rename",
+    # proving a crash there can never leave anything at $path - the same
+    # invariant a real, randomly-timed crash mid-write relies on, without the
+    # test itself needing to race real wall-clock timing.
+    $opts{after_write}->() if $opts{after_write};
+
+    rename $tmp_path, $path
+      or die "D2TG::Download::_atomic_write: cannot rename $tmp_path to $path: $!\n";
+
+    return;
 }
 
 sub prune_vault {
@@ -116,6 +146,27 @@ it as recently active rather than as stale since its one-time original
 download. Without C<dir>, behavior is unchanged from before TGT-051: a
 uniquely-named file in the OS temp directory every call, never
 deduplicated.
+
+The first-time (non-dedup) write to a content-addressed path goes
+through L</_atomic_write> (TGT-080, a real live-reproduced incident): a
+process killed between finishing the write and the final rename leaves
+I<no file at all> at the hash-derived path, never a truncated one - a
+crash during a direct C<open/print/close> to that path used to leave
+exactly that: a truncated file whose real content no longer matched
+its own filename's claimed hash, silently trusted forever after since
+the dedup check only tests C<-e>, never re-hashes.
+
+=head2 _atomic_write($path, $content, after_write => \&coderef)
+
+Writes C<$content> to a temp file in the same directory as C<$path>,
+then C<rename>s it onto C<$path> - C<rename> is atomic on POSIX
+filesystems, so any interruption before it runs leaves nothing at
+C<$path>. C<after_write> is a test-only hook (same pattern as
+C<run_once_safe>'s injectable C<sleep>), called after the temp file is
+fully written and closed but before the rename - it exists so a test
+can deterministically synchronize a real process kill to land exactly
+between those two steps, instead of racing wall-clock timing against a
+production write that has no such hook.
 
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 

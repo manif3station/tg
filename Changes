@@ -727,3 +727,19 @@ Revision history for the tg skill
         username is shown unchanged, and D2TG_OWNER has no effect on
         access control, which still keys entirely on the numeric chat
         id. New D2TG::Config::owner_name and D2TG::Poller::_display_name.
+
+0.58  2026-09-08
+      - BUGFIX (TGT-080, found via a scheduled improvement-hunt,
+        live-reproduced): D2TG::Download::download_file's
+        content-addressed write went directly to its final hash-derived
+        path (open/print/close), with no atomicity guarantee. A process
+        killed mid-write left a truncated file whose real content no
+        longer matched its own filename's claimed hash - and since the
+        dedup check only tests file existence (never re-hashes), that
+        corrupted file was silently trusted as already-correctly-
+        downloaded forever after. Confirmed via a real forked-process
+        kill in developer-dashboard:latest. Fixed with a new
+        D2TG::Download::_atomic_write helper: write to a temp file in
+        the same directory, then rename onto the final path - rename is
+        atomic on POSIX filesystems, so a crash before it runs leaves
+        nothing at the final path at all.

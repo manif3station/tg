@@ -157,6 +157,20 @@ the next token as the bot token with zero validation, even after
 `D2TG::Config::shift_flag_value`, same as every other flag this skill
 validates.
 
+## A content-addressed download can never leave a corrupted, silently-trusted file
+
+Live-reproduced finding (TGT-080): a process killed mid-download used
+to leave a truncated file at the hash-derived path whose real content
+no longer matched its own filename's claimed hash - and since the
+dedup check only tests whether the file exists (never re-hashes it),
+that corrupted file was silently trusted as "already correctly
+downloaded" forever after, with no repair and no detection. Confirmed
+via a real forked-process kill in `developer-dashboard:latest`. The
+first-time write now goes through a temp-file-then-rename sequence
+(`D2TG::Download::_atomic_write`) - `rename` is atomic on POSIX
+filesystems, so any interruption before it runs leaves nothing at the
+final path at all, never a truncated one.
+
 ## The owner's own name can be shown instead of their Telegram username
 
 Live request (TGT-079): `D2TG_OWNER`, when set, replaces the raw
