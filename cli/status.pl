@@ -15,6 +15,13 @@ use D2TG::Lock;
 # answers it directly. Read-only - never touches the lock file, never
 # calls D2TG::Lock::acquire (which could evict a genuinely live poller
 # just to answer a status question).
+#
+# TGT-116: also reports the poller's own heartbeat age - "alive" (pid
+# exists) and "working" (still genuinely cycling through poll cycles)
+# are different questions, per a real, confirmed incident this session
+# where a poller stayed alive and held its lock for 80+ minutes while
+# doing nothing at all, silently losing a message.
+use constant STALE_THRESHOLD_SECONDS => 600;
 
 my $db_alias;
 while (@ARGV) {
@@ -58,12 +65,28 @@ my $lock_path = D2TG::Config::lock_path(
 
 my $pid = D2TG::Lock::is_held($lock_path);
 
+my $heartbeat_path = D2TG::Config::heartbeat_path(
+    default_root => $skill_root,
+    base_dir     => $base_dir,
+);
+my $heartbeat_age = D2TG::Config::heartbeat_age($heartbeat_path);
+
 print "d2tg version: $version\n";
 if ( defined $pid ) {
     print "poller: running (pid $pid)\n";
 }
 else {
     print "poller: not running\n";
+}
+
+if ( !defined $heartbeat_age ) {
+    print "heartbeat: never\n";
+}
+elsif ( $heartbeat_age > STALE_THRESHOLD_SECONDS ) {
+    print "heartbeat: ${heartbeat_age}s ago (STALE)\n";
+}
+else {
+    print "heartbeat: ${heartbeat_age}s ago (ok)\n";
 }
 
 exit 0;
@@ -91,6 +114,15 @@ question would risk evicting a genuinely live poller, per this skill's
 own "last one wins" lock policy (TGT-084). C<is_held> only ever sends a
 harmless C<kill(0, $pid)> liveness probe (no real signal), and never
 touches the lock file itself.
+
+Also reports the poller's own heartbeat age (TGT-116) - "alive" (pid
+exists) and "working" (still genuinely cycling through poll cycles) are
+different questions, per a real, confirmed incident where a poller
+stayed alive and held its lock for 80+ minutes while doing nothing at
+all, silently losing a message. C<heartbeat: never> means the poller has
+never completed a full poll cycle since this heartbeat file's location
+was last cleared; C<heartbeat: <N>s ago (ok)> or C<(STALE)> reports the
+age against a fixed threshold (C<STALE_THRESHOLD_SECONDS>, 600s).
 
 C<--db>/C<-d> match every other C<d2 tg.*> command's own resolution
 (L<D2TG::Config/resolve_alias_dir>) - the same storage location the

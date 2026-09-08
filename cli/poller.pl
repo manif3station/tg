@@ -117,6 +117,17 @@ if ($@) {
     exit 1;
 }
 
+# TGT-116: a heartbeat, separate from the lock file - written once per
+# full poll cycle below, unconditionally, regardless of whether any
+# message/error activity happened. This is what lets "the loop is still
+# genuinely cycling" be distinguished from "alive but wedged" (a real,
+# confirmed message-loss incident this session: a poller stayed alive
+# and holding its lock for 80+ minutes while doing nothing at all).
+my $heartbeat_path = D2TG::Config::heartbeat_path(
+    default_root => File::Spec->catdir( $Bin, '..' ),
+    base_dir     => $base_dir,
+);
+
 if ( !@$groups ) {
     print STDERR "No --chat_id/--bot groups configured (neither via CLI nor D2TG_CHAT_ID/D2TG_TOKEN) - refusing to start.\n";
     exit 1;
@@ -213,6 +224,7 @@ until ($shutting_down) {
         $store->set_offset( $pair->{offset}, $pair->{bot_key} ) if defined $pair->{offset};
     }
     D2TG::Download::prune_vault($attachments_dir);
+    D2TG::Config::write_heartbeat($heartbeat_path);
 
     unless ($shutting_down) {
         my $current_version = D2TG::Config::skill_version( default_root => $skill_root );

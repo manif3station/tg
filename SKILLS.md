@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.81).** This file is a procedure to
+**Status: early implementation (v0.82).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -27,7 +27,10 @@ text half. If just the voice half fails, `d2 tg.reply --voice-only
 a photo or document, the outbound counterpart to inbound media (which
 already worked fully). `d2 tg.status` (TGT-111) reports the installed
 version and whether the poller is currently alive, without reaching into
-Tira job metadata from outside.
+Tira job metadata from outside - and also its heartbeat age, flagged
+stale past 10 minutes (TGT-116), since "alive" and "still genuinely
+cycling" turned out to be different questions after a real 80+ minute
+silent-message-loss incident.
 
 ## 2. Prep before install
 

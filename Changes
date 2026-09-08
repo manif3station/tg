@@ -1074,3 +1074,22 @@ Revision history for the tg skill
         `D2TG::Lock::acquire`, since doing so to merely answer a status
         question could evict a genuinely live poller under this skill's
         own "last one wins" lock policy (TGT-084).
+
+0.82  2026-09-08
+      - FEATURE (TGT-116, live-experienced incident: a poller stayed
+        alive and held its lock for 80+ minutes while doing nothing at
+        all, silently losing a message - "alive" and "still genuinely
+        cycling" turned out to be different questions): `d2 tg.poller`
+        now writes a heartbeat once per full poll cycle, unconditionally
+        - regardless of whether any message or error activity happened
+        - via new `D2TG::Config::write_heartbeat`/`heartbeat_age`/
+        `heartbeat_path` (mirroring `lock_path`'s own `.tira/`
+        resolution). `d2 tg.status` (TGT-111) now also reports the
+        heartbeat's age, flagging it `(STALE)` past 600 seconds. Full
+        automatic restart-on-stale is intentionally NOT built here - a
+        genuinely stuck poller cannot restart itself, so that needs
+        either a second always-running watchdog process (recreating
+        exactly the kind of supervisor this project's architecture
+        deliberately avoids, Q-003) or a Tira-scheduled job doing the
+        restarting - an operational/architecture decision, flagged as a
+        follow-up.

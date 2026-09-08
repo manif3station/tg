@@ -950,6 +950,35 @@ danger TGT-107 already closed for `cli/poller.pl`'s own argv handling.
 `is_held` only ever sends a harmless `kill(0, $pid)` probe (no real
 signal delivered) and never touches the lock file itself.
 
+## "Alive" and "still genuinely cycling" are different questions (TGT-116)
+
+Live-experienced incident: a poller was confirmed alive (holding its
+lock, in a normal sleeping process state) and had been for over 80
+minutes, but had not produced a single line of output - not even a
+routine `POLL ERROR` - in that entire window, and a real voice note sent
+during it never arrived anywhere. Nothing distinguished "genuinely
+cycling through poll cycles" from "silently wedged" from outside, since
+a live PID and a held lock are both true in either case.
+
+`cli/poller.pl` now writes a heartbeat (`D2TG::Config::write_heartbeat`,
+mirroring `lock_path`'s own `.tira/` vault resolution) once per full poll
+cycle, unconditionally - regardless of whether any message or error
+activity happened that cycle. `d2 tg.status` reports the heartbeat's age
+and flags it `STALE` past 600 seconds.
+
+Deliberately **not** built here: an automatic restart when the heartbeat
+goes stale. A genuinely stuck poller cannot restart itself - that's the
+nature of the failure - so acting on staleness needs an external actor:
+either a second, always-running watchdog process (which would recreate
+exactly the kind of standing supervisor this project's architecture
+deliberately avoids, per Q-003's own "no systemd/crontab" decision), or
+a Tira-scheduled job that periodically checks `d2 tg.status` and
+restarts the monitor job if stale. Either is an operational/architecture
+decision, not a code change to make unilaterally - flagged as a
+follow-up requiring the owner's own input, matching this project's
+standing pattern for exactly this class of decision (e.g. TGT-098's
+Q-008, TGT-118's Q-009/Q-010).
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

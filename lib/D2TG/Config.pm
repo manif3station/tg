@@ -106,6 +106,47 @@ sub lock_path {
     return File::Spec->catfile( $state_dir, 'poller.pid' );
 }
 
+sub heartbeat_path {
+    my (%args) = @_;
+
+    if ( defined $args{base_dir} ) {
+        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
+        make_path($vault_dir) unless -d $vault_dir;
+        return File::Spec->catfile( $vault_dir, 'telegram.heartbeat' );
+    }
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+      // $args{default_root}
+      // '.';
+
+    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
+    make_path($state_dir) unless -d $state_dir;
+
+    return File::Spec->catfile( $state_dir, 'poller.heartbeat' );
+}
+
+sub write_heartbeat {
+    my ($path) = @_;
+
+    open my $fh, '>', $path or die "D2TG::Config::write_heartbeat: cannot write $path: $!\n";
+    print {$fh} time();
+    close $fh;
+
+    return;
+}
+
+sub heartbeat_age {
+    my ($path) = @_;
+
+    open my $fh, '<', $path or return undef;
+    my $written = <$fh>;
+    close $fh;
+
+    return undef unless defined $written && $written =~ /^\d+$/;
+
+    return time() - $written;
+}
+
 sub shift_flag_value {
     my ( $args, $flag_label ) = @_;
 

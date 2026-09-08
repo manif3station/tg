@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v0.81).** `d2 tg.status` reports the
+**Status: early implementation (v0.82).** `d2 tg.poller` now writes a
+heartbeat once per full poll cycle, unconditionally, and `d2 tg.status`
+reports its age, flagging it stale past 10 minutes (TGT-116, a
+live-experienced incident: a poller stayed alive and held its lock for
+80+ minutes while doing nothing at all, silently losing a message -
+"alive" and "still genuinely cycling" turned out to be different
+questions). Automatic restart-on-stale is intentionally not built yet -
+that needs an external actor, an operational decision flagged as a
+follow-up. `d2 tg.status` also reports the
 installed version and whether the poller is currently alive (TGT-111,
 user-supplied feature-gap analysis), without reaching into Tira job
 metadata from outside - read-only, never calls the lock's own `acquire`
