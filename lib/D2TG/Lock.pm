@@ -150,6 +150,48 @@ sub is_held {
     return undef;
 }
 
+sub find_other_pollers {
+    my (%args) = @_;
+
+    my $own_pid  = $args{own_pid}  // $$;
+    my $proc_dir = $args{proc_dir} // '/proc';
+
+    # Codex review finding (TGT-113): the default pattern must match a
+    # single argv element as a whole path/basename, anchored so it
+    # cannot match mid-string - a bare qr/poller\.pl/ against a
+    # NUL-joined-as-spaces cmdline would false-positive on
+    # "not-a-poller.pl", "poller.pl.bak", "--note=poller.pl", or even a
+    # match spanning two unrelated argv elements. Requiring a preceding
+    # "/" or start-of-string, and requiring the element to END in
+    # "poller.pl", rejects all of those while still matching either the
+    # bare basename or any full/relative path ending in it.
+    my $pattern = $args{pattern} // qr{(?:^|/)poller\.pl$};
+
+    my @found;
+
+    opendir( my $dh, $proc_dir ) or return @found;
+    for my $entry ( readdir $dh ) {
+        next unless $entry =~ /^\d+$/;
+        next if $entry == $own_pid;
+
+        open my $fh, '<', "$proc_dir/$entry/cmdline" or next;
+        my $cmdline = do { local $/; <$fh> };
+        close $fh;
+
+        next unless defined $cmdline;
+
+        # cmdline is NUL-separated argv - match each element on its own
+        # rather than joining with spaces and matching the whole string,
+        # which would let an anchored pattern span two unrelated
+        # elements (e.g. ".../poller" followed by ".pl-shaped-arg").
+        my @argv = split /\0/, $cmdline;
+        push @found, $entry if grep { $_ =~ $pattern } @argv;
+    }
+    closedir $dh;
+
+    return @found;
+}
+
 sub _read_pid {
     my ($path) = @_;
 
@@ -268,5 +310,38 @@ lock already reclaimed by a newer process (this process died without
 releasing, and something else has since started) is never removed out
 from under that newer owner. A silent no-op if C<$lock_path> doesn't
 exist at all.
+
+=head2 find_other_pollers(own_pid => $pid, proc_dir => $dir, pattern => $qr)
+
+TGT-113, a live-experienced incident: a poller crashed mid-version-bump
+race, never auto-restarted, and a separate orphaned instance under a
+different PID - which never touched this instance's own lock file at
+all - was found still running the entire time, competing for the same
+bot token's C<getUpdates> queue. L</acquire>'s "last one wins" eviction
+only ever sees whichever single PID the lock I<file> currently names; it
+has no way to notice a second live process that never wrote to that file
+in the first place.
+
+Scans C<$proc_dir> (default C</proc>) for other numeric PID directories,
+reads each one's C<cmdline> (NUL-separated argv, per the kernel's own
+C</proc/E<lt>pidE<gt>/cmdline> format), and reports any PID (other than
+C<$own_pid>, default C<$$>) whose argv contains an element matching
+C<$pattern> (default C<qr{(?:^|/)poller\.pl$}>, anchored so it matches
+only a bare basename or a path ending in it - a Codex review caught that
+an unanchored substring match, or joining argv with spaces before
+matching, would false-positive on C<not-a-poller.pl>, C<poller.pl.bak>,
+C<--note=poller.pl>, or a match spanning two unrelated argv elements).
+Skips any entry it cannot read (a vanished PID between C<readdir> and
+C<open>, a permission-restricted C<cmdline>) rather than dying, and
+returns an empty list rather than dying if C<$proc_dir> itself can't be
+opened at all (a non-Linux host, a restricted/namespaced C</proc>).
+
+This is a best-effort, point-in-time snapshot, not a guarantee - a
+matching process can start or exit between the scan and the caller
+reading its result, and a PID can be reused by an unrelated process
+before the caller acts on it. C<cli/poller.pl> therefore only warns on
+STDERR naming the PID(s) found; it deliberately never acts on this
+result by killing anything itself, since a cmdline pattern match alone
+is not strong enough evidence to justify an unprompted kill.
 
 =cut

@@ -103,27 +103,31 @@ require D2TG::Config;
         unlink $heartbeat_path;
     }
 
-    # Codex review finding: pin down the exact 1200s boundary, not just
-    # "an hour is stale" - a heartbeat exactly at the threshold is still
-    # ok, one second past it flips to STALE.
+    # Codex review finding: pin down that the boundary is near 1200s, not
+    # just "an hour is stale" - close enough on both sides to prove the
+    # threshold moved off 600s, with a few seconds' margin either side
+    # of the exact boundary so real subprocess-exec latency between
+    # writing the heartbeat and d2 tg.status reading it can never flip
+    # the result (an exact time()-1200 write can legitimately read back
+    # as 1201s old by the time the CLI subprocess actually runs).
     {
         open my $fh, '>', $heartbeat_path or die $!;
-        print {$fh} time() - 1200;
+        print {$fh} time() - 1190;
         close $fh;
 
         my $out = `$status_cli`;
-        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'a heartbeat exactly 1200s old is still ok, not STALE' );
+        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'a heartbeat 1190s old (comfortably under 1200s) is still ok, not STALE' );
 
         unlink $heartbeat_path;
     }
 
     {
         open my $fh, '>', $heartbeat_path or die $!;
-        print {$fh} time() - 1201;
+        print {$fh} time() - 1210;
         close $fh;
 
         my $out = `$status_cli`;
-        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat 1201s old flips to STALE' );
+        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat 1210s old (comfortably over 1200s) flips to STALE' );
 
         unlink $heartbeat_path;
     }

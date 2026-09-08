@@ -117,12 +117,34 @@ if ($@) {
     exit 1;
 }
 
-# TGT-116: a heartbeat, separate from the lock file - written once per
-# full poll cycle below, unconditionally, regardless of whether any
-# message/error activity happened. This is what lets "the loop is still
-# genuinely cycling" be distinguished from "alive but wedged" (a real,
-# confirmed message-loss incident this session: a poller stayed alive
-# and holding its lock for 80+ minutes while doing nothing at all).
+# TGT-113 (live-experienced incident: a poller crashed mid-version-bump
+# race, never auto-restarted, and a SEPARATE orphaned instance under a
+# different PID - with a stale command line missing '-d tira' - was
+# found still running the entire time, competing for the same bot
+# token's getUpdates queue). TGT-084's lock-eviction above only ever
+# sees whichever single PID the LOCK FILE currently names; it has no
+# way to notice a second process that never touched this lock file at
+# all. This is a best-effort report, not a refusal: killing a process
+# found only via a cmdline pattern match risks killing something that
+# merely looks like a poller (a different project's own copy, or a
+# developer's editor with the file open), so this warns loudly on
+# STDERR and continues rather than acting unilaterally on a guess.
+my @other_pollers = D2TG::Lock::find_other_pollers( own_pid => $$ );
+if (@other_pollers) {
+    print STDERR "WARNING: possible orphaned poller instance(s) detected "
+      . "(PID(s): " . join( ', ', @other_pollers ) . ") - still running and "
+      . "not tracked by this instance's own lock file. If genuinely another "
+      . "live poller sharing this bot token, it may be competing for the "
+      . "same getUpdates long-poll slot; investigate and stop it manually.\n";
+}
+
+# TGT-116: a heartbeat, separate from the lock file - written after each
+# bot/chat pair's own poll cycle below, unconditionally, regardless of
+# whether any message/error activity happened. This is what lets "the
+# loop is still genuinely cycling" be distinguished from "alive but
+# wedged" (a real, confirmed message-loss incident this session: a
+# poller stayed alive and holding its lock for 80+ minutes while doing
+# nothing at all).
 my $heartbeat_path = D2TG::Config::heartbeat_path(
     default_root => File::Spec->catdir( $Bin, '..' ),
     base_dir     => $base_dir,
