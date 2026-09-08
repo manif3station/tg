@@ -49,6 +49,10 @@ untouched state. `d2 tg.approve` gains an optional `--bot <token>`
 flag (the same shape as `d2 tg.reply`'s own) to grant access scoped to
 one bot; omitting it behaves exactly as before this ticket.
 
+(TGT-101: the `bot_key=''` sentinel above is now `D2TG::Store::DEFAULT_BOT_KEY`,
+a single named constant, rather than a bare `''` literal repeated at
+every call site - a pure refactor, no behavior change.)
+
 ## Access control: not everyone can talk to the bot
 
 `D2TG_CHAT_ID` is auto-seeded as allowed on every start. Any other chat

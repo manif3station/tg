@@ -5,6 +5,11 @@ use warnings;
 use DBI;
 use Digest::SHA qw(sha256_hex);
 
+# TGT-101: the single-bot/unscoped sentinel for allow_list/pending's
+# bot_key column (TGT-098) - named once here rather than repeated as a
+# bare '' literal at every call site.
+use constant DEFAULT_BOT_KEY => '';
+
 sub new {
     my ( $class, %args ) = @_;
 
@@ -32,14 +37,14 @@ sub _ensure_schema {
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS allow_list (
              chat_id INTEGER NOT NULL,
-             bot_key TEXT NOT NULL DEFAULT \'\',
+             bot_key TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
              PRIMARY KEY (chat_id, bot_key)
          )'
     );
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS pending (
              chat_id INTEGER NOT NULL,
-             bot_key TEXT NOT NULL DEFAULT \'\',
+             bot_key TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
              PRIMARY KEY (chat_id, bot_key)
          )'
     );
@@ -95,11 +100,13 @@ sub _ensure_schema {
             $self->{dbh}->do(
                 "CREATE TABLE $table (
                      chat_id INTEGER NOT NULL,
-                     bot_key TEXT NOT NULL DEFAULT '',
+                     bot_key TEXT NOT NULL DEFAULT '" . DEFAULT_BOT_KEY . "',
                      PRIMARY KEY (chat_id, bot_key)
                  )"
             );
-            $self->{dbh}->do("INSERT INTO $table (chat_id, bot_key) SELECT chat_id, '' FROM ${table}_pre_tgt098");
+            $self->{dbh}->do( "INSERT INTO $table (chat_id, bot_key) SELECT chat_id, '"
+                  . DEFAULT_BOT_KEY
+                  . "' FROM ${table}_pre_tgt098" );
             $self->{dbh}->do("DROP TABLE ${table}_pre_tgt098");
             $self->{dbh}->commit;
         };
@@ -115,7 +122,7 @@ sub _ensure_schema {
 
 sub _seed_admin {
     my ( $self, $admin_chat_id, $bot_key ) = @_;
-    $bot_key = '' unless defined $bot_key;
+    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
 
     $self->{dbh}->do(
         'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
@@ -127,7 +134,7 @@ sub _seed_admin {
 
 sub is_allowed {
     my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = '' unless defined $bot_key;
+    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
 
     my ($found) = $self->{dbh}->selectrow_array(
         'SELECT 1 FROM allow_list WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
@@ -138,7 +145,7 @@ sub is_allowed {
 
 sub add_pending {
     my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = '' unless defined $bot_key;
+    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
 
     my $inserted = $self->{dbh}->do(
         'INSERT OR IGNORE INTO pending (chat_id, bot_key) VALUES (?, ?)',
@@ -150,7 +157,7 @@ sub add_pending {
 
 sub approve {
     my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = '' unless defined $bot_key;
+    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
 
     my $dbh = $self->{dbh};
 
@@ -365,7 +372,9 @@ a bare C<ALTER TABLE ... ADD COLUMN> - a C<PRIMARY KEY> change can't be
 done that way in SQLite, so a pre-migration table (detected once, no
 C<bot_key> column) is rebuilt: renamed aside, replaced with the new
 composite-C<(chat_id, bot_key)>-PK shape, every row copied across with
-C<bot_key=''>, old table dropped, the whole sequence wrapped in one
+C<bot_key=DEFAULT_BOT_KEY> (TGT-101 - a single named constant, still C<''>,
+replacing 6 bare-literal occurrences that used to exist across this file),
+old table dropped, the whole sequence wrapped in one
 transaction so a failure partway through rolls back to the untouched
 original state (a genuine, testable concern for a rename/create/copy/drop
 sequence, unlike the single-statement C<ADD COLUMN> migration above) -
@@ -376,9 +385,9 @@ are a no-op (the C<PRAGMA> check finds C<bot_key> already present).
 =head2 is_allowed($chat_id, $bot_key)
 
 True if C<$chat_id> is in the allow-list under C<$bot_key> (TGT-098,
-default C<''> - the single-bot/unscoped sentinel, so every existing
-caller that never passes C<$bot_key> is unaffected). A Telegram group
-shared by more than one of this skill's configured bots has the same
+default C<DEFAULT_BOT_KEY> - the single-bot/unscoped sentinel, so every
+existing caller that never passes C<$bot_key> is unaffected). A Telegram
+group shared by more than one of this skill's configured bots has the same
 C<$chat_id> for each - passing the actual bot's own key here is what
 stops an approval granted under one bot from silently applying to
 another.
@@ -386,15 +395,15 @@ another.
 =head2 add_pending($chat_id, $bot_key)
 
 Records C<$chat_id> as pending approval under C<$bot_key> (TGT-098,
-default C<''>). Idempotent. Returns true the first time a given
-C<($chat_id, $bot_key)> pair is recorded, false on every subsequent call
-for the same pair (already pending) - this is what lets a caller notify
-only once per new sender per bot.
+default C<DEFAULT_BOT_KEY>). Idempotent. Returns true the first time a
+given C<($chat_id, $bot_key)> pair is recorded, false on every subsequent
+call for the same pair (already pending) - this is what lets a caller
+notify only once per new sender per bot.
 
 =head2 approve($chat_id, $bot_key)
 
-Moves C<($chat_id, $bot_key)> (TGT-098, default C<''>) from C<pending>
-to C<allow_list>, atomically. Returns true if it was genuinely pending
+Moves C<($chat_id, $bot_key)> (TGT-098, default C<DEFAULT_BOT_KEY>) from
+C<pending> to C<allow_list>, atomically. Returns true if it was genuinely pending
 under that C<$bot_key> and is now approved; returns false (without
 error) if it was not pending under that C<$bot_key> - already approved
 under it, or never seen under it (a chat pending under a *different*
