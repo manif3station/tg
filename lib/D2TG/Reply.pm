@@ -33,6 +33,28 @@ sub send_reply {
     return { text => $text_result, voice => $voice_result };
 }
 
+sub resend_voice {
+    my (%args) = @_;
+
+    my $telegram = $args{telegram} or die "D2TG::Reply::resend_voice requires telegram\n";
+    my $chat_id  = $args{chat_id};
+    my $text     = $args{text};
+    my $synth    = $args{synthesize} || \&D2TG::TTS::synthesize;
+
+    my %opts = defined $args{reply_to_message_id}
+      ? ( reply_to_message_id => $args{reply_to_message_id} )
+      : ();
+
+    my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
+
+    my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
+    my $send_voice_error = $@;
+    unlink $voice_path if -e $voice_path;
+    die $send_voice_error if $send_voice_error;
+
+    return { voice => $voice_result };
+}
+
 sub format_send_error {
     my ($error) = @_;
 
@@ -130,6 +152,20 @@ call dies before C<mark_read> is ever reached, so a message is never
 marked read for a reply that didn't actually go out. Omitting C<store>,
 or omitting C<reply_to_message_id>, leaves read status untouched -
 unchanged from before this ticket.
+
+=head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id)
+
+TGT-109 (live-experienced incident): recovers from the specific failure
+shape C<send_reply>'s TGT-083 text-first-then-voice ordering can leave
+behind - text delivered successfully, then synthesis or C<send_voice>
+fails. Re-running C<send_reply> in that situation would duplicate the
+already-delivered text; C<resend_voice> synthesizes and sends I<only>
+the voice half, never calling C<send_message> at all. Same arguments as
+C<send_reply> (minus C<store> - this path doesn't mark anything read,
+since it isn't the original send), same fail-loud behavior (a synthesis
+or C<send_voice> failure still dies, temp file still cleaned up either
+way). Returns C<{ voice => ... }> - no C<text> key, since none was ever
+sent.
 
 =head2 format_send_error($error)
 

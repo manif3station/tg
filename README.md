@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v0.78).** `d2 tg.poller` now validates
+**Status: early implementation (v0.79).** `d2 tg.reply --voice-only
+<chat_id> <text...>` resends just the voice half of a reply whose text
+already went out but whose voice synthesis/send then failed (TGT-109, a
+live-experienced incident) - never calling `send_message`, so it can't
+duplicate the already-delivered text. `d2 tg.poller` now validates
 its own arguments fully before ever touching its lock file - `--help`/
 `-h` prints usage and exits, and any other unrecognized flag refuses
 with a clear error naming it (TGT-107, a live-experienced incident: a

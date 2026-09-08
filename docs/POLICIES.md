@@ -860,6 +860,24 @@ its own guard) - it now runs before the lock too. Every
 previously-recognized flag (`--db`/`-d`/`--chat_id`/`--bot`) keeps its
 exact existing behavior.
 
+## Recovering from a voice-only send failure never duplicates the text (TGT-109)
+
+Live-experienced incident (user-supplied feedback, 2026-09-08): a reply
+sent through `d2 tg.reply` had its text half delivered successfully,
+then its voice half timed out (`sendVoice ... timed out after 50s`).
+TGT-083's deliberate text-first-then-voice ordering makes this possible
+by design - a voice failure can no longer prevent the text half from
+having already gone out - but it also means there was no way to retry
+*only* the voice half afterward: running the same `d2 tg.reply` command
+again would resend the text too, producing a visible duplicate.
+
+`d2 tg.reply --voice-only <chat_id> <text...>` (via
+`D2TG::Reply::resend_voice`) synthesizes and sends only a voice note for
+`text`, never calling `send_message` at all. A synthesis or `send_voice`
+failure on this path still dies loudly (non-zero exit), matching the
+normal reply's own fail-loud convention - it just never risks
+duplicating text that already reached the chat.
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

@@ -1032,3 +1032,15 @@ Revision history for the tg skill
         missing guard's own message) was caught by the full suite and
         fixed before shipping. Every previously-recognized flag
         (--db/-d/--chat_id/--bot) is unchanged.
+
+0.79  2026-09-08
+      - FEATURE (TGT-109, live-experienced incident: user-supplied
+        feedback reported a reply's text half delivering successfully
+        while its voice half then timed out - TGT-083's deliberate
+        text-first ordering means this can happen, and re-running the
+        same `d2 tg.reply` command would duplicate the already-sent
+        text): new `d2 tg.reply --voice-only <chat_id> <text...>` resends
+        only a synthesized voice note, via a new
+        `D2TG::Reply::resend_voice`, never calling `send_message`. Same
+        fail-loud behavior as the normal path - a synthesis/send_voice
+        failure still dies, exit non-zero, temp file still cleaned up.

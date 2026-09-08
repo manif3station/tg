@@ -13,6 +13,7 @@ use D2TG::Store;
 
 my $db_alias;
 my $bot_token;
+my $voice_only = 0;
 while (@ARGV) {
     if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
         shift @ARGV;
@@ -35,6 +36,17 @@ while (@ARGV) {
             # other malformed invocation.
             shift @ARGV;
         }
+    }
+    elsif ( $ARGV[0] eq '--voice-only' ) {
+
+        # TGT-109 (live-experienced incident): TGT-083's text-first-
+        # then-voice ordering means a voice-only failure after text
+        # success has no clean recovery path - re-running this command
+        # normally would duplicate the already-delivered text. --voice-
+        # only skips send_message entirely, resending just the voice
+        # half for a message whose text has already gone out.
+        $voice_only = 1;
+        shift @ARGV;
     }
     else {
         last;
@@ -74,21 +86,39 @@ my $store = D2TG::Store->new(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-eval {
-    D2TG::Reply::send_reply(
-        telegram             => $telegram,
-        chat_id              => $chat_id,
-        text                 => $text,
-        reply_to_message_id  => $reply_to_message_id,
-        store                => $store,
-    );
-};
-if ($@) {
-    print STDERR D2TG::Reply::format_send_error($@);
-    exit 1;
-}
+if ($voice_only) {
+    eval {
+        D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => $chat_id,
+            text                 => $text,
+            reply_to_message_id  => $reply_to_message_id,
+        );
+    };
+    if ($@) {
+        print STDERR D2TG::Reply::format_send_error($@);
+        exit 1;
+    }
 
-print "Replied to $chat_id\n";
+    print "Resent voice-only to $chat_id\n";
+}
+else {
+    eval {
+        D2TG::Reply::send_reply(
+            telegram             => $telegram,
+            chat_id              => $chat_id,
+            text                 => $text,
+            reply_to_message_id  => $reply_to_message_id,
+            store                => $store,
+        );
+    };
+    if ($@) {
+        print STDERR D2TG::Reply::format_send_error($@);
+        exit 1;
+    }
+
+    print "Replied to $chat_id\n";
+}
 
 =head1 NAME
 
@@ -96,9 +126,21 @@ reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
 
 =head1 SYNOPSIS
 
-    d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <text...> [--reply-to-message-id <id>]
+    d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]
 
 =head1 DESCRIPTION
+
+C<--voice-only> (TGT-109, a live-experienced incident) skips
+C<send_message> entirely and resends only a synthesized voice note for
+C<text>, via L<D2TG::Reply/resend_voice> - recovers from the specific
+case where an earlier C<d2 tg.reply> already delivered the text but then
+failed synthesizing or sending the voice half (TGT-083's text-first
+ordering makes this possible); running the plain command again in that
+situation would duplicate the already-sent text. Recognized in the same
+leading position as C<--db>/C<-d>/C<--bot>, in any order relative to
+them. Prints C<Resent voice-only to <chat_id>> on success instead of the
+normal C<Replied to <chat_id>>; a failure is still reported through
+L<D2TG::Reply/format_send_error> exactly like the normal path.
 
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback) is recognized only in the I<leading> position - the very
