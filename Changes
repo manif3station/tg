@@ -851,3 +851,17 @@ Revision history for the tg skill
         still created as before once the base directory is confirmed
         real - only the base directory's own existence was never
         checked.
+
+0.67  2026-09-08
+      - FIX (TGT-091, live production incident - Michael's zen-framework
+        project): TIRA_HOME's value is now resolved against the d2 paths
+        table first, exactly like an explicit --db/-d/D2TG_DB alias,
+        falling back to treating it as a literal filesystem path only
+        if it matches no registered alias. TGT-090 (shipped moments
+        earlier) exposed this: TIRA_HOME=tira-zen - a real, registered
+        alias resolving to /home/mv/.tira/zenandi - was being treated
+        as a literal path and correctly rejected as nonexistent by
+        TGT-090's new check, blocking d2 tg.poller from starting at all
+        in zen-framework. TGT-090's fix itself was correct and is
+        unchanged; this closes the gap one level up, in how TIRA_HOME
+        itself gets interpreted.

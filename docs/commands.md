@@ -24,8 +24,11 @@ attachments live under `.tira/attachments/`. **Mandatory** (TGT-059,
 with a TGT-081 fallback): every `d2 tg.*` command refuses to start
 (exit 1, clear STDERR message pointing at `d2 paths`) when neither this
 flag nor `D2TG_DB` is given at all AND `TIRA_HOME` isn't set either -
-when `TIRA_HOME` *is* set, it's used as the base directory directly
-(not looked up via `d2 paths`, since it's already a filesystem path).
+when `TIRA_HOME` *is* set, it's resolved the same way an explicit alias
+is (TGT-091, a live production incident): looked up against `d2 paths`
+first (e.g. `TIRA_HOME=tira-zen` resolves to whatever `tira-zen` names
+in `d2 paths`), falling back to using the value directly as a filesystem
+path only if it doesn't match any registered alias.
 The same refusal happens when an alias *is* given but isn't a known
 one - `TIRA_HOME` is never consulted once an alias was given. As of
 TGT-090 (a live user request + live reproduction), the resolved base
@@ -323,14 +326,19 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
   nor `--db`/`-d` is given at all AND `TIRA_HOME` isn't set either (see
   below), the same as an unknown alias already refused.
 - `TIRA_HOME` (TGT-081, a live user request) — when none of `--db`/`-d`/
-  `D2TG_DB` is given at all, this is used as the base directory directly
-  (not looked up via `d2 paths` - it's already a filesystem path)
-  instead of refusing to start. Only consulted when no alias was given
-  at all; an explicit `--db`/`-d`/`D2TG_DB` always takes priority, and
-  an unknown alias still refuses rather than falling through to this.
-  Its value is used purely as a lookup, never a creation target (TGT-090)
-  - if it names a directory that doesn't already exist, every `d2 tg.*`
-  command refuses to start rather than creating it.
+  `D2TG_DB` is given at all, this is used as the base directory instead
+  of refusing to start. Only consulted when no alias was given at all;
+  an explicit `--db`/`-d`/`D2TG_DB` always takes priority, and an
+  unknown alias still refuses rather than falling through to this.
+  **Resolved as a `d2 paths` alias first** (TGT-091, a live production
+  incident: `TIRA_HOME=tira-zen` was being treated as a literal
+  filesystem path and refused, even though `tira-zen` is a real,
+  registered alias) — only falls back to using the value directly as a
+  literal filesystem path if it doesn't match any registered alias.
+  Whichever way it resolves, that final value is used purely as a
+  lookup, never a creation target (TGT-090) - if it names a directory
+  that doesn't already exist, every `d2 tg.*` command refuses to start
+  rather than creating it.
 - `D2TG_OWNER` (TGT-079, a live user request) — optional. When set, the
   poller's printed sender name (the main content line and any
   `(replying to ...)` suffix) shows this value instead of the raw

@@ -17,20 +17,37 @@ require D2TG::Config;
 
 {
     # TGT-081 (folded in, live user request): with neither --db/-d nor
-    # D2TG_DB set at all, fall back to $TIRA_HOME as the base_dir
-    # directly (not looked up via d2 paths - it's already a filesystem
-    # path) instead of refusing to start.
+    # D2TG_DB set at all, fall back to $TIRA_HOME as the base_dir.
+    # TGT-091 update (live production incident): TIRA_HOME's value is
+    # looked up against the paths table FIRST, same as an explicit
+    # alias - only falling back to the literal value when it doesn't
+    # match any registered alias. Here 'some-tira-home' matches nothing
+    # in the (empty) injected paths table, so it falls through to the
+    # literal-path behavior, same as before TGT-091.
     local $ENV{D2TG_DB};
     local $ENV{TIRA_HOME} = '/tmp/some-tira-home';
-    my $dir = D2TG::Config::resolve_alias_dir();
-    is( $dir, '/tmp/some-tira-home', 'no --db/-d and no D2TG_DB, but TIRA_HOME set: falls back to TIRA_HOME as the base_dir (TGT-081)' );
+    my $dir = D2TG::Config::resolve_alias_dir( paths => {} );
+    is( $dir, '/tmp/some-tira-home', 'no --db/-d and no D2TG_DB, but TIRA_HOME set to a value matching no alias: falls back to the literal TIRA_HOME value as the base_dir (TGT-081/TGT-091)' );
 }
 
 {
     local $ENV{D2TG_DB};
     local $ENV{TIRA_HOME};
-    my $dir = D2TG::Config::resolve_alias_dir( tira_home => '/tmp/injected-tira-home' );
+    my $dir = D2TG::Config::resolve_alias_dir( tira_home => '/tmp/injected-tira-home', paths => {} );
     is( $dir, '/tmp/injected-tira-home', 'an explicit tira_home arg overrides $ENV{TIRA_HOME} (for test injection), same pattern as alias/paths' );
+}
+
+{
+    # TGT-091 (live production incident, Michael's zen-framework
+    # project): TIRA_HOME=tira-zen (a real, registered d2 paths alias)
+    # was being treated as a literal filesystem path and refused
+    # (TGT-090 correctly rejected the literal string 'tira-zen' as a
+    # nonexistent directory) - it must instead resolve via the paths
+    # table, exactly like an explicit --db/-d/D2TG_DB alias would.
+    local $ENV{D2TG_DB};
+    local $ENV{TIRA_HOME} = 'tira-zen';
+    my $dir = D2TG::Config::resolve_alias_dir( paths => { 'tira-zen' => '/home/mv/.tira/zenandi' } );
+    is( $dir, '/home/mv/.tira/zenandi', 'TIRA_HOME set to a value matching a registered alias resolves via the paths table, not as a literal path (TGT-091)' );
 }
 
 {

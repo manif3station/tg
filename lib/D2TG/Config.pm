@@ -177,7 +177,22 @@ sub resolve_alias_dir {
 
     if ( !defined $alias || !length $alias ) {
         my $tira_home = exists $args{tira_home} ? $args{tira_home} : $ENV{TIRA_HOME};
-        return $tira_home if defined $tira_home && length $tira_home;
+
+        if ( defined $tira_home && length $tira_home ) {
+
+            # TGT-091 (live production incident): TIRA_HOME's real-world
+            # value is a d2-paths alias name (e.g. "tira-zen"), not
+            # necessarily a raw filesystem path - resolve it the same
+            # way an explicit --db/-d/D2TG_DB alias would be, and only
+            # fall back to treating it as a literal path if it doesn't
+            # match any registered alias (preserving the original
+            # TGT-081 behavior for a caller that really did set
+            # TIRA_HOME to a raw absolute path).
+            my $paths = $args{paths} || _developer_dashboard_paths();
+            return $paths->{$tira_home} if defined $paths->{$tira_home};
+
+            return $tira_home;
+        }
 
         die "D2TG_DB (or --db/-d <alias>) is not set - refusing to start. "
           . "Run 'd2 paths' to see valid aliases.\n";
@@ -441,14 +456,22 @@ hashref here instead, so this function - and every caller of it - never
 needs a real Developer Dashboard environment to be unit-tested.
 
 When neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all,
-falls back to C<$ENV{TIRA_HOME}> as the base_dir directly (TGT-081, a
-live user request) instead of refusing - C<TIRA_HOME> is already a
-filesystem path, not a C<d2 paths> alias name, so it's returned as-is
-rather than looked up. Pass C<tira_home> explicitly to override
-C<$ENV{TIRA_HOME}> for testing, same pattern as C<alias>/C<paths>. Only
-consulted when no alias was given at all - an explicit C<alias> or
-C<D2TG_DB> always takes priority, and an unknown alias still refuses
-exactly as before, never falling through to C<TIRA_HOME>.
+falls back to C<$ENV{TIRA_HOME}> as the base_dir (TGT-081, a live user
+request) instead of refusing. As of TGT-091 (a live production
+incident: C<TIRA_HOME=tira-zen> - a real, registered C<d2 paths> alias
+in the owner's own environment - was being treated as a literal
+filesystem path and refused), C<TIRA_HOME>'s value is resolved the same
+way an explicit C<alias> would be: looked up in C<paths> first, and
+only used directly as a literal filesystem path if it doesn't match any
+registered alias there. This preserves the original TGT-081 behavior
+for a caller that really did set C<TIRA_HOME> to a raw absolute path,
+while correctly resolving the (apparently more common in practice)
+case where it names an alias instead. Pass C<tira_home> explicitly to
+override C<$ENV{TIRA_HOME}> for testing, same pattern as
+C<alias>/C<paths>. Only consulted when no alias was given at all - an
+explicit C<alias> or C<D2TG_DB> always takes priority, and an unknown
+alias still refuses exactly as before, never falling through to
+C<TIRA_HOME>.
 
 Dies with a clear message pointing at C<d2 paths> in two cases (TGT-059):
 when neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all

@@ -202,6 +202,25 @@ still created as before - that's this skill's own controlled state
 folder, not the bug; the bug was the base_dir itself never being
 checked to actually pre-exist.
 
+**Update, TGT-091 (2026-09-08), a second live production incident:**
+this fix immediately exposed a deeper, pre-existing flaw in how
+`TIRA_HOME` itself gets resolved. Michael's own `zen-framework` project
+sets `TIRA_HOME=tira-zen` - `tira-zen` is a real, registered `d2 paths`
+alias (resolving to `/home/mv/.tira/zenandi`, which genuinely exists),
+not a literal filesystem path. TGT-081's original design assumed
+`TIRA_HOME` would always hold a raw path ("already a filesystem path,
+not a `d2 paths` alias name") and returned it as-is; TGT-090's new
+existence check then correctly rejected the literal string `tira-zen`
+as a nonexistent directory, which meant `d2 tg.poller` could not start
+at all in `zen-framework` - an active production incident, not a
+hypothetical. `resolve_alias_dir`'s `TIRA_HOME` branch now looks the
+value up against the `d2 paths` table first, exactly like an explicit
+`--db`/`-d`/`D2TG_DB` alias would be, and only falls back to treating it
+as a literal filesystem path if it matches no registered alias -
+preserving TGT-081's original behavior for anyone who genuinely does set
+`TIRA_HOME` to a raw path, while fixing the apparently more common real
+usage where it names an alias instead.
+
 ## A content-addressed download can never leave a corrupted, silently-trusted file
 
 Live-reproduced finding (TGT-080): a process killed mid-download used

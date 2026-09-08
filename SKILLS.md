@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.66).** This file is a procedure to
+**Status: early implementation (v0.67).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -97,13 +97,16 @@ column of `d2 paths`) the skill's SQLite state and downloaded
 attachments live under, so a fresh install is never left silently
 writing state into the skill's own install directory. If `TIRA_HOME` is
 set, it's used as this base directory instead of refusing (TGT-081) -
-only when none of `--db`/`-d`/`D2TG_DB` was given at all. Whichever
-directory is resolved, state and attachments live under a `.tira/`
-subdirectory of it: `.tira/telegram.messages.db` and
-`.tira/attachments/` (TGT-081). The resolved base directory (the alias's
-real path, or the `TIRA_HOME` value) must already exist - it is purely
-looked up, never created (TGT-090); if it doesn't exist, every `d2 tg.*`
-command refuses to start rather than `mkdir`-ing it into existence.
+only when none of `--db`/`-d`/`D2TG_DB` was given at all - and is itself
+resolved as a `d2 paths` alias first (TGT-091: e.g. `TIRA_HOME=tira-zen`
+resolves via whatever `tira-zen` names in `d2 paths`), falling back to
+using its value as a literal filesystem path only if it matches no
+alias. Whichever directory is resolved, state and attachments live
+under a `.tira/` subdirectory of it: `.tira/telegram.messages.db` and
+`.tira/attachments/` (TGT-081). That resolved base directory must
+already exist - it is purely looked up, never created (TGT-090); if it
+doesn't exist, every `d2 tg.*` command refuses to start rather than
+`mkdir`-ing it into existence.
 
 ## 5. End-to-end onboarding test (agent ↔ user ↔ Telegram)
 
