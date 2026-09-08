@@ -54,6 +54,17 @@ require D2TG::Config;
         'heartbeat_path resolves under the same .tira/ vault as lock_path' );
 }
 
+{
+    # Mirrors lock_path's own default_root/state/poller.pid fallback
+    # (t/40-db-alias-resolution.t) - no base_dir given at all.
+    my $dir  = tempdir( CLEANUP => 1 );
+    my $path = D2TG::Config::heartbeat_path( default_root => $dir );
+
+    is( $path, File::Spec->catfile( $dir, 'state', 'poller.heartbeat' ),
+        'heartbeat_path without base_dir falls back to default_root/state/poller.heartbeat, mirroring lock_path' );
+    ok( -d File::Spec->catdir( $dir, 'state' ), 'heartbeat_path creates the state/ directory if missing' );
+}
+
 # CLI-level: d2 tg.status reports heartbeat staleness.
 {
     my $status_cli  = File::Spec->catfile( $Bin, '..', 'cli', 'status.pl' );
