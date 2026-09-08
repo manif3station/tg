@@ -1,14 +1,17 @@
 # tg
 
 **Status: early implementation (v0.82).** `d2 tg.poller` now writes a
-heartbeat once per full poll cycle, unconditionally, and `d2 tg.status`
-reports its age, flagging it stale past 10 minutes (TGT-116, a
-live-experienced incident: a poller stayed alive and held its lock for
-80+ minutes while doing nothing at all, silently losing a message -
-"alive" and "still genuinely cycling" turned out to be different
-questions). Automatic restart-on-stale is intentionally not built yet -
-that needs an external actor, an operational decision flagged as a
-follow-up. `d2 tg.status` also reports the
+heartbeat after each bot/chat pair's own poll cycle, atomically (temp
+file + rename), and `d2 tg.status` reports its age, flagging it stale
+past 20 minutes (TGT-116, a live-experienced incident: a poller stayed
+alive and held its lock for 80+ minutes while doing nothing at all,
+silently losing a message - "alive" and "still genuinely cycling" turned
+out to be different questions). The 20-minute threshold and per-pair
+write both came from a Codex review catching that a once-per-full-cycle
+heartbeat against a tighter threshold could falsely flag a healthy,
+actively-transcribing poller as stale. Automatic restart-on-stale is
+intentionally not built yet - that needs an external actor, an
+operational decision flagged as a follow-up. `d2 tg.status` also reports the
 installed version and whether the poller is currently alive (TGT-111,
 user-supplied feature-gap analysis), without reaching into Tira job
 metadata from outside - read-only, never calls the lock's own `acquire`

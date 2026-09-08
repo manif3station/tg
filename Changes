@@ -1080,12 +1080,21 @@ Revision history for the tg skill
         alive and held its lock for 80+ minutes while doing nothing at
         all, silently losing a message - "alive" and "still genuinely
         cycling" turned out to be different questions): `d2 tg.poller`
-        now writes a heartbeat once per full poll cycle, unconditionally
+        now writes a heartbeat after each bot/chat pair's own poll cycle
         - regardless of whether any message or error activity happened
         - via new `D2TG::Config::write_heartbeat`/`heartbeat_age`/
         `heartbeat_path` (mirroring `lock_path`'s own `.tira/`
-        resolution). `d2 tg.status` (TGT-111) now also reports the
-        heartbeat's age, flagging it `(STALE)` past 600 seconds. Full
+        resolution, and writing atomically via a temp file + `rename`,
+        so a concurrent `d2 tg.status` read or a crash mid-write can
+        never observe a partial file). `d2 tg.status` (TGT-111) now also
+        reports the heartbeat's age, flagging it `(STALE)` past 1200
+        seconds - a threshold kept safely above the worst case a single
+        pair's own poll cycle can legitimately take, including a slow
+        voice transcription's full retry ladder (up to ~900s across
+        `D2TG::Transcribe`'s medium->small->base tiers). Codex review
+        caught this exact gap (a healthy, actively-transcribing poller
+        could otherwise be falsely reported STALE against a tighter,
+        once-per-full-cycle heartbeat), plus the non-atomic write. Full
         automatic restart-on-stale is intentionally NOT built here - a
         genuinely stuck poller cannot restart itself, so that needs
         either a second always-running watchdog process (recreating

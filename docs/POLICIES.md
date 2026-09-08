@@ -961,10 +961,14 @@ cycling through poll cycles" from "silently wedged" from outside, since
 a live PID and a held lock are both true in either case.
 
 `cli/poller.pl` now writes a heartbeat (`D2TG::Config::write_heartbeat`,
-mirroring `lock_path`'s own `.tira/` vault resolution) once per full poll
-cycle, unconditionally - regardless of whether any message or error
-activity happened that cycle. `d2 tg.status` reports the heartbeat's age
-and flags it `STALE` past 600 seconds.
+mirroring `lock_path`'s own `.tira/` vault resolution, written atomically
+via a temp file + `rename`) after each bot/chat pair's own poll cycle,
+unconditionally - regardless of whether any message or error activity
+happened. `d2 tg.status` reports the heartbeat's age and flags it
+`STALE` past 1200 seconds. (A Codex review caught that writing only once
+per full multi-pair cycle, against a tighter 600s threshold, could
+falsely flag a healthy, actively-transcribing poller as stale - a single
+voice transcription's retry ladder alone can take up to ~900s.)
 
 Deliberately **not** built here: an automatic restart when the heartbeat
 goes stale. A genuinely stuck poller cannot restart itself - that's the

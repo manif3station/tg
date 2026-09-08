@@ -28,7 +28,7 @@ a photo or document, the outbound counterpart to inbound media (which
 already worked fully). `d2 tg.status` (TGT-111) reports the installed
 version and whether the poller is currently alive, without reaching into
 Tira job metadata from outside - and also its heartbeat age, flagged
-stale past 10 minutes (TGT-116), since "alive" and "still genuinely
+stale past 20 minutes (TGT-116), since "alive" and "still genuinely
 cycling" turned out to be different questions after a real 80+ minute
 silent-message-loss incident.
 
