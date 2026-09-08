@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 use File::Temp;
 use File::Spec;
+use File::Basename;
 
 require D2TG::Transcribe;
 
@@ -152,6 +153,105 @@ for my $case (
 
     is( D2TG::Transcribe::_probe_duration('/any/path.ogg'), 0,
         '_probe_duration falls back to 0 when ffprobe produces no usable output' );
+}
+
+{
+    # TGT-100 follow-up (Michael's measured throughput data, msg #133/134):
+    # duration-based tiering alone is insufficient - per-host throughput
+    # varies (medium measured at ~5.6x real time on his host). The real
+    # guarantee comes from automatically retrying at a faster model tier
+    # when the current one times out, not just guessing a duration
+    # threshold.
+    my @whisper_calls;
+
+    my $tempdir = File::Temp::tempdir( CLEANUP => 1 );
+    my $audio_path = File::Spec->catfile( $tempdir, 'voice.ogg' );
+    open my $fh, '>', $audio_path or die $!;
+    close $fh;
+
+    # transcribe() needs a real output file for the second (successful)
+    # attempt to read back - write it now so it's already there.
+    my ($name) = File::Basename::fileparse( $audio_path, qr/\.[^.]*/ );
+
+    my $text = eval {
+        D2TG::Transcribe::transcribe(
+            $audio_path,
+            runner      => sub {
+                my (@cmd) = @_;
+                push @whisper_calls, [@cmd];
+                if ( @whisper_calls == 1 ) {
+                    die "D2TG::Transcribe::_run: command timed out after 300s and was killed\n";
+                }
+                my ($out_dir_idx) = grep { $cmd[$_] eq '--output_dir' } 0 .. $#cmd;
+                my $out_dir = $cmd[ $out_dir_idx + 1 ];
+                open my $out_fh, '>', File::Spec->catfile( $out_dir, "$name.txt" ) or die $!;
+                print {$out_fh} "transcribed on retry";
+                close $out_fh;
+                return 0;
+            },
+            duration_fn => sub { return 200; },    # would normally pick 'medium'
+        );
+    };
+
+    is( $@, '', 'transcribe() does not die when a retry at a faster tier succeeds' ) or diag($@);
+    is( $text, 'transcribed on retry', 'the successful retry transcript is returned' );
+    is( scalar(@whisper_calls), 2, 'whisper was invoked exactly twice (initial timeout + one retry)' );
+    is( $whisper_calls[0][ ( grep { $whisper_calls[0][$_] eq '--model' } 0 .. $#{ $whisper_calls[0] } )[0] + 1 ],
+        'medium', 'the first attempt used the initially-selected medium tier' );
+    is( $whisper_calls[1][ ( grep { $whisper_calls[1][$_] eq '--model' } 0 .. $#{ $whisper_calls[1] } )[0] + 1 ],
+        'small', 'the retry attempt stepped down to the next faster tier (small)' );
+}
+
+{
+    # Every tier times out, including base - transcribe() finally dies
+    # with one clear error instead of retrying forever.
+    my @whisper_calls;
+    my $runner = sub {
+        push @whisper_calls, [@_];
+        die "D2TG::Transcribe::_run: command timed out after 300s and was killed\n";
+    };
+
+    my $tempdir = File::Temp::tempdir( CLEANUP => 1 );
+    my $audio_path = File::Spec->catfile( $tempdir, 'voice.ogg' );
+    open my $fh, '>', $audio_path or die $!;
+    close $fh;
+
+    eval {
+        D2TG::Transcribe::transcribe(
+            $audio_path,
+            runner      => $runner,
+            duration_fn => sub { return 200; },
+        );
+    };
+
+    like( $@, qr/timed out/, 'transcribe() finally dies with a timeout error after exhausting every tier' );
+    is( scalar(@whisper_calls), 3, 'exactly 3 attempts were made (medium, small, base) before giving up' );
+}
+
+{
+    # An explicitly-passed model must NEVER get the automatic
+    # retry-on-timeout fallback - explicit means explicit.
+    my @whisper_calls;
+    my $runner = sub {
+        push @whisper_calls, [@_];
+        die "D2TG::Transcribe::_run: command timed out after 300s and was killed\n";
+    };
+
+    my $tempdir = File::Temp::tempdir( CLEANUP => 1 );
+    my $audio_path = File::Spec->catfile( $tempdir, 'voice.ogg' );
+    open my $fh, '>', $audio_path or die $!;
+    close $fh;
+
+    eval {
+        D2TG::Transcribe::transcribe(
+            $audio_path,
+            runner => $runner,
+            model  => 'medium',
+        );
+    };
+
+    like( $@, qr/timed out/, 'an explicit model still dies on timeout' );
+    is( scalar(@whisper_calls), 1, 'an explicit model is never automatically retried at a different tier' );
 }
 
 done_testing();

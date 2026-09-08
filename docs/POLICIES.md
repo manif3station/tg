@@ -469,15 +469,55 @@ section above) kills whatever `whisper` is running once it runs too long
 - a long clip transcribed with `medium` could exceed that budget and be
 killed, losing the transcript entirely instead of finishing more slowly.
 
-`D2TG::Transcribe::select_model($duration_seconds)` now tiers the model:
-up to 5 minutes stays `medium` (today's quality, unchanged for the
-common case), up to 15 minutes drops to `small`, longer uses `base` -
-each step trading transcription accuracy for speed to stay within
-`$TIMEOUT`. `transcribe()` measures the audio's actual duration via
-`ffprobe` (a list-form pipe `open`, never a shell string, so the audio
-path can never reach a shell) before choosing, unless the caller passes
-an explicit `model` argument, which always wins - unchanged from before
-this ticket.
+`D2TG::Transcribe::select_model($duration_seconds)` tiers the model as a
+starting guess: up to 5 minutes stays `medium` (today's quality,
+unchanged for the common case), up to 15 minutes drops to `small`,
+longer uses `base`. `transcribe()` measures the audio's actual duration
+via `ffprobe` (a list-form pipe `open`, never a shell string, so the
+audio path can never reach a shell) before choosing, unless the caller
+passes an explicit `model` argument, which always wins.
+
+**Follow-up (same ticket, after Michael measured this directly on his
+own host):** duration-based tiering alone turned out to be
+insufficient. The real limiting factor is per-host Whisper *throughput*,
+not audio length, and that varies far more than a fixed duration
+threshold can predict - `medium` measured at ~5.6x real time on his
+host (no GPU, FP16 unsupported, falls back to FP32), so a 102.48-second
+clip took 9m31s real time, well inside the original "stays on medium up
+to 300s" threshold. His own reproduction: `time whisper <file> --model
+medium ...` compared against `ffprobe`'s reported duration.
+
+`transcribe()` now automatically retries at the next faster tier
+(`medium` → `small` → `base`) whenever an *automatically-selected*
+model's `whisper` run times out, instead of dying on the first timeout -
+only a timeout at `base` itself (the fastest tier) produces a final,
+single `TRANSCRIBE ERROR`. This guarantees correctness regardless of a
+given host's actual measured speed, which the code can never know in
+advance - the duration guess just picks a sensible starting point,
+saving a doomed first attempt on an obviously-long clip. An
+explicitly-passed `model` is never automatically retried on timeout -
+explicit still means explicit, unchanged from before this follow-up.
+
+## A voice note gets an immediate "processing" notice, not silence (TGT-100)
+
+Live user request via the Telegram bridge, 2026-09-08, verbatim (msg
+#137/#138): *"So in this incident print a message notify the agent it
+will take long to transcribe instead of blind wait, before starting the
+long transcription. So the agent will notice and tell the user the got
+it but need time to process so everyone would be informed."* -> *"Fold
+this in too."* Folded into the same ticket as the throughput/retry work
+above, per his own instruction.
+
+Transcription can genuinely block a poll cycle for several real minutes
+(measured: ~9m31s for a 102-second clip on a slow host). Before this,
+the only stdout output for a voice message was the final `NEW TG VOICE`
+line once transcription finished (or failed) - the watching agent had no
+way to know a voice note had even been received until the whole wait was
+over. `D2TG::Poller::run_once` now prints `NEW TG VOICE [chat_id]
+sender: transcribing... (this may take a few minutes)` immediately, before
+the blocking `transcribe_voice` call, so the agent can acknowledge
+receipt right away ("got it, processing") instead of the sender hearing
+nothing until the real transcript line arrives afterward.
 
 ## A transcription's own console output never reaches the watched stream
 

@@ -947,3 +947,20 @@ Revision history for the tg skill
         (list-form pipe open, no shell involved) before invoking
         whisper. An explicitly-passed model still overrides the
         automatic choice, unchanged from before.
+      - FOLLOW-UP (TGT-100, same live user request, after Michael's
+        measured data): duration-based tiering alone was insufficient -
+        per-host Whisper throughput varies (medium measured at ~5.6x
+        real time on his host, no GPU; a 102.48s clip took 9m31s real
+        time, well inside the original 300s "stays on medium"
+        threshold). transcribe() now automatically retries at the next
+        faster model tier (medium -> small -> base) whenever the
+        current automatically-selected model times out, only dying with
+        a clear TRANSCRIBE ERROR if even 'base' times out. An
+        explicitly-passed model is never automatically retried -
+        explicit still means explicit.
+      - FOLLOW-UP (TGT-100, same live user request, msg #137/#138):
+        D2TG::Poller::run_once now prints a "NEW TG VOICE [chat_id]
+        sender: transcribing... (this may take a few minutes)" notice
+        immediately, before the (potentially multi-minute, blocking)
+        transcription call, instead of the watched stream staying
+        silent until the real transcript line arrives afterward.

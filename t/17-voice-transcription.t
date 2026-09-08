@@ -85,4 +85,33 @@ sub capture_std {
     like( $out, qr/voice/i, 'without transcribe_voice, the old MEDIA-line behavior is unchanged' );
 }
 
+{
+    # TGT-100 follow-up (live user request): transcription can block for
+    # several real minutes - a notice must print BEFORE the blocking
+    # transcribe_voice call, not only the final NEW TG VOICE line after,
+    # so the watching agent notices immediately instead of the whole
+    # wait being silent.
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 203,
+                message   => { chat => { id => 999 }, from => { username => 'ada' }, voice => { file_id => 'pqr' } },
+            },
+        ],
+    );
+    my $store = Fake::Store->new( allowed => [999] );
+    my $transcribe_voice = sub { return 'hello there'; };
+
+    my ( $out, $err ) = capture_std( sub {
+        D2TG::Poller::run_once( $tg, undef, $store, transcribe_voice => $transcribe_voice );
+    } );
+
+    like( $out, qr/transcrib/i, 'a pre-transcription notice is printed to stdout' );
+
+    my $notice_pos = index( $out, 'transcrib' );
+    my $result_pos = index( $out, 'hello there' );
+    ok( $notice_pos >= 0 && $result_pos > $notice_pos,
+        'the pre-transcription notice appears BEFORE the final transcript line, proving it printed before the blocking call' );
+}
+
 done_testing();

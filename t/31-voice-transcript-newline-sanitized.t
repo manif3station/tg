@@ -43,8 +43,8 @@ sub capture_stdout {
     } );
 
     my @lines = split /\n/, $out;
-    is( scalar(@lines), 2, 'a transcript with an embedded newline still produces exactly one NEW TG VOICE line plus one REPLY WITH line' );
-    like( $lines[0], qr/first sentence\.\\nsecond sentence\./, 'the embedded newline is escaped to a literal backslash-n, not left as a real newline' );
+    is( scalar(@lines), 3, 'a transcript with an embedded newline produces exactly one pre-transcription notice, one NEW TG VOICE line, and one REPLY WITH line (TGT-100)' );
+    like( $lines[1], qr/first sentence\.\\nsecond sentence\./, 'the embedded newline is escaped to a literal backslash-n, not left as a real newline' );
 
     my $stored = $store->get_message( 999, 900 );
     is( $stored->{summary}, 'first sentence.\nsecond sentence.', 'the stored summary is also sanitized (literal backslash-n), matching what was printed' );

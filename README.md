@@ -1,11 +1,16 @@
 # tg
 
 **Status: early implementation (v0.74).** Inbound voice-note
-transcription now scales the Whisper model to the voice note's own
-length - short clips (up to 5 minutes) still use `medium`, longer ones
-automatically drop to `small` or `base` so transcription completes
-within the existing timeout instead of a long note being silently lost
-(TGT-100, live user request). `d2 tg.poller` no longer
+transcription now automatically retries at a faster Whisper model when
+the current one times out (`medium` → `small` → `base`), instead of
+failing outright - per-host Whisper throughput varies too much for a
+duration-based guess alone to guarantee correctness (a 102-second clip
+measured at 9m31s on one host, ~5.6x real time with no GPU), so
+retry-on-timeout is what actually keeps transcription from being lost;
+duration-based tiering (TGT-100) still picks a sensible starting model.
+A voice note also gets an immediate "transcribing..." notice on stdout
+before the blocking transcription starts, so a multi-minute wait isn't
+silent. `d2 tg.poller` no longer
 prints a `POLL ERROR` line for a known-transient failure (a network
 timeout or a 5xx status) - it keeps retrying silently, since these are
 routine and self-heal on their own; a genuinely unexpected failure is

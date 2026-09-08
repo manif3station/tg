@@ -87,6 +87,16 @@ sub run_once {
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
             my $file_id = $message->{voice}{file_id};
+
+            # TGT-100 (live user request): transcription can genuinely
+            # take several real minutes (a slow local Whisper run), and
+            # it blocks this poll cycle the whole time. Printing this
+            # notice BEFORE the blocking call, not only the final NEW TG
+            # VOICE line after, lets the watching agent notice
+            # immediately and tell the sender "got it, processing"
+            # instead of the whole wait being silent.
+            print "$ts NEW TG VOICE [$chat_id] $sender: transcribing... (this may take a few minutes)$msg_note\n";
+
             my ( $ok, $transcript ) =
               _run_non_fatal( $transcribe_voice, $telegram, $file_id, $chat_id, $sender, 'TRANSCRIBE ERROR' );
 
@@ -352,12 +362,19 @@ preference, with no effect on access control.
 C<transcribe_voice>, if given, is called as
 C<< $transcribe_voice->($telegram, $file_id) >> for a voice message and
 should return its transcript text (typically wiring L<D2TG::Download>
-and L<D2TG::Transcribe> together). Its success prints
+and L<D2TG::Transcribe> together). Before that (potentially
+multi-minute, blocking) call, a
+C<NEW TG VOICE [chat_id] sender: transcribing... (this may take a few
+minutes)> notice is printed immediately (TGT-100, a live user request:
+the watching agent should notice a voice note arrived and can
+acknowledge it right away, instead of the whole wait being silent until
+the real transcript line appears). Its success then prints
 C<NEW TG VOICE [chat_id] sender: <transcript>> to STDOUT; its failure
 prints C<TRANSCRIBE ERROR [chat_id] sender: <message>> to STDERR and the
 loop continues - one bad voice note never crashes the poller. Without
 C<transcribe_voice>, a voice message falls back to the plain
-C<NEW TG MEDIA> line.
+C<NEW TG MEDIA> line (no pre-transcription notice, since there's no
+blocking call to warn about).
 
 C<download_media>, if given, is called as
 C<< $download_media->($telegram, $file_id) >> for a photo or document

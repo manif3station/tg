@@ -13,6 +13,8 @@ our $TIMEOUT     = 300;
 our $CURRENT_PID = undef;
 our $FORKER      = sub { return fork() };
 
+our @MODEL_TIERS = qw(medium small base);
+
 sub select_model {
     my ($duration) = @_;
 
@@ -21,6 +23,15 @@ sub select_model {
     return 'medium' if $duration <= 300;
     return 'small'  if $duration <= 900;
     return 'base';
+}
+
+sub _next_tier {
+    my ($model) = @_;
+
+    for my $i ( 0 .. $#MODEL_TIERS - 1 ) {
+        return $MODEL_TIERS[ $i + 1 ] if $MODEL_TIERS[$i] eq $model;
+    }
+    return undef;
 }
 
 sub _probe_duration {
@@ -44,37 +55,56 @@ sub _probe_duration {
 sub transcribe {
     my ( $audio_path, %args ) = @_;
 
-    my $duration_fn = $args{duration_fn} || \&_probe_duration;
-    my $model = $args{model} || select_model( $duration_fn->($audio_path) );
+    my $duration_fn     = $args{duration_fn} || \&_probe_duration;
+    my $explicit_model  = $args{model};
+    my $model           = $explicit_model || select_model( $duration_fn->($audio_path) );
     die "D2TG::Transcribe::transcribe: model must not be an English-only (.en) checkpoint\n"
       if $model =~ /\.en$/;
 
-    my $runner  = $args{runner} || \&_run;
-    my $out_dir = tempdir( CLEANUP => 0 );
+    my $runner = $args{runner} || \&_run;
 
-    my $text = eval {
-        if ( $runner->( 'whisper', $audio_path, '--model', $model, '--output_format', 'txt', '--output_dir', $out_dir ) != 0 ) {
-            die "D2TG::Transcribe::transcribe: whisper failed to transcribe $audio_path\n";
+    while (1) {
+        my $out_dir = tempdir( CLEANUP => 0 );
+
+        my $text = eval {
+            if ( $runner->( 'whisper', $audio_path, '--model', $model, '--output_format', 'txt', '--output_dir', $out_dir ) != 0 ) {
+                die "D2TG::Transcribe::transcribe: whisper failed to transcribe $audio_path\n";
+            }
+
+            my ($name) = fileparse( $audio_path, qr/\.[^.]*/ );
+            my $txt_path = File::Spec->catfile( $out_dir, "$name.txt" );
+
+            open my $fh, '<', $txt_path
+              or die "D2TG::Transcribe::transcribe: whisper did not produce the expected output $txt_path: $!\n";
+            local $/;
+            my $out = <$fh>;
+            close $fh;
+
+            $out =~ s/\s+\z//;
+            $out;
+        };
+        my $error = $@;
+
+        remove_tree( $out_dir, { safe => 1 } );
+
+        if ($error) {
+            # A timeout at an automatically-selected model (never an
+            # explicitly-passed one, TGT-100 follow-up: per-host
+            # throughput varies too much for a duration guess alone to
+            # guarantee correctness) automatically retries at the next
+            # faster tier instead of failing outright.
+            if ( !$explicit_model && $error =~ /timed out/ ) {
+                my $next = _next_tier($model);
+                if ( defined $next ) {
+                    $model = $next;
+                    next;
+                }
+            }
+            die $error;
         }
 
-        my ($name) = fileparse( $audio_path, qr/\.[^.]*/ );
-        my $txt_path = File::Spec->catfile( $out_dir, "$name.txt" );
-
-        open my $fh, '<', $txt_path
-          or die "D2TG::Transcribe::transcribe: whisper did not produce the expected output $txt_path: $!\n";
-        local $/;
-        my $out = <$fh>;
-        close $fh;
-
-        $out =~ s/\s+\z//;
-        $out;
-    };
-    my $error = $@;
-
-    remove_tree( $out_dir, { safe => 1 } );
-    die $error if $error;
-
-    return $text;
+        return $text;
+    }
 }
 
 sub _run {
@@ -140,9 +170,21 @@ cloud transcription service. Per the blueprint, refuses any C<*.en>
 Returns a Whisper model name tiered by audio duration (TGT-100, a live
 user request): C<medium> up to 300 seconds (today's quality, unchanged
 for the common case), C<small> up to 900 seconds, C<base> beyond that -
-each step trading accuracy for speed so a long voice note finishes
-within L</transcribe>'s C<$TIMEOUT> instead of being killed with no
-transcript at all.
+a I<starting-point guess> only. Per-host Whisper throughput varies far
+more than audio duration alone predicts (measured on one host: C<medium>
+ran at ~5.6x real time with no GPU, so a 102-second clip took 9m31s,
+well inside this function's own 300-second "stays on medium" boundary) -
+see L</transcribe>'s automatic retry-on-timeout for what actually
+guarantees a long/slow clip doesn't get lost.
+
+=head2 _next_tier($model)
+
+Returns the next entry in C<@MODEL_TIERS> (C<medium>, C<small>,
+C<base>, in that order) after C<$model>, or C<undef> if C<$model> is
+already C<base> or not one of the three known tiers (e.g. an
+explicitly-passed custom model name) - the latter case deliberately
+gives L</transcribe> no fallback to step down to, since retry-on-timeout
+only ever applies to an automatically-selected model.
 
 =head2 _probe_duration($audio_path)
 
@@ -158,18 +200,31 @@ L</select_model>'s answer for the audio's own duration, TGT-100 -
 previously always the fixed C<medium>), reads back its
 C<--output_format txt> transcript, and returns the trimmed text. Dies if
 C<model> ends in C<.en>, if C<whisper> exits non-zero, or if its expected
-output file is missing. C<duration_fn> is an optional coderef taking the
+output file is missing.
+
+If C<model> was I<not> explicitly passed and the run times out
+(C<_run>'s C<"...timed out..."> die), C<transcribe> automatically
+retries at L</_next_tier>'s next-faster model instead of dying
+immediately - TGT-100's follow-up, since a fixed duration-based guess
+alone can't account for how much per-host Whisper throughput varies
+(measured: C<medium> at ~5.6x real time on one host). Retrying continues
+until a model succeeds or C<base> itself times out, at which point the
+timeout error finally propagates. An explicitly-passed C<model> is never
+automatically retried - only the automatically-selected starting model
+gets this fallback.
+
+C<duration_fn> is an optional coderef taking the
 audio path and returning its duration in seconds; it defaults to
 L</_probe_duration> and exists so callers (tests) can inject a fake
 instead of invoking a real C<ffprobe>. The
-whisper-output temp directory is removed before returning or dying
-either way - it is not left for process-exit cleanup, since a
-long-running poller could otherwise accumulate one per transcribed
-voice note for the life of the process. C<runner> is
-an optional coderef taking a command's argument list and returning its
-exit status; it defaults to C<_run> (TGT-031: a bounded, killable
-subprocess, no longer a plain C<system(@cmd)> call), and exists so
-callers (tests) can inject a fake runner instead of invoking a real
+whisper-output temp directory is removed after every attempt (success,
+non-retryable failure, or before a retry) - it is not left for
+process-exit cleanup, since a long-running poller could otherwise
+accumulate one per transcription attempt for the life of the process.
+C<runner> is an optional coderef taking a command's argument list and
+returning its exit status; it defaults to C<_run> (TGT-031: a bounded,
+killable subprocess, no longer a plain C<system(@cmd)> call), and exists
+so callers (tests) can inject a fake runner instead of invoking a real
 subprocess.
 
 =head2 _run(@cmd)
