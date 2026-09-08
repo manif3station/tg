@@ -120,13 +120,18 @@ content from it.
   message's own `message_id` as `(msg #N)` (TGT-040), so it can be passed
   to `d2 tg.reply --reply-to-message-id N` for a genuine Telegram-native
   threaded reply.
-- `NEW TG MEDIA [chat_id] sender: <photo|document> <local_path>` — an
-  allowed sender's photo/document message, downloaded to `local_path`.
+- `NEW TG MEDIA [chat_id] sender: <photo|document> <local_path> [- caption: <text>]` —
+  an allowed sender's photo/document message, downloaded to `local_path`.
   For a photo, the largest available resolution is downloaded.
   `local_path` is content-addressed (TGT-051, named by the file's own
   SHA256 hash) under `D2TG::Config::attachments_dir` - identical content
   downloaded any number of times, from any sender, only ever occupies
-  one copy of disk space.
+  one copy of disk space. If the sender attached a caption to the photo/
+  document (TGT-092, a live production incident: a caption was silently
+  dropped before this fix, causing a real miscommunication), it's
+  appended as `- caption: <text>`, sanitized the same way inbound text is
+  (TGT-039); omitted entirely when there is no caption, which is the
+  common case.
 - `NEW TG VOICE [chat_id] sender: <transcript>` — an allowed sender's
   voice message, downloaded and transcribed via a local Whisper install
   (the downloaded audio itself is not kept, only its transcript).

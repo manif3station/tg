@@ -652,3 +652,18 @@ environment variables or `--db`/`-d`/`D2TG_DB` at all (unlike every
 other `d2 tg.*` command) - it touches no state, network, or credentials,
 only two static files that ship with the skill, so the mandatory
 storage-location guard (TGT-059) does not apply here.
+
+## A photo/document's caption is never silently dropped
+
+Live production incident (TGT-092): Michael sent a photo with a
+Telegram caption describing a real problem to solve - the poller's
+`NEW TG MEDIA` line only ever printed the media kind and downloaded
+local path, never `$message->{caption}` (a field the Bot API attaches
+to photo/document messages, separate from `$message->{text}`, which is
+only present for plain text messages). The caption was silently
+dropped: never printed, never stored, never reaching the agent watching
+the bridge - a genuine, in-the-moment miscommunication, not a
+hypothetical. Fixed: a present caption is sanitized the same way
+inbound text already is (TGT-039) and appended to both the printed line
+and the stored message summary; a message with no caption (the common
+case) is unaffected.

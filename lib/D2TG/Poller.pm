@@ -65,6 +65,16 @@ sub run_once {
         my $message_id = $message->{message_id};
         my $msg_note   = defined $message_id ? " (msg #$message_id)" : '';
 
+        # TGT-092 (live production incident): a photo/document's caption
+        # was never read at all - Telegram's Bot API attaches it as a
+        # field separate from $message->{text} (which is only present
+        # for plain text messages), so it was silently dropped.
+        my $caption = $message->{caption};
+        my $caption_note =
+          defined $caption && length $caption
+          ? ' - caption: ' . _sanitize_for_stdout($caption)
+          : '';
+
         if ( defined $text && length $text ) {
             my $safe_text = _sanitize_for_stdout($text);
 
@@ -101,15 +111,15 @@ sub run_once {
                   _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
                 if ($ok) {
-                    print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$msg_note$reply_ctx\n";
+                    print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$caption_note$msg_note$reply_ctx\n";
                     _print_reply_template( $chat_id, $message_id, $bot_token );
-                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path" )
+                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path$caption_note" )
                       if $store && defined $message_id;
                 }
             }
         }
         else {
-            print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$msg_note$reply_ctx\n";
+            print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
         }
     }
@@ -351,6 +361,17 @@ prints C<MEDIA DOWNLOAD ERROR [chat_id] sender: <message>> to STDERR and
 the loop continues, matching C<transcribe_voice>'s non-fatal handling.
 Without C<download_media>, photo/document messages fall back to the
 plain C<NEW TG MEDIA> line.
+
+If the message carries a caption (TGT-092, a live production incident:
+a caption was silently dropped entirely before this fix, causing a real
+miscommunication - C<$message->{caption}> is a field the Bot API
+attaches to photo/document messages, separate from C<$message->{text}>,
+which is only present for plain text messages), it is sanitized the
+same way inbound text already is (TGT-039) and appended to both the
+printed C<NEW TG MEDIA> line (as C<- caption: <text>>) and the stored
+message summary. A message with no caption - the common case - is
+completely unaffected. This applies to both the C<download_media>
+success path above and the plain fallback C<NEW TG MEDIA> line below.
 
 Before calling C<download_media> at all, if the message's own declared
 C<file_size> exceeds C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, TGT-037 - a

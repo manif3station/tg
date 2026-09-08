@@ -865,3 +865,15 @@ Revision history for the tg skill
         in zen-framework. TGT-090's fix itself was correct and is
         unchanged; this closes the gap one level up, in how TIRA_HOME
         itself gets interpreted.
+
+0.68  2026-09-08
+      - FIX (TGT-092, live production incident): a photo/document
+        message's caption was never captured or printed at all -
+        Telegram's Bot API attaches it as a field separate from the
+        plain-text $message->{text}, and the poller silently dropped it.
+        Michael sent a photo with a caption describing a real problem to
+        solve, and it never reached stdout/the bridge, causing a genuine
+        miscommunication. A present caption is now sanitized the same
+        way inbound text already is (TGT-039) and appended to both the
+        printed NEW TG MEDIA line and the stored message summary; a
+        message with no caption (the common case) is unaffected.

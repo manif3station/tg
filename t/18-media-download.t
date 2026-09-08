@@ -107,4 +107,59 @@ sub capture_std {
     like( $out, qr/document/i, 'without download_media, the old MEDIA-line behavior is unchanged' );
 }
 
+{
+    # TGT-092 (live production incident): a photo/document's caption was
+    # never read or printed at all, causing a real miscommunication -
+    # Michael sent a photo with a caption describing a problem, and the
+    # agent monitoring the bridge never saw it.
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 304,
+                message   => {
+                    message_id => 111,
+                    chat       => { id => 999 }, from => { username => 'ada' },
+                    document   => { file_id => 'doc4' },
+                    caption    => 'please fix the thing described here',
+                },
+            },
+        ],
+    );
+    my $store           = Fake::Store->new( allowed => [999] );
+    my $download_media  = sub { return '/tmp/doc4.bin'; };
+
+    my ( $out, $err ) = capture_std( sub {
+        D2TG::Poller::run_once( $tg, undef, $store, download_media => $download_media );
+    } );
+
+    like( $out, qr/please fix the thing described here/, 'a caption on a document message is printed on stdout (TGT-092)' );
+
+    my $stored = $store->get_message( 999, 111 );
+    like( $stored->{summary}, qr/please fix the thing described here/, 'the caption is also included in the stored summary' );
+}
+
+{
+    # No caption present - unchanged from before.
+    my $tg = Fake::Telegram->new(
+        [
+            {
+                update_id => 305,
+                message   => {
+                    message_id => 112,
+                    chat       => { id => 999 }, from => { username => 'ada' },
+                    document   => { file_id => 'doc5' },
+                },
+            },
+        ],
+    );
+    my $store          = Fake::Store->new( allowed => [999] );
+    my $download_media = sub { return '/tmp/doc5.bin'; };
+
+    my ( $out, $err ) = capture_std( sub {
+        D2TG::Poller::run_once( $tg, undef, $store, download_media => $download_media );
+    } );
+
+    unlike( $out, qr/caption/i, 'no caption text/label appears when the message carries no caption' );
+}
+
 done_testing();

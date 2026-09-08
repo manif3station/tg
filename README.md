@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.67).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.68).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -16,7 +16,8 @@ note — text is sent first, then the voice note is synthesized and sent
 reported loudly but can no longer un-send the text. An allow-listed
 sender's voice message is downloaded and transcribed via a local
 Whisper install, printed to stdout as its text; a photo/document message
-is downloaded to a local file and its path printed. Either kind of
+is downloaded to a local file and its path printed, along with any
+caption the sender attached (TGT-092). Either kind of
 download/transcription failure is reported on stderr without stopping
 the poller. Every content line also carries a ready-to-run `REPLY WITH:
 d2 tg.reply <chat_id> "..."` template (per Q-004) — the poller never
