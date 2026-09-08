@@ -321,7 +321,7 @@ anything is marked). A message with no reply against it stays unread.
 Requires `gtts-cli` and `ffmpeg` to be installed on the machine running
 this command.
 
-## `d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <file_path> [--caption <text>] [--reply-to-message-id <id>]`
+## `d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] [--caption <text>] [--reply-to-message-id <id>] <chat_id> <file_path>`
 
 TGT-103 (user-supplied feature-gap analysis): pushes a local file to a
 chat as a Telegram photo or document - the old `~/skills/tg` blueprint
@@ -343,10 +343,18 @@ flag - but recognized in leading position here (unlike `d2 tg.reply`'s
 trailing-only convention), since `file_path` is a single unambiguous
 argument, not free-form text that could contain the literal flag token.
 
-`chat_id` is validated as numeric and `file_path`'s existence on disk is
-checked before any network call is attempted - a missing file or bad
-chat_id refuses with a clear message rather than an opaque Telegram API
-error.
+Any argument left over after `chat_id`/`file_path` refuses with `Usage`
+(exit 2) instead of being silently dropped - a Codex review finding:
+`--caption`/`--reply-to-message-id` given *after* `chat_id file_path`
+used to be accepted syntactically and then silently ignored, sending
+the file with neither.
+
+`chat_id` is validated as numeric and `file_path` must exist on disk as
+a genuine regular file (`-f`, not merely `-e` - another Codex finding:
+`-e` alone also accepts a directory/FIFO/device/socket, none of which is
+a valid upload, and a FIFO could block the read indefinitely) before any
+network call is attempted - a missing/non-regular file or a bad chat_id
+refuses with a clear message rather than an opaque Telegram API error.
 
 ## `d2 tg.unread [--db <alias> | -d <alias>]`
 

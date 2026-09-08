@@ -166,4 +166,55 @@ sub http_response {
     like( $err, qr/Usage: d2 tg\.send/, 'the Usage message is printed' );
 }
 
+{
+    # Codex review finding: --caption/--reply-to-message-id given AFTER
+    # chat_id/file_path used to be silently dropped (accepted
+    # syntactically, sent the file with neither) - must now refuse
+    # instead, matching TGT-107's own "unrecognized/misplaced argument
+    # refuses, never silently ignored" principle.
+    my $send_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'send.pl' );
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN}   = 'test-token';
+    $ENV{D2TG_CHAT_ID} = '12345';
+
+    my ( $fh, $path ) = tempfile( SUFFIX => '.jpg' );
+    print {$fh} 'fake jpeg bytes';
+    close $fh;
+
+    my $err_file = "/tmp/d2tg-79-stderr.$$";
+    my $out      = `$send_cli 42 $path --caption hello 2>$err_file`;
+    my $rc       = $? >> 8;
+    my $err      = do { open my $fh2, '<', $err_file or die $!; local $/; <$fh2> };
+    unlink $err_file;
+    unlink $path;
+
+    is( $rc, 2, 'a trailing --caption after chat_id/file_path refuses (exit 2), never silently dropped' );
+    like( $err, qr/Usage: d2 tg\.send/, 'the Usage message is printed, not a silent success' );
+    is( $out, '', 'the file is never sent when trailing arguments are refused' );
+}
+
+{
+    # Codex review finding: a directory (or other non-regular file) must
+    # be refused by -f, not accepted by a bare -e check.
+    my $send_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'send.pl' );
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN}   = 'test-token';
+    $ENV{D2TG_CHAT_ID} = '12345';
+
+    my $a_directory = tempdir( CLEANUP => 1 );
+
+    my $err_file = "/tmp/d2tg-79-stderr.$$";
+    my $out      = `$send_cli 42 $a_directory 2>$err_file`;
+    my $rc       = $? >> 8;
+    my $err      = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
+    unlink $err_file;
+
+    is( $rc, 1, 'a directory passed as file_path is refused, not accepted' );
+    like( $err, qr/file not found/, 'the refusal message is the same clear one as a missing file' );
+}
+
 done_testing();

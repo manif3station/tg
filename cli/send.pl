@@ -71,19 +71,31 @@ if ($@) {
     exit 1;
 }
 
-my ( $chat_id, $file_path ) = @ARGV;
+my ( $chat_id, $file_path, @extra ) = @ARGV;
 
+# Codex review finding: --caption/--reply-to-message-id are only ever
+# recognized in the LEADING position (before chat_id/file_path, in the
+# same loop as --db/--bot above) - any argument left over after the two
+# required positionals must refuse loudly rather than being silently
+# dropped. Before this fix, `d2 tg.send 42 img.jpg --caption "hi"` sent
+# the file with no caption at all and no error, exactly the "silently
+# ignored, not refused" danger TGT-107 exists to close for cli/poller.pl.
 if ( !defined $chat_id
     || $chat_id !~ /^-?\d+$/
     || !defined $file_path
     || !length $file_path
+    || @extra
     || ( defined $reply_to_message_id && $reply_to_message_id !~ /^\d+$/ ) )
 {
-    print STDERR "Usage: d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <file_path> [--caption <text>] [--reply-to-message-id <id>]\n";
+    print STDERR "Usage: d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] [--caption <text>] [--reply-to-message-id <id>] <chat_id> <file_path>\n";
     exit 2;
 }
 
-if ( !-e $file_path ) {
+# Codex review finding: -e also accepts directories, FIFOs, devices, and
+# sockets - a FIFO could block indefinitely inside _send_file's blocking
+# read, and a directory is not a valid upload at all. -f requires a
+# genuine regular file.
+if ( !-f $file_path ) {
     print STDERR "d2 tg.send: file not found: $file_path\n";
     exit 1;
 }
@@ -118,7 +130,7 @@ send - push a local file to a chat as a photo or document, dispatched as C<d2 tg
 
 =head1 SYNOPSIS
 
-    d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] <chat_id> <file_path> [--caption <text>] [--reply-to-message-id <id>]
+    d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] [--caption <text>] [--reply-to-message-id <id>] <chat_id> <file_path>
 
 =head1 DESCRIPTION
 
@@ -141,10 +153,19 @@ optional free text attached to the sent photo/document.
 C<--reply-to-message-id> (numeric) threads the send under an existing
 Telegram message, matching C<d2 tg.reply>'s own flag. C<--db>/C<-d>/
 C<--bot> match C<d2 tg.reply>'s own leading-flag shape and validation
-(L<D2TG::Config/shift_flag_value>).
+(L<D2TG::Config/shift_flag_value>). Any argument left over after
+C<chat_id>/C<file_path> refuses with C<Usage> (exit 2) rather than being
+silently dropped (a real gap caught by Codex review before shipping -
+previously C<--caption>/C<--reply-to-message-id> given I<after>
+C<chat_id file_path> were accepted syntactically and then silently
+ignored, sending the file with neither).
 
 C<chat_id> is validated as numeric and C<file_path> must exist on disk
-before any network call is attempted - a missing or unreadable file
-refuses with a clear message rather than an opaque Telegram API error.
+as a genuine regular file (C<-f>, not merely C<-e> - a Codex review
+finding: C<-e> alone would also accept a directory, FIFO, device, or
+socket, any of which is not a valid upload, and a FIFO could block
+C<_send_file>'s read indefinitely) before any network call is attempted
+- a missing or non-regular-file path refuses with a clear message
+rather than an opaque Telegram API error.
 
 =cut
