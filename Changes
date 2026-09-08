@@ -717,3 +717,13 @@ Revision history for the tg skill
         precedent as t/lib/Fake/{Telegram,Store}.pm (TGT-018) and
         t/lib/Test/CaptureStdio.pm (TGT-034) - pure refactor, zero
         assertion changes, full suite green.
+
+0.57  2026-09-08
+      - FEATURE (TGT-079, live user request): new optional D2TG_OWNER
+        env var. When set, the poller's printed sender name (the main
+        content line and any "(replying to ...)" suffix) shows this
+        value instead of the raw Telegram username, but only for
+        messages from the D2TG_CHAT_ID chat - every other sender's
+        username is shown unchanged, and D2TG_OWNER has no effect on
+        access control, which still keys entirely on the numeric chat
+        id. New D2TG::Config::owner_name and D2TG::Poller::_display_name.

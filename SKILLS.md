@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.56).** This file is a procedure to
+**Status: early implementation (v0.57).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -63,7 +63,13 @@ directly from step 2 above) and exported:
 export D2TG_TOKEN="<the bot token from step 2.1>"
 export D2TG_CHAT_ID="<the admin chat id from step 2.2>"
 export D2TG_DB="<a Developer Dashboard path alias - run 'd2 paths' to see the choices>"
+export D2TG_OWNER="<optional: a friendly display name for the admin, e.g. 'Michael'>"
 ```
+
+`D2TG_OWNER` is optional (TGT-079) - when set, the poller shows this
+name instead of the admin's raw Telegram username, for messages from
+`D2TG_CHAT_ID` only. Purely cosmetic; leave it unset to see the
+Telegram username as before.
 
 Without `D2TG_CHAT_ID` set, `d2 tg.poller` refuses to start and prints a
 warning to stderr - this is a deliberate hard guard, not a bug. If the

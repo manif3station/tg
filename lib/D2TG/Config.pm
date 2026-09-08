@@ -5,8 +5,9 @@ use warnings;
 use File::Spec;
 use File::Path qw(make_path);
 
-sub token   { return $ENV{D2TG_TOKEN}; }
-sub chat_id { return $ENV{D2TG_CHAT_ID}; }
+sub token      { return $ENV{D2TG_TOKEN}; }
+sub chat_id    { return $ENV{D2TG_CHAT_ID}; }
+sub owner_name { return $ENV{D2TG_OWNER}; }
 
 sub masked_token {
     my ($token) = @_;
@@ -197,6 +198,15 @@ Returns the value of C<D2TG_TOKEN>, or C<undef> if unset.
 =head2 chat_id
 
 Returns the value of C<D2TG_CHAT_ID>, or C<undef> if unset.
+
+=head2 owner_name
+
+Returns the value of C<D2TG_OWNER> (TGT-079, a live user request), or
+C<undef> if unset. Used by C<D2TG::Poller>'s display-name substitution:
+a message from the L</chat_id> chat shows this name instead of the
+sender's raw Telegram username, when set. Purely a display preference -
+has no effect on access control, which continues to key everything on
+the numeric chat id.
 
 =head2 masked_token($token)
 

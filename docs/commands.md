@@ -270,6 +270,13 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
   when the flag isn't given. **Required** (TGT-059) — every `d2 tg.*`
   command refuses to start if neither this nor `--db`/`-d` is given at
   all, the same as an unknown alias already refused.
+- `D2TG_OWNER` (TGT-079, a live user request) — optional. When set, the
+  poller's printed sender name (the main content line and any
+  `(replying to ...)` suffix) shows this value instead of the raw
+  Telegram username, but only for messages from the `D2TG_CHAT_ID`
+  chat - every other sender's username is shown unchanged. Purely a
+  display preference; has no effect on access control, which still
+  keys entirely on the numeric chat id.
 
 ## Module reference
 

@@ -3,6 +3,7 @@ package D2TG::Poller;
 use strict;
 use warnings;
 use POSIX qw(strftime);
+use D2TG::Config;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
@@ -49,7 +50,7 @@ sub run_once {
         next unless ( defined $text && length $text ) || $media_kind;
 
         my $chat_id = $message->{chat}{id};
-        my $sender  = $message->{from}{username} // 'unknown';
+        my $sender  = _display_name( $chat_id, $message->{from}{username} );
 
         my $ts = _timestamp_prefix($message);
 
@@ -116,13 +117,31 @@ sub run_once {
     return ( $updates, $next_offset );
 }
 
+sub _display_name {
+    my ( $chat_id, $username ) = @_;
+
+    my $owner_chat_id = D2TG::Config::chat_id();
+    my $owner_name    = D2TG::Config::owner_name();
+
+    if (   defined $chat_id
+        && defined $owner_chat_id
+        && $chat_id eq $owner_chat_id
+        && defined $owner_name
+        && length $owner_name )
+    {
+        return $owner_name;
+    }
+
+    return $username // 'unknown';
+}
+
 sub _reply_context_suffix {
     my ( $message, $store, $chat_id ) = @_;
 
     my $original = $message->{reply_to_message};
     return '' unless $original;
 
-    my $original_sender    = $original->{from}{username} // 'unknown';
+    my $original_sender    = _display_name( $chat_id, $original->{from}{username} );
     my $original_message_id = $original->{message_id};
     my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
 
@@ -290,6 +309,13 @@ described above but never the message text; when omitted, every
 sender's text is printed unconditionally (used by earlier tests only -
 C<cli/poller> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
+
+Every printed sender name (the main content line and any reply-context
+suffix) goes through L</_display_name> (TGT-079, a live user request):
+a message from the L<D2TG::Config/chat_id> chat shows
+L<D2TG::Config/owner_name> (C<D2TG_OWNER>) instead of the sender's raw
+Telegram username, when that env var is set - purely a display
+preference, with no effect on access control.
 
 C<transcribe_voice>, if given, is called as
 C<< $transcribe_voice->($telegram, $file_id) >> for a voice message and

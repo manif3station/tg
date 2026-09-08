@@ -157,6 +157,16 @@ the next token as the bot token with zero validation, even after
 `D2TG::Config::shift_flag_value`, same as every other flag this skill
 validates.
 
+## The owner's own name can be shown instead of their Telegram username
+
+Live request (TGT-079): `D2TG_OWNER`, when set, replaces the raw
+Telegram username with a friendlier configured name in every printed
+sender line - but only for messages from the `D2TG_CHAT_ID` chat.
+Every other sender's username is always shown unchanged, and this is
+purely a display substitution: it has no effect on access control,
+allow-listing, or anything keyed on the numeric chat id, which is
+untouched by this feature.
+
 ## Same-second messages need a message_id tiebreaker, not just created_at
 
 Search-fork finding (TGT-075): `unread_messages` and `messages_in_range`
