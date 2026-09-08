@@ -827,3 +827,12 @@ Revision history for the tg skill
         and its narrowed guarantee. Also added D2TG::Config's new
         lock_path helper (TGT-087) to its table row, which had been
         missing.
+
+0.65  2026-09-08
+      - FEATURE (TGT-089, live user request): new d2 tg.help command
+        prints SKILLS.md then docs/commands.md, so an agent unfamiliar
+        with this skill can self-serve its own documentation without
+        knowing the skill's install path on disk. Takes no arguments,
+        requires no environment variables at all - unlike every other
+        d2 tg.* command, it does not need --db/-d/D2TG_DB, since it
+        touches no state, network, or credentials.

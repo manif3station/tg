@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.64).** This file is a procedure to
+**Status: early implementation (v0.65).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -55,6 +55,10 @@ Collect these before starting:
 ```
 dashboard skills install tg
 ```
+
+Once installed, `d2 tg.help` prints this file and the full command
+reference (`docs/commands.md`) - useful any time an agent needs to
+re-learn how this skill works without re-reading this repo directly.
 
 ## 4. Config the agent must collect before first use
 

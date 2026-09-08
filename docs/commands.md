@@ -3,6 +3,16 @@
 All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 (the `cli/<name>` script in this repo).
 
+## `d2 tg.help`
+
+Prints `SKILLS.md` (the onboarding runbook) in full, then a divider,
+then this file (`docs/commands.md`, the full command reference) in
+full - so an agent unfamiliar with this skill can self-serve
+documentation without needing to know the skill's own install path on
+disk (TGT-089, a live user request). Takes no arguments, requires no
+environment variables at all - it touches no state, network, or
+credentials, only two static files that ship with the skill.
+
 ## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...]`
 
 `--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a

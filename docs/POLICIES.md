@@ -599,3 +599,15 @@ meantime, it disconnects its DB handle and re-execs itself in place
 (same PID, same Tira monitor-job tracking) - a fresh Perl interpreter
 then loads the newly-installed code. A version change never interrupts
 an in-progress shutdown (`SIGTERM`/`SIGINT` still takes priority).
+
+## An agent can always self-serve this skill's own documentation
+
+Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then
+`docs/commands.md` in full, so an agent unfamiliar with this skill can
+learn how to use it without already knowing the skill's own install
+path on disk - a fresh Developer Dashboard skill install gives no other
+way to reach either file via `d2 tg.*` itself. Deliberately requires no
+environment variables or `--db`/`-d`/`D2TG_DB` at all (unlike every
+other `d2 tg.*` command) - it touches no state, network, or credentials,
+only two static files that ship with the skill, so the mandatory
+storage-location guard (TGT-059) does not apply here.

@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.64).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.65).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -20,9 +20,11 @@ is downloaded to a local file and its path printed. Either kind of
 download/transcription failure is reported on stderr without stopping
 the poller. Every content line also carries a ready-to-run `REPLY WITH:
 d2 tg.reply <chat_id> "..."` template (per Q-004) — the poller never
-sends a reply itself, this just makes composing one fast. See
-`SKILLS.md` for what's implemented so far, `docs/commands.md` for the
-command reference, and this project's Tira board ("D2 TG Skill") for
+sends a reply itself, this just makes composing one fast. Run `d2
+tg.help` (TGT-089) any time for both of these in one place - it prints
+`SKILLS.md` then `docs/commands.md`, no config required. See `SKILLS.md`
+for what's implemented so far, `docs/commands.md` for the command
+reference, and this project's Tira board ("D2 TG Skill") for
 ticket-level status.
 
 Telegram bridge skill for Developer Dashboard. Lets an admin reach a
