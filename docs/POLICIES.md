@@ -898,6 +898,41 @@ type via `sendDocument` regardless of what it actually contains.
 checked before any network call, matching this skill's existing
 fail-fast conventions (the same shape as `cli/reply.pl`'s own guards).
 
+## A monitor job's own command must not trust the shell that (re)starts it (TGT-118)
+
+Live operational incident, 2026-09-08: this project's own message history
+and attachment vault were found sitting at `/tmp/.tira/` instead of the
+project's real, durable storage location. Root cause was **not** a bug
+in `D2TG::Config::resolve_alias_dir` (it resolved exactly as designed)
+and **not** a persistent misconfiguration in any project `.env` file
+(none set `D2TG_DB` at all) - it was an environment variable
+(`D2TG_DB=test`, a real `d2 paths` alias that legitimately resolves to
+`/tmp`) present in one interactive session's own shell. Every time that
+session restarted the poller's Tira monitor job from that shell (`d2
+tira.job.stop`/`.start`, done to recover from an unrelated stuck-poller
+incident), the newly-spawned process inherited whatever env that shell
+happened to have - including a variable nobody had deliberately set for
+this project.
+
+Fixed at the most durable point available: the job's own command
+definition (`d2 tira.job.update --id JOB-007 --command "env -u D2TG_DB
+d2 tg.poller ..."`) now explicitly strips `D2TG_DB` before every future
+invocation, regardless of which shell or session restarts it - not a
+one-off manual `unset` that the next restart could just as easily
+reintroduce. Verified live: a fresh restart's own `/proc/<pid>/environ`
+confirmed `D2TG_DB` absent and `TIRA_HOME=tg` used instead, with
+`telegram.messages.db` landing at the correct, durable path. The `/tmp`
+history accumulated during the misconfigured window was not migrated,
+per the owner's own explicit choice - accepted as low-value, not lost by
+oversight.
+
+**Lesson for any future job restart on this or another project**: a Tira
+monitor job's own command is a more durable place to pin required
+environment state than trusting whatever env the shell issuing `job.stop`/
+`job.start` happens to carry - that shell's env is not part of this
+project's own configuration and can silently vary between sessions,
+terminals, or restart circumstances.
+
 ## Checking whether the poller is alive never risks evicting it (TGT-111)
 
 User-supplied feature-gap analysis, 2026-09-08: the only way to know
