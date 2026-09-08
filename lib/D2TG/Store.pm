@@ -212,7 +212,7 @@ sub unread_messages {
 
     my $rows = $self->{dbh}->selectall_arrayref(
         'SELECT chat_id, message_id, sender, summary, created_at
-         FROM messages WHERE read_at IS NULL ORDER BY created_at',
+         FROM messages WHERE read_at IS NULL ORDER BY created_at, message_id',
         { Slice => {} },
     );
 
@@ -249,7 +249,7 @@ sub messages_in_range {
 
     my $sql = 'SELECT chat_id, message_id, sender, summary, created_at FROM messages';
     $sql .= ' WHERE ' . join( ' AND ', @where ) if @where;
-    $sql .= ' ORDER BY created_at';
+    $sql .= ' ORDER BY created_at, message_id';
 
     my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
 
@@ -372,8 +372,12 @@ recorded for it at all (never dies on an unknown message).
 
 Returns the list of all stored messages (TGT-047) not yet marked read
 (C<mark_read>), as a list of hashrefs C<{ chat_id, message_id, sender,
-summary, created_at }>, ordered oldest first. Empty list if there are
-none - never dies on an empty store.
+summary, created_at }>, ordered oldest first - ties on C<created_at>
+(two or more messages landing within the same second) are broken by
+C<message_id> ascending (TGT-075, same reasoning C<recent_messages>
+already applies in the opposite direction), so a same-second burst
+never returns in SQLite's undefined tie-break order. Empty list if
+there are none - never dies on an empty store.
 
 =head2 recent_messages($limit = 10)
 
@@ -385,9 +389,10 @@ error if the store has fewer rows than that.
 =head2 messages_in_range(since => $iso8601, until => $iso8601)
 
 Returns every stored message (TGT-048) with C<created_at> between
-C<since> and C<until> inclusive, oldest first. Either bound may be
-omitted (an open-ended range on that side); omitting both returns every
-stored message, oldest first.
+C<since> and C<until> inclusive, oldest first - same C<message_id>
+same-second tiebreaker as L</unread_messages> (TGT-075). Either bound
+may be omitted (an open-ended range on that side); omitting both
+returns every stored message, oldest first.
 
 =head2 disconnect
 

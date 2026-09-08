@@ -157,6 +157,20 @@ the next token as the bot token with zero validation, even after
 `D2TG::Config::shift_flag_value`, same as every other flag this skill
 validates.
 
+## Same-second messages need a message_id tiebreaker, not just created_at
+
+Search-fork finding (TGT-075): `unread_messages` and `messages_in_range`
+both `ORDER BY created_at` alone - a second-resolution column with no
+secondary tiebreaker - while `recent_messages`, querying the same table,
+already adds `, message_id DESC` for exactly this reason. Whenever two
+or more messages land within the same second (a realistic burst, e.g.
+two rapid messages in one poll cycle), SQLite's tie-break order for
+equal `ORDER BY` keys is not guaranteed to match chronological order,
+so `d2 tg.unread`/`d2 tg.history` could silently show a same-second
+burst out of sequence despite promising "oldest first." Both now add
+`message_id` (ascending, since they're oldest-first views) as the
+tiebreaker, matching `recent_messages`'s own already-correct pattern.
+
 ## Non-ASCII reply text needs a UTF-8 decode before it reaches JSON
 
 Hourly bug-hunt finding (TGT-073): `@ARGV` is always raw bytes - Perl
