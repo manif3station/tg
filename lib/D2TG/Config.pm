@@ -89,7 +89,10 @@ sub extract_db_flag {
     while (@args) {
         my $arg = shift @args;
         if ( $arg eq '--db' || $arg eq '-d' ) {
-            $alias = shift @args;
+            my $value = shift @args;
+            die "--db/-d requires a value\n"
+              unless defined $value && $value ne '' && $value !~ /^-/;
+            $alias = $value;
         }
         else {
             push @rest, $arg;
@@ -251,6 +254,25 @@ C<D2TG::Reply::parse_cli_args>'s C<--reply-to-message-id> is
 trailing-only (TGT-042): reply text passed as free-form words could
 otherwise collide with the flag's own name. Returns C<($alias,
 @remaining_args)> - C<$alias> is C<undef> if the flag wasn't given.
+
+Dies with C<--db/-d requires a value> (TGT-071, a real live-reproduced
+incident, same bug class as TGT-069/070) if the token immediately after
+C<--db>/C<-d> is missing, empty, or itself looks like a flag (starts
+with C<->) - a bare trailing C<--db>, or C<--db> immediately followed by
+another real flag (e.g. C<cli/history --db --since 2026-01-01>, C<cli/reply
+--db --bot TOKEN ...>, C<cli/history --db --chat_id>), would otherwise
+silently swallow that flag's own name as the alias and fail later with a
+misleading C<Unknown --db/-d alias '--since'>-style message instead of
+naming the real problem. Every caller (C<cli/poller>/C<cli/approve>/
+C<cli/unread>/C<cli/history>) wraps this call in C<eval { ... }>,
+printing C<$@> to STDERR and exiting 1 on failure - the same pattern
+already used around C<resolve_alias_dir>'s own die. C<cli/reply>'s
+separate leading-position-only C<--db> extraction (see above) has the
+identical validation added directly in its own loop, since it doesn't
+call this function. A consequence (flagged in TGT-071's Codex review):
+a Developer Dashboard path alias can no longer itself begin with C<->
+- not a real-world constraint, since C<d2 paths> aliases are plain
+names, not flag-like strings.
 
 =head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
 

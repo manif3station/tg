@@ -12,7 +12,14 @@ attachments under that Developer Dashboard path alias's directory -
 (exit 1, clear STDERR message pointing at `d2 paths`) when neither this
 flag nor `D2TG_DB` is given at all, and the same happens when an alias
 *is* given but isn't a known one. There is no default-storage-location
-fallback. See the Environment variables section below.
+fallback. See the Environment variables section below. `--db`/`-d`'s own
+value is validated (TGT-071): a bare trailing `--db`, or one immediately
+followed by another flag (e.g. `--db --chat_id`), exits 1 with a clear
+`--db/-d requires a value` message instead of silently swallowing that
+flag's own name as the alias and later failing with a misleading
+`Unknown --db/-d alias '--chat_id'`. This applies to every `d2 tg.*`
+command that takes `--db`/`-d` (`poller`, `approve`, `unread`, `history`,
+and `reply`'s own separate leading-position extraction).
 
 `--chat_id <id>`/`--bot <token>` (TGT-049, both repeatable) declare one
 or more bot/chat groups: each `--chat_id` starts a new group, and every

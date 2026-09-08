@@ -30,7 +30,12 @@ $| = 1;
 # the --db override and fall back to the default storage location.
 my @original_argv = @ARGV;
 
-my ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV);
+my ( $db_alias, @rest );
+eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
 @ARGV = @rest;
 
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };

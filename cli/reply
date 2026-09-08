@@ -15,8 +15,13 @@ my $db_alias;
 my $bot_token;
 while (@ARGV) {
     if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
-        shift @ARGV;
-        $db_alias = shift @ARGV;
+        my $flag = shift @ARGV;
+        my $value = shift @ARGV;
+        if ( !defined $value || $value eq '' || $value =~ /^-/ ) {
+            print STDERR "--db/-d requires a value\n";
+            exit 1;
+        }
+        $db_alias = $value;
     }
     elsif ( $ARGV[0] eq '--bot' ) {
         if ( @ARGV >= 2 ) {
@@ -105,6 +110,13 @@ two elements to consume anything) - falls through to the C<chat_id>/text
 C<Usage> check below like any other malformed invocation, instead of
 looping forever on the same unconsumed argument (a real, live-reproduced
 hang before this fix).
+
+C<--db>/C<-d>'s own shifted value is validated (TGT-071, same bug class
+as TGT-068/069/070): if it's missing, empty, or itself looks like a flag
+(starts with C<->) - e.g. a bare trailing C<--db>, or C<--db> immediately
+followed by C<--bot> - the command dies with C<--db/-d requires a value>
+instead of silently treating that flag's own name as the alias and
+failing later with a misleading C<Unknown --db/-d alias '--bot'>.
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

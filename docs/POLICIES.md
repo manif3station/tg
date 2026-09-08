@@ -114,6 +114,22 @@ storage locations, or even switching which bot token is in use (TGT-049
 multi-bot mode), never resets or changes where a given bot's own
 `message_id` sequence continues from.
 
+## --db/-d always requires a real value, everywhere it's recognized
+
+Hourly bug-hunt finding (TGT-071): `D2TG::Config::extract_db_flag` - the
+shared `--db`/`-d` parser used by `cli/poller`, `cli/approve`,
+`cli/unread`, and `cli/history` - shifted the token immediately after
+`--db`/`-d` with no validation, same as `cli/reply`'s own separate
+leading-position `--db` extraction. A bare trailing `--db`, or `--db`
+immediately followed by another real flag, silently swallowed that
+flag's own name as the alias instead of erroring - e.g. `cli/history
+--db --since 2026-01-01` dropped `--since` entirely and failed with
+`Unknown --db/-d alias '--since'`, naming the wrong problem. Both
+`extract_db_flag` and `cli/reply`'s own loop now die/exit with a clear
+`--db/-d requires a value` message whenever the shifted value is
+missing, empty, or itself flag-like - the same validation shape already
+applied to `--chat_id` (TGT-069) and `--since`/`--until` (TGT-070).
+
 ## A reply can thread natively under the original Telegram message
 
 Live follow-up question (TGT-040): "where is the message id?" - every

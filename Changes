@@ -608,3 +608,22 @@ Revision history for the tg skill
         nothing. Both flags now validate their shifted value is defined
         and isn't itself a recognized flag token, exiting 2 with a clear
         "--since/--until requires a value" message instead.
+
+0.50  2026-09-08
+      - BUGFIX (TGT-071, found via a scheduled hourly bug-hunt pass,
+        live-reproduced, same class of bug as TGT-068/069/070):
+        D2TG::Config::extract_db_flag - the shared --db/-d parser used
+        by cli/poller, cli/approve, cli/unread, and cli/history - didn't
+        validate its shifted value either, and neither did cli/reply's
+        own separate --db extraction. A bare or misplaced --db (e.g.
+        "cli/history --db --since 2026-01-01", "cli/reply --db --bot
+        TOKEN ...", "cli/history --db --chat_id") silently swallowed the
+        following flag's own name as the alias, dropping that flag and
+        its argument, then failed with a misleading "Unknown --db/-d
+        alias '--since'" instead of naming the real problem. Both
+        extract_db_flag and cli/reply's own loop now validate the
+        shifted value is defined, non-empty, and not itself flag-like,
+        dying/exiting with a clear "--db/-d requires a value" message
+        instead. All four extract_db_flag callers now eval-wrap the call
+        and report the failure the same way they already do for
+        resolve_alias_dir's own die.

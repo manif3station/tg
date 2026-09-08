@@ -77,6 +77,21 @@ require D2TG::Config;
 }
 
 {
+    # TGT-071: a bare trailing --db/-d, or one immediately followed by
+    # another flag, must not silently swallow that flag's own name as
+    # the alias - same bug class as TGT-069/070, live-reproduced as
+    # `cli/history --db --since 2026-01-01` swallowing --since.
+    eval { D2TG::Config::extract_db_flag('--db') };
+    like( $@, qr/--db\/-d requires a value/i, 'a bare trailing --db dies naming --db/-d as requiring a value' );
+
+    eval { D2TG::Config::extract_db_flag( '-d', '--since', '2026-01-01' ) };
+    like( $@, qr/--db\/-d requires a value/i, '-d immediately followed by another flag dies instead of swallowing that flag as the alias' );
+
+    eval { D2TG::Config::extract_db_flag( '123456', '--db', '--chat_id' ) };
+    like( $@, qr/--db\/-d requires a value/i, '--db appearing mid-list followed by another flag also dies, not just when --db is first/last' );
+}
+
+{
     # Exercises the real (non-injected-paths) branch of resolve_alias_dir,
     # i.e. _developer_dashboard_paths, without needing a real Developer
     # Dashboard install: pretend the module is already loaded (so
