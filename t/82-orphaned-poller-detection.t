@@ -175,9 +175,24 @@ sub _fake_proc {
         exit 1;
     }
 
-    # Give the child a moment to actually appear under /proc.
+    # Give the child a moment to actually exec() into the fake poller
+    # script. Checking mere existence of /proc/$child_pid/cmdline is not
+    # enough - it exists the instant fork() returns, before exec()
+    # replaces argv, so a reader could see the pre-exec cmdline (this
+    # test process's own copied argv) and race ahead believing the
+    # child is ready when it isn't yet. Read the actual content and
+    # require it to already name the fake poller script.
     my $tries = 0;
-    1 while $tries++ < 100 && !-e "/proc/$child_pid/cmdline" && select( undef, undef, undef, 0.01 );
+    my $child_cmdline = '';
+    while ( $tries++ < 200 ) {
+        if ( open my $cfh, '<', "/proc/$child_pid/cmdline" ) {
+            local $/;
+            $child_cmdline = <$cfh> // '';
+            close $cfh;
+        }
+        last if $child_cmdline =~ /\Q$fake_poller\E/;
+        select( undef, undef, undef, 0.01 );
+    }
 
     my $fake_db_dir = tempdir( CLEANUP => 1 );
     setup_mandatory_db_env( $Bin, $fake_db_dir );
