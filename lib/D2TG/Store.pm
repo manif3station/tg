@@ -373,7 +373,9 @@ done that way in SQLite, so a pre-migration table (detected once, no
 C<bot_key> column) is rebuilt: renamed aside, replaced with the new
 composite-C<(chat_id, bot_key)>-PK shape, every row copied across with
 C<bot_key=DEFAULT_BOT_KEY> (TGT-101 - a single named constant, still C<''>,
-replacing 6 bare-literal occurrences that used to exist across this file),
+replacing 8 bare-literal occurrences that used to exist across this file -
+the 2 CREATE TABLE DDL strings above, the migration block's own CREATE
+TABLE/INSERT strings below, and 4 "unless defined" guards),
 old table dropped, the whole sequence wrapped in one
 transaction so a failure partway through rolls back to the untouched
 original state (a genuine, testable concern for a rename/create/copy/drop

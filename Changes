@@ -990,9 +990,10 @@ Revision history for the tg skill
 0.76  2026-09-08
       - REFACTOR (TGT-101, found via a scheduled improvement-hunt review
         of the TGT-098 migration code): D2TG::Store's bot_key='' sentinel
-        was repeated as a bare literal in 6 places (2 CREATE TABLE DDL
-        strings, 4 "unless defined" guards) with no single source of
-        truth. Now a single `use constant DEFAULT_BOT_KEY => ''`,
+        was repeated as a bare literal in 8 places (2 CREATE TABLE DDL
+        strings, the migration block's own CREATE TABLE/INSERT strings,
+        and 4 "unless defined" guards) with no single source of truth.
+        Now a single `use constant DEFAULT_BOT_KEY => ''`,
         matching this project's existing use-constant convention
         (D2TG::Poller's TELEGRAM_GETFILE_MAX_BYTES, D2TG::Lock's
         constants, D2TG::Telegram's DEFAULT_HARD_TIMEOUT). Pure refactor,
