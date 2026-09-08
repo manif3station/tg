@@ -329,6 +329,55 @@ reported loudly," not "a text-only reply can never happen at all." See
 update) for the full incident history this guarantee is built on and why
 it changed.
 
+## A failed reply tells the agent whether retrying is worth it (TGT-096)
+
+Live user request, 2026-09-08: Michael hit a real `d2 tg.reply` failure
+in a different project (`sendVoice: HTTP request failed - status 500,
+request timed out after 50s`) and asked, via the Telegram bridge: *"Instead
+of showing the error only. Also instruction to ask the agent try again."*
+Before this, `cli/reply.pl` called `D2TG::Reply::send_reply` completely
+unwrapped - any failure (transient network timeout, or a permanent
+problem like a bad token) propagated as a raw, uncaught Perl fatal, with
+no signal to the calling agent about which kind of failure it was looking
+at.
+
+`D2TG::Reply::format_send_error` now classifies the error text:
+transient-shaped errors (a network timeout, or an HTTP `5\d\d` status -
+the same shapes `D2TG::Telegram`'s own die messages already use) get an
+explicit retry instruction appended; anything else (a `4\d\d` status like
+a bad token or invalid chat id) is left unchanged, so the agent is never
+misled into retrying something a retry can't fix. `cli/reply.pl` now
+wraps `send_reply` in `eval` and routes any failure through this function
+before printing to STDERR and exiting non-zero - the exit code itself is
+unaffected, only the message content. The classification itself
+(`D2TG::Config::is_transient_error`) is a shared helper, not private to
+`D2TG::Reply` - see the next section for its other caller.
+
+## A known-transient poll failure retries silently instead of logging noise (TGT-097)
+
+Live user request via the Telegram bridge, 2026-09-08, verbatim: *"also,
+instead of showing the polling error. just silent it if that is
+unavoidable and focus on recovery instead."* `d2 tg.poller`'s
+`run_once_safe` already retries automatically after any poll-cycle
+failure (TGT-028) - the retry loop itself was never the problem. What
+Michael was reacting to was the `POLL ERROR: ...` line it printed on
+*every* transient failure (a network timeout, a 5xx from Telegram's
+side) - during a period of network/host contention this repeats many
+times in a row, and each one reaches the project's `tira.policy.bridge`
+as its own separate `monitor-output` event: pure noise, since nothing
+actionable is gained from reporting a failure the poller is already
+recovering from on its own.
+
+`run_once_safe` now checks `D2TG::Config::is_transient_error($@)`
+(TGT-096's shared classifier, moved to `D2TG::Config` for this reuse)
+before printing: a transient-shaped failure retries completely silently
+- no STDERR output at all, same sleep-and-continue behavior as before. A
+genuinely unexpected/non-transient failure (a malformed response, an
+auth problem) is still logged as `POLL ERROR`, exactly as before this
+ticket - that class of failure is something an operator should actually
+see, since the poller can't self-heal from it the way it can from a
+routine timeout.
+
 ## Only one poller may ever hold the lock, and the last one to try wins (TGT-084)
 
 Live production incident (TGT-062): "it is not always works. when send

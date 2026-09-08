@@ -227,6 +227,14 @@ sub resolve_self_exec_path {
     return $args{fallback};
 }
 
+sub is_transient_error {
+    my ($error) = @_;
+
+    return 1 if $error =~ /timed out/i;
+    return 1 if $error =~ /status 5\d\d/;
+    return 0;
+}
+
 sub _developer_dashboard_paths {
     require Developer::Dashboard;
     return Developer::Dashboard::d2()->paths;
@@ -543,5 +551,19 @@ depends on the script's I<directory>, which a filename-only rename
 doesn't change - re-checking there for the known current basename
 (C<poller.pl>) finds the live file regardless of what C<$0> says,
 falling back to C<$0> only if that lookup itself fails.
+
+=head2 is_transient_error($error)
+
+Returns true if C<$error> looks like a transient failure - matches
+C</timed out/i> or C</status 5\d\d/>, the same shapes
+L<D2TG::Telegram>'s own C<die> messages already use for a network
+timeout or a 5xx response - false otherwise (TGT-097). A shared
+predicate: L<D2TG::Reply/format_send_error> (TGT-096) uses it to decide
+whether a failed C<d2 tg.reply> should tell the calling agent to retry;
+C<D2TG::Poller::run_once_safe> (TGT-097) uses it to decide whether a
+poll-cycle failure is worth printing at all - a transient one retries
+completely silently, since the retry loop already recovers on its own
+and each printed occurrence was reaching the project's
+C<tira.policy.bridge> as pure noise.
 
 =cut

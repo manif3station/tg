@@ -909,3 +909,28 @@ Revision history for the tg skill
         only 5 of the 6 real files - cli/help.pl (d2 tg.help, TGT-089)
         was missing, even though it's documented elsewhere in the same
         file. Corrected.
+
+0.72  2026-09-08
+      - IMPROVEMENT (TGT-096, live user request via Telegram): d2
+        tg.reply's send_reply call was completely unwrapped in
+        cli/reply.pl, so any failure propagated as a raw Perl fatal
+        with no guidance for the calling agent. New
+        D2TG::Reply::format_send_error appends an explicit retry
+        instruction when the error looks transient (a network timeout
+        or a 5xx status), matching D2TG::Telegram's own die message
+        shapes - a permanent failure (bad token, invalid chat_id) is
+        unaffected, with no misleading retry suggestion.
+
+0.73  2026-09-08
+      - IMPROVEMENT (TGT-097, live user request via Telegram): d2
+        tg.poller no longer prints a POLL ERROR line for a
+        known-transient poll failure (a network timeout or a 5xx
+        status) - it keeps retrying silently instead, since these are
+        routine and self-heal via the existing retry loop with no
+        operator action needed; each occurrence was previously reaching
+        the project's tira.policy.bridge as its own separate
+        monitor-output event, pure noise. A genuinely unexpected/
+        non-transient poll failure is still reported as before. New
+        D2TG::Config::is_transient_error is a shared classifier now
+        used by both this and D2TG::Reply::format_send_error (TGT-096),
+        avoiding duplicated regex (same precedent as TGT-072).

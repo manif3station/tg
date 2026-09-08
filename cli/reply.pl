@@ -74,13 +74,19 @@ my $store = D2TG::Store->new(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-D2TG::Reply::send_reply(
-    telegram             => $telegram,
-    chat_id              => $chat_id,
-    text                 => $text,
-    reply_to_message_id  => $reply_to_message_id,
-    store                => $store,
-);
+eval {
+    D2TG::Reply::send_reply(
+        telegram             => $telegram,
+        chat_id              => $chat_id,
+        text                 => $text,
+        reply_to_message_id  => $reply_to_message_id,
+        store                => $store,
+    );
+};
+if ($@) {
+    print STDERR D2TG::Reply::format_send_error($@);
+    exit 1;
+}
 
 print "Replied to $chat_id\n";
 
@@ -131,6 +137,13 @@ followed by C<--bot> - the command dies with C<--db/-d requires a value>
 instead of silently treating that flag's own name as the alias and
 failing later with a misleading C<Unknown --db/-d alias '--bot'>. This
 validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072).
+
+A C<send_reply> failure (TGT-096) is caught and routed through
+L<D2TG::Reply/format_send_error> before being printed to STDERR - a
+transient-shaped failure (a network timeout or a 5xx status) gets an
+explicit instruction telling the calling agent to retry the same
+command; a permanent failure (bad token, invalid chat id) is reported
+as before, with no misleading retry suggestion.
 
 Thin CLI wrapper around L<D2TG::Reply>'s C<send_reply>: synthesizes a
 voice note for C<text> (via L<D2TG::TTS>, cloud gTTS) and sends both a

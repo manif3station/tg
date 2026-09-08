@@ -19,8 +19,10 @@ sub run_once_safe {
 
     if ($@) {
         my $error = $@;
-        $error =~ s/\n\z//;
-        print STDERR "POLL ERROR: $error\n";
+        unless ( D2TG::Config::is_transient_error($error) ) {
+            $error =~ s/\n\z//;
+            print STDERR "POLL ERROR: $error\n";
+        }
         $sleep_fn->(2);
         return $offset;
     }
@@ -312,13 +314,21 @@ Wraps C<run_once> so a transient failure (e.g. a network blip inside
 C<get_updates>) never kills the caller's loop - see TGT-028, a real
 production incident where an uncaught exception here silently ended the
 whole poller process. On success, behaves exactly like calling
-C<run_once> and taking its offset. On failure: strips the trailing
-newline from C<$@>, prints C<POLL ERROR: <message>> to STDERR, sleeps 2
-seconds (via C<sleep>, injectable for tests; defaults to a real
-C<sleep>) to avoid hammering a persistently-failing endpoint, and
-returns the I<unchanged> C<$offset> so the next call retries from the
-same place. All other C<%opts> (C<transcribe_voice>, C<download_media>)
-pass through to C<run_once> unchanged.
+C<run_once> and taking its offset. On failure: if
+L<D2TG::Config/is_transient_error> says the error looks transient (a
+network timeout or a 5xx status), nothing is printed at all - the retry
+loop below already recovers on its own, and printing it would only be
+noise reaching the project's C<tira.policy.bridge> as a separate
+C<monitor-output> event per occurrence (TGT-097, a live user request:
+I<"instead of showing the polling error, just silent it ... and focus on
+recovery instead">). Otherwise (a genuinely unexpected/non-transient
+failure), strips the trailing newline from C<$@> and prints C<POLL
+ERROR: <message>> to STDERR as before. Either way, sleeps 2 seconds (via
+C<sleep>, injectable for tests; defaults to a real C<sleep>) to avoid
+hammering a persistently-failing endpoint, and returns the I<unchanged>
+C<$offset> so the next call retries from the same place. All other
+C<%opts> (C<transcribe_voice>, C<download_media>) pass through to
+C<run_once> unchanged.
 
 =head2 run_once($telegram, $offset, $store, transcribe_voice => \&coderef, download_media => \&coderef, bot_token => $token)
 

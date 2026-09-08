@@ -33,6 +33,16 @@ sub send_reply {
     return { text => $text_result, voice => $voice_result };
 }
 
+sub format_send_error {
+    my ($error) = @_;
+
+    return $error
+      . "This looks like a transient network error - try running the same d2 tg.reply command again.\n"
+      if D2TG::Config::is_transient_error($error);
+
+    return $error;
+}
+
 sub extract_bot_flag {
     my (@args) = @_;
 
@@ -120,6 +130,20 @@ call dies before C<mark_read> is ever reached, so a message is never
 marked read for a reply that didn't actually go out. Omitting C<store>,
 or omitting C<reply_to_message_id>, leaves read status untouched -
 unchanged from before this ticket.
+
+=head2 format_send_error($error)
+
+Given a C<send_reply> failure's C<$@> text, returns it unchanged unless
+L<D2TG::Config/is_transient_error> says it looks transient (a network
+timeout or a 5xx response - TGT-097 moved this classification into a
+shared predicate, also used by C<D2TG::Poller::run_once_safe>), in which
+case an explicit retry instruction is appended (TGT-096, a live user
+request: a real C<sendVoice> timeout looked identical to a permanent
+failure to the calling agent, with no signal that retrying would likely
+succeed). C<cli/reply.pl> wraps its C<send_reply> call in C<eval> and
+routes any failure through this before printing to STDERR - a permanent
+failure (bad token, invalid chat id) is never given a misleading retry
+suggestion.
 
 =head2 extract_bot_flag(@args)
 

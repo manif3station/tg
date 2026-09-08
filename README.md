@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v0.71).** The poller's own version-change
+**Status: early implementation (v0.73).** `d2 tg.poller` no longer
+prints a `POLL ERROR` line for a known-transient failure (a network
+timeout or a 5xx status) - it keeps retrying silently, since these are
+routine and self-heal on their own; a genuinely unexpected failure is
+still reported (TGT-097, live user request). `d2 tg.reply`'s error output
+now tells the calling agent to retry when a send fails with a
+transient-shaped error (a network timeout or a 5xx status) - a
+permanent failure (bad token, invalid chat_id) is reported as before,
+with no misleading retry suggestion (TGT-096, live user request). The
+poller's own version-change
 self-restart (TGT-036) no longer trusts a stale `$0` - live production
 incident, TGT-094: a running poller mid-restart during TGT-093's own
 install died because `$0` pointed at the just-renamed-away `cli/poller`
