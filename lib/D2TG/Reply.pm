@@ -52,6 +52,16 @@ sub resend_voice {
     unlink $voice_path if -e $voice_path;
     die $send_voice_error if $send_voice_error;
 
+    # Codex review finding: without this, a successfully-recovered
+    # reply (text already sent earlier, voice now resent here) stayed
+    # unread forever - inviting later reprocessing/a duplicate full
+    # reply, since nothing else ever marks it read for this recovery
+    # path. Same guard as send_reply's own: only when both store and
+    # reply_to_message_id are given, and only after send_voice has
+    # actually succeeded.
+    $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
+      if $args{store} && defined $args{reply_to_message_id};
+
     return { voice => $voice_result };
 }
 
@@ -153,19 +163,24 @@ marked read for a reply that didn't actually go out. Omitting C<store>,
 or omitting C<reply_to_message_id>, leaves read status untouched -
 unchanged from before this ticket.
 
-=head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id)
+=head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store)
 
 TGT-109 (live-experienced incident): recovers from the specific failure
 shape C<send_reply>'s TGT-083 text-first-then-voice ordering can leave
 behind - text delivered successfully, then synthesis or C<send_voice>
 fails. Re-running C<send_reply> in that situation would duplicate the
 already-delivered text; C<resend_voice> synthesizes and sends I<only>
-the voice half, never calling C<send_message> at all. Same arguments as
-C<send_reply> (minus C<store> - this path doesn't mark anything read,
-since it isn't the original send), same fail-loud behavior (a synthesis
-or C<send_voice> failure still dies, temp file still cleaned up either
-way). Returns C<{ voice => ... }> - no C<text> key, since none was ever
-sent.
+the voice half, never calling C<send_message> at all. Same fail-loud
+behavior as C<send_reply> (a synthesis or C<send_voice> failure still
+dies, temp file still cleaned up either way). Returns C<{ voice => ... }>
+- no C<text> key, since none was ever sent by this call.
+
+C<store> (Codex review finding, same day): without this, a successfully
+-recovered reply stayed unread forever, since nothing else ever marks it
+read for this recovery path - inviting later reprocessing or a duplicate
+full reply. Same guard as C<send_reply>'s own: given I<together with>
+C<reply_to_message_id>, the message is marked read only after
+C<send_voice> has actually succeeded.
 
 =head2 format_send_error($error)
 

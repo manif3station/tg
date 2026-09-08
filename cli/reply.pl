@@ -93,6 +93,7 @@ if ($voice_only) {
             chat_id              => $chat_id,
             text                 => $text,
             reply_to_message_id  => $reply_to_message_id,
+            store                => $store,
         );
     };
     if ($@) {

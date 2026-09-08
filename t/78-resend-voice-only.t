@@ -36,11 +36,21 @@ sub send_message {
 }
 
 sub send_voice {
-    my ( $self, $chat_id, $path ) = @_;
+    my ( $self, $chat_id, $path, %opts ) = @_;
     push @{ $self->{call_order} }, 'send_voice';
     die "sendVoice failed: network error\n" if $self->{fail_voice};
-    push @{ $self->{sent_voices} }, { chat_id => $chat_id, path => $path };
+    push @{ $self->{sent_voices} }, { chat_id => $chat_id, path => $path, %opts };
     return { message_id => 2 };
+}
+
+package Fake::Store;
+
+sub new { return bless { marked_read => [] }, shift }
+
+sub mark_read {
+    my ( $self, $chat_id, $message_id ) = @_;
+    push @{ $self->{marked_read} }, { chat_id => $chat_id, message_id => $message_id };
+    return;
 }
 
 package main;
@@ -69,6 +79,60 @@ package main;
     is( scalar @{ $telegram->{sent_voices} },   1, 'exactly one voice note was sent' );
     ok( $result->{voice}, 'resend_voice returns the voice send result' );
     ok( !exists $result->{text}, 'resend_voice returns no text result - it never sent one' );
+}
+
+{
+    # Codex review finding: a recovered reply must not stay unread
+    # forever - mark_read must fire after a successful resend, and
+    # reply_to_message_id must thread through to send_voice so the
+    # resent voice note still lands as a native Telegram reply.
+    my ( $fh, $voice_path ) = tempfile( SUFFIX => '.ogg' );
+    print {$fh} 'fake voice bytes';
+    close $fh;
+
+    my $telegram   = Fake::Telegram->new;
+    my $store      = Fake::Store->new;
+    my $synthesize = sub { return $voice_path };
+
+    D2TG::Reply::resend_voice(
+        telegram             => $telegram,
+        chat_id              => 99,
+        text                 => 'hello there',
+        synthesize           => $synthesize,
+        reply_to_message_id  => 42,
+        store                => $store,
+    );
+
+    is( $telegram->{sent_voices}[0]{reply_to_message_id}, 42,
+        'reply_to_message_id is forwarded to send_voice on the recovery path' );
+    is_deeply( $store->{marked_read}, [ { chat_id => 99, message_id => 42 } ],
+        'mark_read fires after a successful voice-only resend - the reply does not stay unread forever' );
+}
+
+{
+    # And the inverse: a FAILED resend must never mark anything read -
+    # matching send_reply's own "never marked read for a reply that
+    # didn't actually go out" guarantee.
+    my ( $fh, $voice_path ) = tempfile( SUFFIX => '.ogg' );
+    print {$fh} 'fake voice bytes';
+    close $fh;
+
+    my $telegram   = Fake::Telegram->new( fail_voice => 1 );
+    my $store      = Fake::Store->new;
+    my $synthesize = sub { return $voice_path };
+
+    eval {
+        D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => 99,
+            text                 => 'hello there',
+            synthesize           => $synthesize,
+            reply_to_message_id  => 42,
+            store                => $store,
+        );
+    };
+
+    is( scalar @{ $store->{marked_read} }, 0, 'a failed voice-only resend never marks the message read' );
 }
 
 {
