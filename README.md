@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v0.77).** The multi-bot allow-list is
+**Status: early implementation (v0.78).** `d2 tg.poller` now validates
+its own arguments fully before ever touching its lock file - `--help`/
+`-h` prints usage and exits, and any other unrecognized flag refuses
+with a clear error naming it (TGT-107, a live-experienced incident: a
+`--help` typo used to be silently accepted and start a real second
+poller, which this skill's own "last one wins" lock (TGT-084) then let
+`SIGKILL` the legitimate one already running). The multi-bot allow-list is
 now scoped per bot (`chat_id`, `bot_key`) rather than by `chat_id`
 alone - a Telegram group shared by more than one of this skill's
 configured bots no longer leaks an approval from one bot to another

@@ -13,7 +13,17 @@ disk (TGT-089, a live user request). Takes no arguments, requires no
 environment variables at all - it touches no state, network, or
 credentials, only two static files that ship with the skill.
 
-## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...]`
+## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...] [--help]`
+
+`--help`/`-h` (TGT-107, a live-experienced incident) prints a short
+usage summary and exits 0 - checked before anything else, including
+before `--db`/`-d` is parsed. Any OTHER unrecognized argument refuses
+(STDERR names the specific token, exit 1) before the storage
+location/lock are ever touched - previously, an unrecognized flag
+(including `--help` itself) was silently accepted and the process fell
+through into a real poll loop, which, per this skill's own "last one
+wins" lock (TGT-084), could `SIGKILL` a live, legitimate poller by
+typo. Every previously-recognized flag below is unchanged.
 
 `--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a
 fallback) relocates both the SQLite state file and downloaded

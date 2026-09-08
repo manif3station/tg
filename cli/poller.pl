@@ -23,6 +23,24 @@ use D2TG::Lock;
 # the watched stream in real time. STDERR is unbuffered by default.
 $| = 1;
 
+# TGT-107 (live-experienced incident): --help - or any other flag this
+# script doesn't recognize - used to be silently accepted and ignored,
+# letting the process fall all the way through to a real poll loop.
+# Because D2TG::Lock's "last one wins" (TGT-084) SIGKILLs whichever
+# process already holds the lock, that made a single typo (or an
+# attempt to check usage) a real way to take a live poller offline. This
+# check must run before ANYTHING else - including before --db/-d is
+# even parsed - since --help must never depend on the rest of argv
+# being well-formed.
+if ( grep { $_ eq '--help' || $_ eq '-h' } @ARGV ) {
+    print "Usage: d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...]\n";
+    print "  --db/-d <alias>   Developer Dashboard path alias for storage (or set D2TG_DB)\n";
+    print "  --chat_id <id>    start a bot/chat group (repeatable)\n";
+    print "  --bot <token>     attach a bot token to the current --chat_id group (repeatable)\n";
+    print "  --help/-h         print this message and exit\n";
+    exit 0;
+}
+
 # Preserved separately from the parsed/stripped @ARGV below: the
 # self-restart exec() further down must re-exec with the ORIGINAL
 # arguments (including --db, if given), not the already-parsed
@@ -37,6 +55,32 @@ if ($@) {
     exit 1;
 }
 @ARGV = @rest;
+
+# Multi-bot/multi-chat support (TGT-049): peek whether the CLI declared
+# any --chat_id groups BEFORE consuming them, so the original single-var
+# startup guard (exact message, for exact backward compatibility) only
+# fires for the plain env-var-only case - CLI-declared groups supply
+# their own chat ids independently of D2TG_CHAT_ID. This guard must run
+# BEFORE bot_groups() below: bot_groups() itself dies on a bare
+# D2TG_TOKEN with no D2TG_CHAT_ID/--chat_id at all ("--bot given before
+# any --chat_id"), which would otherwise mask this guard's own, more
+# specific D2TG_CHAT_ID message.
+my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
+exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
+
+my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
+
+# TGT-107: any argv token neither --db/-d nor a recognized --chat_id/
+# --bot group must refuse HERE, before the base_dir/lock are ever
+# touched - not merely before the poll loop starts. Acquiring the lock
+# is itself the dangerous side effect (it can SIGKILL a live poller via
+# TGT-084's "last one wins"), so full argv validation must complete
+# first.
+if (@leftover) {
+    print STDERR "Unrecognized argument(s): " . join( ' ', @leftover ) . "\n";
+    exit 1;
+}
+@ARGV = @leftover;
 
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
 if ($@) {
@@ -65,17 +109,6 @@ if ($@) {
     print STDERR $@;
     exit 1;
 }
-
-# Multi-bot/multi-chat support (TGT-049): peek whether the CLI declared
-# any --chat_id groups BEFORE consuming them, so the original single-var
-# startup guard (exact message, for exact backward compatibility) only
-# fires for the plain env-var-only case - CLI-declared groups supply
-# their own chat ids independently of D2TG_CHAT_ID.
-my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
-exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
-
-my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
-@ARGV = @leftover;
 
 if ( !@$groups ) {
     print STDERR "No --chat_id/--bot groups configured (neither via CLI nor D2TG_CHAT_ID/D2TG_TOKEN) - refusing to start.\n";
@@ -210,8 +243,22 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
     d2 tg.poller [--db <alias> | -d <alias>]
     d2 tg.poller --chat_id <id> --bot <token> [--bot <token> ...] [--chat_id <id> --bot <token> ...]
+    d2 tg.poller --help
 
 =head1 DESCRIPTION
+
+C<--help>/C<-h> (TGT-107, a live-experienced incident) prints a short
+usage summary and exits 0 immediately - checked before anything else,
+including before C<--db>/C<-d> is even parsed, so C<--help> never
+depends on the rest of C<@ARGV> being well-formed. Any OTHER argument
+this script does not recognize as C<--db>/C<-d> or a valid
+C<--chat_id>/C<--bot> group also refuses (STDERR names the specific
+unrecognized token, exit 1) - both checks complete fully before the lock
+below is ever acquired, since acquiring the lock is itself the dangerous
+side effect: this project's C<D2TG::Lock> "last one wins" (TGT-084)
+C<SIGKILL>s whichever process already holds it, so a single typo used to
+be a real way to take a live, legitimate poller offline by silently
+starting a second one.
 
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback env var) names a Developer Dashboard path alias (see C<d2

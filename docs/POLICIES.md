@@ -831,6 +831,35 @@ otherwise touched on that path. TGT-084's existing behavior for a
 genuinely different, live PID (kill-and-take-over) and for a genuinely
 dead PID (atomic reclaim) is unchanged.
 
+## An unrecognized poller flag refuses instead of silently starting a poll loop (TGT-107)
+
+Live-experienced incident (user-supplied feedback, 2026-09-08): running
+`d2 tg.poller --help` to check usage did not print help and did not
+error - `--help` was silently accepted as an ordinary, ignored
+argument, and the process proceeded to acquire the lock and start a
+real, long-running poll loop. Because this skill's own lock enforces
+"last one wins" (TGT-084 - a new poller `SIGKILL`s whichever process
+already holds the lock), that stray instance immediately killed the
+legitimate, Tira-job-managed poller already running. The stray instance
+then ran unnoticed until it was caught as a leftover background task,
+and the real poller had to be restarted by hand.
+
+`cli/poller.pl` now validates its own arguments fully before the
+storage location or lock are ever touched: `--help`/`-h` (checked
+first, before even `--db`/`-d` is parsed) prints a short usage summary
+and exits 0; any other argument that isn't `--db`/`-d` or a valid
+`--chat_id`/`--bot` group refuses with a clear error naming the
+specific unrecognized token, exit 1. Acquiring the lock is itself the
+dangerous side effect here, not merely entering the poll loop - so the
+fix validates argv completely first, rather than only guarding the
+point where polling itself would begin. A related, pre-existing
+ordering quirk was tightened as a byproduct: the `D2TG_CHAT_ID`-missing
+guard used to run *after* the lock was already acquired (so a
+misconfigured poller could still evict a live one before then failing
+its own guard) - it now runs before the lock too. Every
+previously-recognized flag (`--db`/`-d`/`--chat_id`/`--bot`) keeps its
+exact existing behavior.
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

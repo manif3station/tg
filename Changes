@@ -1016,3 +1016,19 @@ Revision history for the tg skill
         "poller monitor job died silently" incidents. TGT-084's
         existing reclaim/live-conflict-kill behavior for a genuinely
         different PID is unchanged (t/52/54/66/67 all green).
+
+0.78  2026-09-08
+      - BUGFIX (TGT-107, live-experienced incident: user-supplied
+        feedback reported cli/poller.pl silently accepting `--help` as
+        an ordinary, ignored argument and starting a real, long-running
+        poll loop - which, per D2TG::Lock's own "last one wins"
+        (TGT-084), SIGKILLed the legitimate poller already holding the
+        lock, taking the bot offline): cli/poller.pl now validates its
+        argv fully - `--help`/`-h` prints a short usage summary and
+        exits 0; any other unrecognized argument refuses with a clear
+        error naming it, exit 1 - before the storage location/lock are
+        ever touched. A real ordering bug surfaced during implementation
+        (moving bot_groups() earlier initially broke the D2TG_CHAT_ID-
+        missing guard's own message) was caught by the full suite and
+        fixed before shipping. Every previously-recognized flag
+        (--db/-d/--chat_id/--bot) is unchanged.

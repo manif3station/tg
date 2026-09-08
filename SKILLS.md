@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.77).** This file is a procedure to
+**Status: early implementation (v0.78).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -194,6 +194,12 @@ Have the user note the printed `JOB-NNN` id - it's needed for
   bug-hunt) - closing a narrow window where an independently-started
   second poller could otherwise mistake the mid-restart lock churn for a
   genuine conflict and kill the legitimately restarting instance.
+- `d2 tg.poller --help`/`-h` prints usage and exits, and any other
+  unrecognized flag refuses with a clear error naming it - both checked
+  before the lock is ever touched (TGT-107, a live-experienced incident:
+  a `--help` typo used to be silently accepted and start a real second
+  poller, which the "last one wins" rule above then let kill the
+  legitimate one).
 
 This exact wiring was verified live in a `developer-dashboard:latest`
 container (TGT-015).
