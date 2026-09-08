@@ -743,3 +743,23 @@ Revision history for the tg skill
         the same directory, then rename onto the final path - rename is
         atomic on POSIX filesystems, so a crash before it runs leaves
         nothing at the final path at all.
+
+0.59  2026-09-08
+      - FEATURE (TGT-081, live user requests, folded into one ticket):
+        a resolved --db/-d/D2TG_DB base directory now nests its state
+        and attachments under a .tira/ subdirectory, renamed:
+        <base_dir>/store.sqlite -> <base_dir>/.tira/telegram.messages.db,
+        <base_dir>/files -> <base_dir>/.tira/attachments. This is a
+        breaking layout change for an existing vault - no automatic
+        migration is included. Separately: when none of --db/-d/D2TG_DB
+        is given at all, TIRA_HOME (if set) is now used as the base
+        directory directly instead of refusing to start - only when no
+        alias was given at all; an unknown alias still refuses, and if
+        neither an alias nor TIRA_HOME is available, every d2 tg.*
+        command still refuses to start with a clear error, exactly as
+        TGT-059 originally established.
+      - DOC ACCURACY (TGT-082, found via JOB-005's scheduled doc-accuracy
+        hunt): D2TG::Poller.pm's KNOWN LIMITATION section cited a stale
+        35s timeout figure - DEFAULT_HARD_TIMEOUT was widened to 50 by
+        TGT-066. Updated to reference the constant instead of a
+        hardcoded value.

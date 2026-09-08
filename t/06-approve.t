@@ -9,6 +9,7 @@ use File::Temp qw(tempfile tempdir);
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 require D2TG::Store;
+require D2TG::Config;
 
 sub fresh_db_path {
     my ( $fh, $path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
@@ -62,7 +63,7 @@ sub fresh_db_path {
 
     setup_mandatory_db_env( $Bin, $skill_root );
 
-    my $db_path = File::Spec->catfile( $skill_root, 'store.sqlite' );
+    my $db_path = D2TG::Config::state_db_path( base_dir => $skill_root );
     D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 )->add_pending(444);
 
     my $out = `$approve_cli 444 2>/tmp/d2tg-approve-stderr.$$`;

@@ -157,6 +157,20 @@ the next token as the bot token with zero validation, even after
 `D2TG::Config::shift_flag_value`, same as every other flag this skill
 validates.
 
+## The vault nests under .tira/, and TIRA_HOME is a real fallback
+
+Live requests (TGT-081): a resolved `--db`/`-d`/`D2TG_DB` base directory
+no longer stores files flat (`store.sqlite`, `files/`) - both now live
+under a `.tira/` subdirectory, renamed (`telegram.messages.db`,
+`attachments/`). Separately, when none of `--db`/`-d`/`D2TG_DB` is
+given at all, `TIRA_HOME` (if set) is used as the base directory
+directly instead of refusing to start - only when no alias was given
+at all; an unknown alias still refuses rather than falling through to
+`TIRA_HOME`. If neither an alias nor `TIRA_HOME` is available, the
+poller (and every `d2 tg.*` command) still refuses to start with a
+clear error, exactly as TGT-059 originally established - there is no
+silent fallback to an undefined or default location.
+
 ## A content-addressed download can never leave a corrupted, silently-trusted file
 
 Live-reproduced finding (TGT-080): a process killed mid-download used

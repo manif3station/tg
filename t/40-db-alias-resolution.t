@@ -9,9 +9,38 @@ require D2TG::Config;
 
 {
     local $ENV{D2TG_DB};
+    local $ENV{TIRA_HOME};
     eval { D2TG::Config::resolve_alias_dir() };
-    like( $@, qr/D2TG_DB.*--db.*-d/i, 'no --db flag and no D2TG_DB env var: dies naming the missing flag/env var (TGT-059)' );
+    like( $@, qr/D2TG_DB.*--db.*-d/i, 'no --db flag, no D2TG_DB env var, and no TIRA_HOME fallback: dies naming the missing flag/env var (TGT-059)' );
     like( $@, qr/d2 paths/i, 'the refusal message points at d2 paths to see valid aliases' );
+}
+
+{
+    # TGT-081 (folded in, live user request): with neither --db/-d nor
+    # D2TG_DB set at all, fall back to $TIRA_HOME as the base_dir
+    # directly (not looked up via d2 paths - it's already a filesystem
+    # path) instead of refusing to start.
+    local $ENV{D2TG_DB};
+    local $ENV{TIRA_HOME} = '/tmp/some-tira-home';
+    my $dir = D2TG::Config::resolve_alias_dir();
+    is( $dir, '/tmp/some-tira-home', 'no --db/-d and no D2TG_DB, but TIRA_HOME set: falls back to TIRA_HOME as the base_dir (TGT-081)' );
+}
+
+{
+    local $ENV{D2TG_DB};
+    local $ENV{TIRA_HOME};
+    my $dir = D2TG::Config::resolve_alias_dir( tira_home => '/tmp/injected-tira-home' );
+    is( $dir, '/tmp/injected-tira-home', 'an explicit tira_home arg overrides $ENV{TIRA_HOME} (for test injection), same pattern as alias/paths' );
+}
+
+{
+    # An explicit --db/-d alias still takes priority over TIRA_HOME, and
+    # an unknown alias still refuses exactly as before - TIRA_HOME is
+    # only ever consulted when no alias was given at all.
+    local $ENV{D2TG_DB};
+    local $ENV{TIRA_HOME} = '/tmp/some-tira-home';
+    eval { D2TG::Config::resolve_alias_dir( alias => 'nope', paths => { foobar => '/tmp/foo/bar' } ) };
+    like( $@, qr/Unknown --db.*nope/i, 'an unknown --db/-d alias still refuses even when TIRA_HOME is set - TIRA_HOME is not consulted once an alias was given' );
 }
 
 {
@@ -40,16 +69,19 @@ require D2TG::Config;
 }
 
 {
+    # TGT-081: a resolved D2TG_DB/--db base_dir nests everything under
+    # .tira/ with renamed files, per a live user request.
     my $dir = tempdir( CLEANUP => 1 );
     my $db_path = D2TG::Config::state_db_path( base_dir => $dir );
-    is( $db_path, "$dir/store.sqlite", 'state_db_path with an explicit base_dir puts store.sqlite directly there, no state/ subdir' );
+    is( $db_path, "$dir/.tira/telegram.messages.db", 'state_db_path with an explicit base_dir nests under .tira/ as telegram.messages.db (TGT-081)' );
+    ok( -d "$dir/.tira", 'state_db_path creates the .tira/ directory if missing' );
 }
 
 {
     my $dir = tempdir( CLEANUP => 1 );
     my $files_dir = D2TG::Config::attachments_dir( base_dir => $dir );
-    is( $files_dir, "$dir/files", 'attachments_dir with an explicit base_dir resolves to <base_dir>/files' );
-    ok( -d $files_dir, 'attachments_dir creates the files/ directory if missing' );
+    is( $files_dir, "$dir/.tira/attachments", 'attachments_dir with an explicit base_dir resolves to <base_dir>/.tira/attachments (TGT-081)' );
+    ok( -d $files_dir, 'attachments_dir creates the .tira/attachments/ directory if missing' );
 }
 
 {

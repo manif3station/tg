@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.58).** This file is a procedure to
+**Status: early implementation (v0.59).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -88,7 +88,12 @@ paths` (TGT-059) - this is deliberate and mandatory, not an optional
 convenience: it names which Developer Dashboard path alias (the left
 column of `d2 paths`) the skill's SQLite state and downloaded
 attachments live under, so a fresh install is never left silently
-writing state into the skill's own install directory.
+writing state into the skill's own install directory. If `TIRA_HOME` is
+set, it's used as this base directory instead of refusing (TGT-081) -
+only when none of `--db`/`-d`/`D2TG_DB` was given at all. Whichever
+directory is resolved, state and attachments live under a `.tira/`
+subdirectory of it: `.tira/telegram.messages.db` and
+`.tira/attachments/` (TGT-081).
 
 ## 5. End-to-end onboarding test (agent ↔ user ↔ Telegram)
 

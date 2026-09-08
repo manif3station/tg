@@ -8,11 +8,17 @@ All commands are dispatched via Developer Dashboard as `d2 tg.<name>`
 `--db <alias>`/`-d <alias>` (TGT-051, or `D2TG_DB=<alias>` as a
 fallback) relocates both the SQLite state file and downloaded
 attachments under that Developer Dashboard path alias's directory -
-**mandatory** (TGT-059): every `d2 tg.*` command refuses to start
+specifically under a `.tira/` subdirectory of it (TGT-081, a live user
+request): the state file is `.tira/telegram.messages.db` and
+attachments live under `.tira/attachments/`. **Mandatory** (TGT-059,
+with a TGT-081 fallback): every `d2 tg.*` command refuses to start
 (exit 1, clear STDERR message pointing at `d2 paths`) when neither this
-flag nor `D2TG_DB` is given at all, and the same happens when an alias
-*is* given but isn't a known one. There is no default-storage-location
-fallback. See the Environment variables section below. `--db`/`-d`'s own
+flag nor `D2TG_DB` is given at all AND `TIRA_HOME` isn't set either -
+when `TIRA_HOME` *is* set, it's used as the base directory directly
+(not looked up via `d2 paths`, since it's already a filesystem path).
+The same refusal happens when an alias *is* given but isn't a known
+one - `TIRA_HOME` is never consulted once an alias was given. See the
+Environment variables section below. `--db`/`-d`'s own
 value is validated (TGT-071): a bare trailing `--db`, or one immediately
 followed by another flag (e.g. `--db --chat_id`), exits 1 with a clear
 `--db/-d requires a value` message instead of silently swallowing that
@@ -265,11 +271,19 @@ Its stdout/stderr then reaches that project's `tira.policy.bridge` as a
 - `DEVELOPER_DASHBOARD_SKILL_ROOT` — overrides where `state/store.sqlite`
   is resolved from; normally set by Developer Dashboard itself.
 - `D2TG_DB` (TGT-051) — a Developer Dashboard path alias (see `d2 paths`)
-  whose directory relocates both the SQLite state file and downloaded
-  attachments; fallback for every `d2 tg.*` command's `--db`/`-d` flag
-  when the flag isn't given. **Required** (TGT-059) — every `d2 tg.*`
-  command refuses to start if neither this nor `--db`/`-d` is given at
-  all, the same as an unknown alias already refused.
+  whose directory relocates both the SQLite state file (as
+  `.tira/telegram.messages.db`) and downloaded attachments (as
+  `.tira/attachments/` - TGT-081); fallback for every `d2 tg.*`
+  command's `--db`/`-d` flag when the flag isn't given. **Required**
+  (TGT-059) — every `d2 tg.*` command refuses to start if neither this
+  nor `--db`/`-d` is given at all AND `TIRA_HOME` isn't set either (see
+  below), the same as an unknown alias already refused.
+- `TIRA_HOME` (TGT-081, a live user request) — when none of `--db`/`-d`/
+  `D2TG_DB` is given at all, this is used as the base directory directly
+  (not looked up via `d2 paths` - it's already a filesystem path)
+  instead of refusing to start. Only consulted when no alias was given
+  at all; an explicit `--db`/`-d`/`D2TG_DB` always takes priority, and
+  an unknown alias still refuses rather than falling through to this.
 - `D2TG_OWNER` (TGT-079, a live user request) — optional. When set, the
   poller's printed sender name (the main content line and any
   `(replying to ...)` suffix) shows this value instead of the raw
@@ -286,7 +300,7 @@ implemented and where:
 
 | Module | What it does |
 | --- | --- |
-| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path; `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045); `extract_db_flag`/`resolve_alias_dir`/`attachments_dir` resolve an optional `--db`/`-d`/`D2TG_DB` Developer Dashboard path alias for both storage and attachments (TGT-051); `bot_groups` parses repeatable `--chat_id`/`--bot` CLI args, folding in `D2TG_CHAT_ID`/`D2TG_TOKEN` as an implicit trailing pair through the same grouping algorithm (TGT-049); `shift_flag_value` (TGT-072) is a shared helper backing `extract_db_flag`'s `--db`/`-d`, `bot_groups`'s `--chat_id` and (TGT-074) `--bot`, `cli/reply`'s own `--db`, `cli/history`'s `--since`/`--until`, and `D2TG::Reply::extract_bot_flag`'s `--bot` validation - one implementation instead of many independent hand-rolled copies. |
+| `D2TG::Config` | Reads `D2TG_TOKEN`/`D2TG_CHAT_ID`; startup guard; resolves `state/store.sqlite`'s path (or, for a resolved `--db`/`-d`/`D2TG_DB`/`TIRA_HOME` base_dir, `.tira/telegram.messages.db` and `.tira/attachments/` - TGT-081); `skill_version` reads `.env`'s installed VERSION (TGT-036); `masked_token` masks a token to its first/last 4 chars for safe display (TGT-045); `owner_name` reads `D2TG_OWNER` (TGT-079); `extract_db_flag`/`resolve_alias_dir`/`attachments_dir` resolve an optional `--db`/`-d`/`D2TG_DB` Developer Dashboard path alias (or a `TIRA_HOME` fallback, TGT-081) for both storage and attachments (TGT-051); `bot_groups` parses repeatable `--chat_id`/`--bot` CLI args, folding in `D2TG_CHAT_ID`/`D2TG_TOKEN` as an implicit trailing pair through the same grouping algorithm (TGT-049); `shift_flag_value` (TGT-072) is a shared helper backing `extract_db_flag`'s `--db`/`-d`, `bot_groups`'s `--chat_id` and (TGT-074) `--bot`, `cli/reply`'s own `--db`, `cli/history`'s `--since`/`--until`, and `D2TG::Reply::extract_bot_flag`'s `--bot` validation - one implementation instead of many independent hand-rolled copies. |
 | `D2TG::Telegram` | Raw HTTP Bot API client (`LWP::UserAgent`, no SDK, explicit 50s timeout - TGT-035/TGT-066, backed by a real SIGALRM-based hard timeout since a stuck TCP connect() was found to bypass it in production - TGT-044): `get_me`, `get_updates`, `get_file`, `file_download_url`, `send_message` (auto-split, optional `reply_to_message_id` - TGT-040), `send_voice` (multipart, optional `reply_to_message_id` - TGT-040). |
 | `D2TG::Poller` | `run_once` — one poll cycle: access-control gate, text/voice/media event lines (sanitized to always be a single stdout line, even a multi-segment voice transcript - TGT-039; naming the message's own `message_id` - TGT-040; plus a `(replying to ... [msg #N]: ...)` suffix when the message is itself a reply, naming the original message's own id (TGT-041) and preferring our own stored message history over Telegram's bare payload - TGT-029/TGT-038), the `REPLY WITH` template (now including `--reply-to-message-id` - TGT-040), non-fatal error handling for voice/media, a specific error for files over Telegram's 20MB `getFile` limit (TGT-037). `run_once_safe` wraps it so a transient failure (network blip, etc.) is logged as `POLL ERROR` and retried after a short backoff instead of killing the poller (TGT-028). |
 | `D2TG::Store` | SQLite-backed allow-list/pending/offset/message-history persistence; `approve` is atomic and rolls back cleanly on any failure; `record_message`/`get_message` store a short summary of each processed message keyed by chat_id+message_id (TGT-038); `mark_read`/`is_read` track read/unread status, set only after a reply actually succeeds (TGT-046); `unread_messages` lists every not-yet-read message, oldest first (TGT-047; ties on the same-second `created_at` broken by `message_id` ascending, TGT-075); `recent_messages`/`messages_in_range` back `d2 tg.history`'s default-last-10 and date-range views (TGT-048; `messages_in_range` shares the same same-second `message_id` tiebreaker, TGT-075); `admin_chat_id` (constructor) also accepts an arrayref to seed multiple chat ids allowed; `get_offset`/`set_offset` accept an optional per-bot key (SHA256-hashed before storage, never plaintext) for independent multi-bot offsets (TGT-049); `disconnect` closes the DB handle cleanly (used before the poller re-execs itself, TGT-036). |

@@ -55,8 +55,9 @@ sub state_db_path {
     my (%args) = @_;
 
     if ( defined $args{base_dir} ) {
-        make_path( $args{base_dir} ) unless -d $args{base_dir};
-        return File::Spec->catfile( $args{base_dir}, 'store.sqlite' );
+        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
+        make_path($vault_dir) unless -d $vault_dir;
+        return File::Spec->catfile( $vault_dir, 'telegram.messages.db' );
     }
 
     my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
@@ -72,9 +73,13 @@ sub state_db_path {
 sub attachments_dir {
     my (%args) = @_;
 
-    my $skill_root = defined $args{base_dir}
-      ? $args{base_dir}
-      : ( $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} // $args{default_root} // '.' );
+    if ( defined $args{base_dir} ) {
+        my $dir = File::Spec->catdir( $args{base_dir}, '.tira', 'attachments' );
+        make_path($dir) unless -d $dir;
+        return $dir;
+    }
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} // $args{default_root} // '.';
 
     my $dir = File::Spec->catdir( $skill_root, 'files' );
     make_path($dir) unless -d $dir;
@@ -150,9 +155,14 @@ sub resolve_alias_dir {
     my (%args) = @_;
 
     my $alias = $args{alias} // $ENV{D2TG_DB};
-    die "D2TG_DB (or --db/-d <alias>) is not set - refusing to start. "
-      . "Run 'd2 paths' to see valid aliases.\n"
-      unless defined $alias && length $alias;
+
+    if ( !defined $alias || !length $alias ) {
+        my $tira_home = exists $args{tira_home} ? $args{tira_home} : $ENV{TIRA_HOME};
+        return $tira_home if defined $tira_home && length $tira_home;
+
+        die "D2TG_DB (or --db/-d <alias>) is not set - refusing to start. "
+          . "Run 'd2 paths' to see valid aliases.\n";
+    }
 
     my $paths = $args{paths} || _developer_dashboard_paths();
     my $dir   = $paths->{$alias};
@@ -232,9 +242,11 @@ C<base_dir>, this is C<state/store.sqlite> under the skill root
 given C<default_root> - callers typically pass
 C<File::Spec-E<gt>catdir($Bin, '..')> for this), matching the original
 behavior exactly. With an explicit C<base_dir> (TGT-051, from a resolved
-C<--db>/C<-d>/C<D2TG_DB> alias - see C<resolve_alias_dir>), the file is
-C<store.sqlite> directly under C<base_dir>, no C<state/> subdirectory.
-Creates whichever directory it resolves to if missing. All of
+C<--db>/C<-d>/C<D2TG_DB> alias, or a C<TIRA_HOME> fallback - see
+C<resolve_alias_dir>), the file is C<telegram.messages.db> under a
+C<.tira/> subdirectory of C<base_dir> (TGT-081, a live user request -
+was C<store.sqlite> directly under C<base_dir>, no subdirectory, before
+this ticket). Creates whichever directory it resolves to if missing. All of
 C<cli/poller>, C<cli/reply>, C<cli/approve>, C<cli/unread>,
 C<cli/history> use this so the resolution logic exists in exactly one
 place.
@@ -251,10 +263,12 @@ invocation can trigger it.
 
 Resolves and returns the directory downloaded attachments (TGT-051)
 should live in, creating it if missing. Mirrors C<state_db_path>'s own
-resolution exactly: C<files/> under C<base_dir> if given, otherwise
-C<files/> under the skill root (C<DEVELOPER_DASHBOARD_SKILL_ROOT> or
-C<default_root>) - and, like C<state_db_path>, the C<base_dir>-omitted
-branch is test-only as of TGT-059, for the same reason.
+resolution exactly: C<.tira/attachments> under C<base_dir> if given
+(TGT-081 - was C<files/> directly under C<base_dir> before this
+ticket), otherwise C<files/> under the skill root
+(C<DEVELOPER_DASHBOARD_SKILL_ROOT> or C<default_root>) - and, like
+C<state_db_path>, the C<base_dir>-omitted branch is test-only as of
+TGT-059, for the same reason.
 
 =head2 shift_flag_value($args_arrayref, $flag_label)
 
@@ -381,12 +395,23 @@ into C<Developer::Dashboard>'s C<d2()-E<gt>paths>; tests inject a plain
 hashref here instead, so this function - and every caller of it - never
 needs a real Developer Dashboard environment to be unit-tested.
 
+When neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all,
+falls back to C<$ENV{TIRA_HOME}> as the base_dir directly (TGT-081, a
+live user request) instead of refusing - C<TIRA_HOME> is already a
+filesystem path, not a C<d2 paths> alias name, so it's returned as-is
+rather than looked up. Pass C<tira_home> explicitly to override
+C<$ENV{TIRA_HOME}> for testing, same pattern as C<alias>/C<paths>. Only
+consulted when no alias was given at all - an explicit C<alias> or
+C<D2TG_DB> always takes priority, and an unknown alias still refuses
+exactly as before, never falling through to C<TIRA_HOME>.
+
 Dies with a clear message pointing at C<d2 paths> in two cases (TGT-059):
-when neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all -
-mandatory, matching C<D2TG_CHAT_ID>'s existing hard-guard pattern; the
-owner's original request, which TGT-051's first shipped version missed
-by silently returning C<undef> (falling back to the skill's own install
-directory) in this exact case - or when an alias I<is> given but isn't a
+when neither an explicit C<alias> nor C<$ENV{D2TG_DB}> is given at all
+AND C<TIRA_HOME> isn't set either - mandatory, matching
+C<D2TG_CHAT_ID>'s existing hard-guard pattern; the owner's original
+request, which TGT-051's first shipped version missed by silently
+returning C<undef> (falling back to the skill's own install directory)
+in this exact case - or when an alias I<is> given but isn't a
 recognized path (unchanged since TGT-051). There is no longer any input
 that returns C<undef> - every C<d2 tg.*> command's C<eval { ... }>
 wrapper around this call turns either die into a clean refusal (STDERR
