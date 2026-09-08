@@ -836,3 +836,18 @@ Revision history for the tg skill
         requires no environment variables at all - unlike every other
         d2 tg.* command, it does not need --db/-d/D2TG_DB, since it
         touches no state, network, or credentials.
+
+0.66  2026-09-08
+      - FIX (TGT-090, live user request + live reproduction): a resolved
+        --db/-d/D2TG_DB alias's target directory, or a TIRA_HOME
+        fallback, is now confirmed to already exist before any d2 tg.*
+        command proceeds. Reproduced live in a tira:latest container:
+        TIRA_HOME=foobar previously made d2 tg.unread silently mkdir -p
+        ./foobar/.tira/ and create telegram.messages.db inside it,
+        rooted wherever the current working directory happened to be.
+        New D2TG::Config::require_existing_base_dir, called by every
+        cli/* script immediately after resolve_alias_dir, dies naming
+        the missing directory instead. The .tira/ subdirectory itself is
+        still created as before once the base directory is confirmed
+        real - only the base directory's own existence was never
+        checked.

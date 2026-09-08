@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.65).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.66).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -48,7 +48,9 @@ Set these environment variables before starting the poller:
   choices) naming where the skill's SQLite state and downloaded
   attachments live. **Required** (TGT-059) — every `d2 tg.*` command
   refuses to start and prints a warning if neither this nor `--db
-  <alias>`/`-d <alias>` is given.
+  <alias>`/`-d <alias>` is given. Its resolved directory (or a
+  `TIRA_HOME` fallback) must already exist — it's looked up, never
+  created (TGT-090).
 
 ## Running
 

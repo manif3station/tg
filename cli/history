@@ -23,6 +23,12 @@ if ($@) {
     exit 1;
 }
 
+eval { D2TG::Config::require_existing_base_dir($base_dir) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 my ( $since, $until );
 {
     my @rest;
@@ -82,7 +88,9 @@ history - view past messages by date range, dispatched as C<d2 tg.history>
 
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback) resolves the same way C<d2 tg.poller>'s does - see
-L<D2TG::Config/resolve_alias_dir>.
+L<D2TG::Config/resolve_alias_dir>. The resolved directory (or a
+C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
+rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>).
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without C<--since>/C<--until>

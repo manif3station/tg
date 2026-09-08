@@ -47,6 +47,12 @@ if ($@) {
     exit 1;
 }
 
+eval { D2TG::Config::require_existing_base_dir($base_dir) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@ARGV);
 
 if ( !defined $chat_id
@@ -96,7 +102,10 @@ C<cli/tg.*> entrypoints. This is deliberate, for the same reason
 C<--reply-to-message-id> is trailing-only (TGT-042): a whole-list scan
 here could misinterpret reply text that happens to contain the literal
 token C<--db> as multiple unquoted shell words. Resolution otherwise
-matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>. C<--bot
+matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>. The
+resolved directory (or a C<TIRA_HOME> fallback) must already exist -
+refuses to start otherwise rather than creating it (TGT-090, see
+L<D2TG::Config/require_existing_base_dir>). C<--bot
 <token>> (TGT-057) is recognized the same leading way, in either order
 relative to C<--db>/C<-d>, and sends via that token instead of
 C<D2TG_TOKEN> - required to reply to a message received under C<d2

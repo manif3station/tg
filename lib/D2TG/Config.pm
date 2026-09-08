@@ -192,6 +192,17 @@ sub resolve_alias_dir {
     return $dir;
 }
 
+sub require_existing_base_dir {
+    my ($base_dir) = @_;
+
+    return $base_dir if -d $base_dir;
+
+    die "Storage location '$base_dir' does not exist - refusing to start. "
+      . "This resolves a --db/-d/D2TG_DB alias or a TIRA_HOME fallback to a "
+      . "real, already-existing directory; it never creates one. Check the "
+      . "value (typo?) or create the directory yourself first.\n";
+}
+
 sub _developer_dashboard_paths {
     require Developer::Dashboard;
     return Developer::Dashboard::d2()->paths;
@@ -450,6 +461,31 @@ recognized path (unchanged since TGT-051). There is no longer any input
 that returns C<undef> - every C<d2 tg.*> command's C<eval { ... }>
 wrapper around this call turns either die into a clean refusal (STDERR
 message, exit 1) before any state is ever touched.
+
+Note that C<resolve_alias_dir> itself never checks whether the
+directory it returns actually exists - see L</require_existing_base_dir>
+below, which every C<cli/*> script calls immediately afterward to close
+that gap (TGT-090).
+
+=head2 require_existing_base_dir($base_dir)
+
+Dies with a clear message naming C<$base_dir> if it is not already a
+real, existing directory; otherwise returns C<$base_dir> unchanged
+(TGT-090, a live user request + live reproduction). Every C<cli/*>
+script calls this immediately after L</resolve_alias_dir> returns, so a
+resolved base directory - whether a C<--db>/C<-d>/C<D2TG_DB> alias's
+real path or a C<TIRA_HOME> fallback - is always confirmed to already
+exist before anything is written under it. Before this existed,
+C<TIRA_HOME>'s value was used completely unvalidated, and
+C<state_db_path>/C<attachments_dir>/C<lock_path>'s own C<make_path>
+calls on the C<.tira/> subdirectory would silently create the entire
+tree - including a C<TIRA_HOME> base directory that had never actually
+existed. Reproduced live: C<TIRA_HOME=foobar> made C<d2 tg.unread>
+silently C<mkdir -p ./foobar/.tira/> and create
+C<telegram.messages.db> inside it. This function does not affect the
+C<.tira/> subdirectory itself - that is still created as normal once
+C<$base_dir> is confirmed real; only the base directory itself must
+pre-exist.
 
 =head2 skill_version(default_root => $path)
 

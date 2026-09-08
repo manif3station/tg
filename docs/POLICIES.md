@@ -180,6 +180,28 @@ a new `D2TG::Config::lock_path` that mirrors `state_db_path`/
 `attachments_dir`'s own pattern exactly. All three vault-resident
 artifacts are consistently nested under `.tira/` as of this ticket.
 
+**Update, TGT-090 (2026-09-08), live user request + live reproduction:**
+resolving a base directory - either a `--db`/`-d`/`D2TG_DB` alias's real
+path, or the `TIRA_HOME` fallback above - must be pure lookup, never
+creation. Michael: *"tg.* will not create any folder. It take the value
+of them as alias and resolve the path and start running on it. No
+mkdir."* Before this fix, that wasn't true: `TIRA_HOME`'s value was
+used completely unvalidated, and `state_db_path`/`attachments_dir`/
+`lock_path`'s own `make_path` calls on the `.tira/` subdirectory would
+silently create the *entire* tree - including a `TIRA_HOME` base
+directory that had never actually existed. Reproduced live in a
+`tira:latest` container: `TIRA_HOME=foobar` (a bogus relative path) made
+`d2 tg.unread` silently `mkdir -p ./foobar/.tira/` and create
+`telegram.messages.db` inside it, rooted at whatever the current
+working directory happened to be, with no error and no confirmation.
+Fixed with a new `D2TG::Config::require_existing_base_dir`, called by
+every `cli/*` script immediately after `resolve_alias_dir` returns: it
+dies if the resolved base_dir is not already a real, existing
+directory. The `.tira/` subdirectory *under* an already-real base_dir is
+still created as before - that's this skill's own controlled state
+folder, not the bug; the bug was the base_dir itself never being
+checked to actually pre-exist.
+
 ## A content-addressed download can never leave a corrupted, silently-trusted file
 
 Live-reproduced finding (TGT-080): a process killed mid-download used

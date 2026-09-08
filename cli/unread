@@ -23,6 +23,12 @@ if ($@) {
     exit 1;
 }
 
+eval { D2TG::Config::require_existing_base_dir($base_dir) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
         default_root => File::Spec->catdir( $Bin, '..' ),
@@ -54,7 +60,9 @@ unread - list new/non-replied messages, dispatched as C<d2 tg.unread>
 
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback) resolves the same way C<d2 tg.poller>'s does - see
-L<D2TG::Config/resolve_alias_dir>.
+L<D2TG::Config/resolve_alias_dir>. The resolved directory (or a
+C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
+rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>).
 
 Lists every message L<D2TG::Store> has recorded (TGT-038) that has not
 been marked read (TGT-046, via a successful C<d2 tg.reply
