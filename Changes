@@ -776,3 +776,19 @@ Revision history for the tg skill
         a text-only outcome (Telegram messages can't be unsent), but
         send_reply still dies/propagates the failure loudly so cli/reply
         never falsely reports success.
+
+0.61  2026-09-08
+      - FIX (TGT-084, live user request + live production incident):
+        D2TG::Lock::acquire no longer refuses to start when it finds a
+        live conflicting PID - "last one wins": it SIGKILLs the existing
+        holder, waits in a bounded loop for it to actually die, then
+        reclaims the lock. Fixes a real production failure loop where a
+        monitor job kept restarting d2 tg.poller while a still-live
+        previous instance held the lock, and the old refuse-to-start
+        behavior meant every restart attempt just failed again
+        ("D2TG::Lock: could not acquire ... - contended for too long").
+        Also hardened the pre-existing stale-lock reclaim path to be
+        atomic (unlink + retry the kernel-atomic O_CREAT|O_EXCL create,
+        instead of a non-atomic overwrite) - TGT-084 makes several live
+        processes reaching that path at the same instant a real,
+        exercised scenario for the first time.

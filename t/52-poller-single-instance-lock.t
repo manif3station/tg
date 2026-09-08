@@ -42,12 +42,25 @@ require D2TG::Lock;
     print {$fh} "$child_pid\n";
     close $fh;
 
-    eval { D2TG::Lock::acquire($lock) };
-    like( $@, qr/Another d2 tg\.poller \(PID $child_pid\)/, 'a second acquire refuses, naming the live PID' );
-    like( $@, qr/kill $child_pid/, 'the refusal message includes the kill command' );
+    # TGT-084 (live user request + live production incident): "last one
+    # wins" - a second acquire() no longer refuses, it kills the
+    # existing live holder and takes over.
+    ok( D2TG::Lock::acquire($lock), 'a second acquire() takes over from an existing live holder instead of refusing (TGT-084)' );
 
-    kill 'KILL', $child_pid;
+    my $dead_tries = 0;
+    while ( $dead_tries++ < 100 && kill( 0, $child_pid ) ) {
+        select( undef, undef, undef, 0.01 );
+    }
+    ok( !kill( 0, $child_pid ), 'the existing live holder was actually killed' );
+
+    open my $fh2, '<', $lock or die $!;
+    my $pid = <$fh2>;
+    close $fh2;
+    chomp $pid;
+    is( $pid, $$, 'the lock file now names our own PID' );
+
     waitpid( $child_pid, 0 );
+    D2TG::Lock::release($lock);
 }
 
 {

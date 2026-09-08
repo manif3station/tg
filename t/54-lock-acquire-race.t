@@ -16,6 +16,20 @@ require D2TG::Lock;
 # Fork N real children, hold them all at a starting gate via a shared
 # pipe, then release them simultaneously to race for the same lock -
 # with the fix (O_CREAT|O_EXCL), exactly one must win.
+#
+# TGT-084 update: "last one wins" means a racer that finds another
+# racer's freshly-written PID alive now kills and retakes it instead of
+# refusing, so more than one caller can transiently believe it won
+# before being pre-empted itself - "exactly one call to acquire() ever
+# returns true" is no longer the invariant to check. What must still
+# hold (and is what TGT-064 actually cared about) is that once the race
+# settles, exactly one process is left alive holding the lock. Racers
+# are launched via a double-fork so each is reparented to init rather
+# than staying a sibling of the others - this matches the real topology
+# (an old poller and its replacement are unrelated processes) and
+# matters mechanically: kill(0,$pid) keeps reporting a killed process as
+# "alive" until something reaps it, and only its real parent can do
+# that.
 {
     my $dir  = tempdir( CLEANUP => 1 );
     my $lock = File::Spec->catfile( $dir, 'poller.pid' );
@@ -23,51 +37,90 @@ require D2TG::Lock;
     my $n = 8;
     pipe( my $gate_read, my $gate_write ) or die "pipe: $!";
 
-    my @pids;
+    my @worker_pids;
     for ( 1 .. $n ) {
-        my $pid = fork();
-        die "fork failed: $!" unless defined $pid;
+        pipe( my $announce_read, my $announce_write ) or die "pipe: $!";
 
-        if ( $pid == 0 ) {
-            close $gate_write;
-            my $buf;
-            sysread( $gate_read, $buf, 1 );    # block until the gate opens
-            close $gate_read;
+        my $launcher_pid = fork();
+        die "fork failed: $!" unless defined $launcher_pid;
 
-            my $ok = eval { D2TG::Lock::acquire($lock) };
+        if ( $launcher_pid == 0 ) {
+            close $announce_read;
 
-            # A winner must stay alive for longer than any loser's retry
-            # loop could possibly run (50 retries * 10ms = 500ms max) -
-            # otherwise a loser can legitimately see this process as
-            # already-dead mid-race and correctly reclaim the lock, which
-            # is D2TG::Lock's own by-design stale-lock recovery, not the
-            # atomicity bug this test targets. A real d2 tg.poller stays
-            # alive for its whole polling loop, never exiting a moment
-            # after acquiring the lock the way a naive test process would.
-            sleep 1 if $ok;
+            my $worker_pid = fork();
+            die "fork failed: $!" unless defined $worker_pid;
 
-            exit( $ok ? 0 : 1 );
+            if ( $worker_pid == 0 ) {
+                close $announce_write;
+                close $gate_write;
+                my $buf;
+                sysread( $gate_read, $buf, 1 );    # block until the gate opens
+                close $gate_read;
+
+                eval { D2TG::Lock::acquire($lock) };
+
+                # Whether this racer won outright, was pre-empted
+                # mid-race, or lost outright, just sit here - the test
+                # process inspects who is still alive once the dust
+                # settles.
+                sleep 5;
+                exit 0;
+            }
+
+            print {$announce_write} "$worker_pid\n";
+            close $announce_write;
+            exit 0;    # orphan the worker before it even reaches the gate
         }
 
-        push @pids, $pid;
+        close $announce_write;
+        my $worker_pid = <$announce_read>;
+        chomp $worker_pid;
+        close $announce_read;
+
+        waitpid( $launcher_pid, 0 );    # reap the launcher right away
+        push @worker_pids, $worker_pid;
     }
 
     close $gate_read;
     close $gate_write;    # closing without writing releases every reader at once (EOF)
 
-    my $wins = 0;
-    for my $pid (@pids) {
-        waitpid( $pid, 0 );
-        $wins++ if ( $? >> 8 ) == 0;
+    # Give the cascade of kill-and-reclaim takeovers (TGT-084) time to
+    # fully settle. Each racer's own acquire() call can, in the worst
+    # case, need to kill-and-wait for several other racers in turn
+    # before it either wins or is itself killed, and that wait scales
+    # with how slow the environment is (e.g. under Devel::Cover
+    # instrumentation, or parallel `prove -j` contention) - so poll for
+    # convergence with a generous overall budget instead of a fixed
+    # short sleep. "Settled" means BOTH exactly one worker is alive AND
+    # the lock file already names that same survivor and stays that way
+    # across a short confirmation window - a laggard racer still deep in
+    # its own retry loop can still preempt the current apparent survivor
+    # a moment later, so checking alive-count alone, once, is not enough.
+    my $read_lock_pid = sub {
+        open my $fh, '<', $lock or return undef;
+        my $pid = <$fh>;
+        close $fh;
+        return undef unless defined $pid;
+        chomp $pid;
+        return $pid;
+    };
+
+    my $deadline = time() + 30;
+    my ( @alive, $winner_pid );
+    while ( time() < $deadline ) {
+        @alive      = grep { kill( 0, $_ ) } @worker_pids;
+        $winner_pid = $read_lock_pid->();
+        last
+          if @alive == 1
+          && defined $winner_pid
+          && $winner_pid == $alive[0];
+        select( undef, undef, undef, 0.05 );
     }
 
-    is( $wins, 1, "exactly one of $n racing processes wins the lock" );
+    is( scalar @alive, 1, "exactly one of $n racing processes is still alive once the race settles" );
+    is( $winner_pid, $alive[0], 'the lock file names exactly the one surviving process' );
 
-    open my $fh, '<', $lock or die $!;
-    my $winner_pid = <$fh>;
-    close $fh;
-    chomp $winner_pid;
-    ok( ( grep { $_ == $winner_pid } @pids ), 'the lock file names one of the actual racing children' );
+    kill( 'KILL', $_ ) for @worker_pids;
 }
 
 # Exhausted-retries path: a lock file that exists but never contains a

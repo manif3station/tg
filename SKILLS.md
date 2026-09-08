@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.60).** This file is a procedure to
+**Status: early implementation (v0.61).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -174,6 +174,11 @@ Have the user note the printed `JOB-NNN` id - it's needed for
   terminal.
 - No systemd unit, no crontab entry is created or needed anywhere - this
   is deliberate (Q-003).
+- If the monitor job restarts `d2 tg.poller` while a previous instance is
+  still alive, the new instance takes over automatically (TGT-084 -
+  "last one wins": it kills the still-live previous instance rather than
+  failing to acquire the lock and looping on
+  `D2TG::Lock: could not acquire ... - contended for too long`).
 
 This exact wiring was verified live in a `developer-dashboard:latest`
 container (TGT-015).
