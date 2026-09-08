@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.74).** Inbound voice-note
+**Status: early implementation (v0.75).** The multi-bot allow-list is
+now scoped per bot (`chat_id`, `bot_key`) rather than by `chat_id`
+alone - a Telegram group shared by more than one of this skill's
+configured bots no longer leaks an approval from one bot to another
+(TGT-098, found via a scheduled bug-hunt investigating multi-bot
+interactions). `cli/approve` gains an optional `--bot <token>` flag,
+matching `cli/reply`'s own; omitting it behaves exactly as before for
+every single-bot install. Inbound voice-note
 transcription now automatically retries at a faster Whisper model when
 the current one times out (`medium` → `small` → `base`), instead of
 failing outright - per-host Whisper throughput varies too much for a

@@ -56,8 +56,8 @@ sub run_once {
 
         my $ts = _timestamp_prefix($message);
 
-        if ( $store && !$store->is_allowed($chat_id) ) {
-            if ( $store->add_pending($chat_id) ) {
+        if ( $store && !$store->is_allowed( $chat_id, $bot_token ) ) {
+            if ( $store->add_pending( $chat_id, $bot_token ) ) {
                 print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
             }
             next;
@@ -345,7 +345,10 @@ C<run_once> unchanged.
 Takes a L<D2TG::Telegram>-shaped object (anything with a C<get_updates>
 method matching that signature), the current offset, and an optional
 L<D2TG::Store>-shaped object (anything with C<is_allowed>/C<add_pending>
-methods). When C<$store> is given, a sender not in its allow-list is
+methods). When C<$store> is given, a sender not in its allow-list
+(scoped by C<bot_token>, TGT-098 - the pair's own bot key, already
+computed for multi-bot mode per TGT-049, now threaded into the store so
+a chat_id approved under one bot never grants access under another) is
 recorded via C<add_pending>, printing the one-time pending notification
 described above but never the message text; when omitted, every
 sender's text is printed unconditionally (used by earlier tests only -

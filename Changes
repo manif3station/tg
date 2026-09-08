@@ -964,3 +964,25 @@ Revision history for the tg skill
         immediately, before the (potentially multi-minute, blocking)
         transcription call, instead of the watched stream staying
         silent until the real transcript line arrives afterward.
+
+0.75  2026-09-08
+      - BUGFIX (TGT-098, found via a scheduled hourly bug-hunt
+        investigating cross-module interactions between multi-bot
+        support and access control): D2TG::Store's allow_list/pending
+        tables were keyed only by chat_id, no bot dimension. A Telegram
+        GROUP chat's chat_id is shared across every bot that's a member
+        of it (unlike a private chat's id, which Telegram allocates
+        uniquely per bot) - so approving a group for one of this
+        skill's configured bots silently also approved it for every
+        other bot sharing the same store. Both tables now carry a
+        composite (chat_id, bot_key) PRIMARY KEY, migrated in place
+        from any pre-existing single-column-PK database (SQLite can't
+        ALTER a PRIMARY KEY, so a pre-migration table is rebuilt:
+        renamed aside, replaced, every row copied across with
+        bot_key='' - the single-bot/unscoped sentinel, deliberately not
+        SQL NULL since SQLite's uniqueness checks don't treat two NULLs
+        as equal). is_allowed/add_pending/approve/_seed_admin all gain
+        an optional bot_key parameter; cli/approve gains an optional
+        --bot <token> flag (matching cli/reply's own, TGT-057) that
+        defaults to the single-bot sentinel when omitted - unchanged
+        behavior for every existing single-bot install.

@@ -30,10 +30,18 @@ sub _ensure_schema {
     my ($self) = @_;
 
     $self->{dbh}->do(
-        'CREATE TABLE IF NOT EXISTS allow_list (chat_id INTEGER PRIMARY KEY)'
+        'CREATE TABLE IF NOT EXISTS allow_list (
+             chat_id INTEGER NOT NULL,
+             bot_key TEXT NOT NULL DEFAULT \'\',
+             PRIMARY KEY (chat_id, bot_key)
+         )'
     );
     $self->{dbh}->do(
-        'CREATE TABLE IF NOT EXISTS pending (chat_id INTEGER PRIMARY KEY)'
+        'CREATE TABLE IF NOT EXISTS pending (
+             chat_id INTEGER NOT NULL,
+             bot_key TEXT NOT NULL DEFAULT \'\',
+             PRIMARY KEY (chat_id, bot_key)
+         )'
     );
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)'
@@ -55,43 +63,94 @@ sub _ensure_schema {
     }
     die $@ if $@ && $@ !~ /duplicate column name/;
 
+    # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
+    # only by chat_id (a single-column PRIMARY KEY), which silently let
+    # an approval leak across bots for a Telegram group shared by more
+    # than one of this skill's configured bots (a group's chat_id is
+    # the same for every bot, unlike a private chat's). A PRIMARY KEY
+    # change can't be done via ALTER TABLE in SQLite, so a
+    # pre-migration table (no bot_key column, detected via PRAGMA
+    # table_info - the CREATE TABLE IF NOT EXISTS above is a no-op
+    # against an existing old-shape table) is rebuilt: renamed aside,
+    # replaced with the new composite-PK shape, every existing row
+    # copied across with bot_key='' (the single-bot/unscoped sentinel -
+    # not SQL NULL, since SQLite's uniqueness checks don't treat two
+    # NULLs as equal, which would silently defeat this exact PRIMARY
+    # KEY), old table dropped - the whole rename/create/copy/drop
+    # sequence wrapped in one transaction so a failure partway through
+    # can never orphan the old data in a renamed-aside table while a
+    # fresh, empty new-shape table silently appears on the next run
+    # instead of the failure being noticed.
+    for my $table (qw(allow_list pending)) {
+        my $cols = $self->{dbh}->selectall_arrayref( "PRAGMA table_info($table)", { Slice => {} } );
+        next if grep { $_->{name} eq 'bot_key' } @$cols;
+
+        # Wrapped in a transaction (SQLite DDL is transactional) so a
+        # crash mid-migration can never leave the old data orphaned in a
+        # renamed-aside table while a fresh, empty new-shape table gets
+        # silently created on the next run instead of being noticed.
+        $self->{dbh}->begin_work;
+        eval {
+            $self->{dbh}->do("ALTER TABLE $table RENAME TO ${table}_pre_tgt098");
+            $self->{dbh}->do(
+                "CREATE TABLE $table (
+                     chat_id INTEGER NOT NULL,
+                     bot_key TEXT NOT NULL DEFAULT '',
+                     PRIMARY KEY (chat_id, bot_key)
+                 )"
+            );
+            $self->{dbh}->do("INSERT INTO $table (chat_id, bot_key) SELECT chat_id, '' FROM ${table}_pre_tgt098");
+            $self->{dbh}->do("DROP TABLE ${table}_pre_tgt098");
+            $self->{dbh}->commit;
+        };
+        if ($@) {
+            my $error = $@;
+            eval { $self->{dbh}->rollback };
+            die $error;
+        }
+    }
+
     return;
 }
 
 sub _seed_admin {
-    my ( $self, $admin_chat_id ) = @_;
+    my ( $self, $admin_chat_id, $bot_key ) = @_;
+    $bot_key = '' unless defined $bot_key;
 
     $self->{dbh}->do(
-        'INSERT OR IGNORE INTO allow_list (chat_id) VALUES (?)',
-        undef, $admin_chat_id,
+        'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
+        undef, $admin_chat_id, $bot_key,
     );
 
     return;
 }
 
 sub is_allowed {
-    my ( $self, $chat_id ) = @_;
+    my ( $self, $chat_id, $bot_key ) = @_;
+    $bot_key = '' unless defined $bot_key;
 
     my ($found) = $self->{dbh}->selectrow_array(
-        'SELECT 1 FROM allow_list WHERE chat_id = ?', undef, $chat_id,
+        'SELECT 1 FROM allow_list WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
     );
 
     return $found ? 1 : 0;
 }
 
 sub add_pending {
-    my ( $self, $chat_id ) = @_;
+    my ( $self, $chat_id, $bot_key ) = @_;
+    $bot_key = '' unless defined $bot_key;
 
     my $inserted = $self->{dbh}->do(
-        'INSERT OR IGNORE INTO pending (chat_id) VALUES (?)',
-        undef, $chat_id,
+        'INSERT OR IGNORE INTO pending (chat_id, bot_key) VALUES (?, ?)',
+        undef, $chat_id, $bot_key,
     );
 
     return $inserted && $inserted ne '0E0' ? 1 : 0;
 }
 
 sub approve {
-    my ( $self, $chat_id ) = @_;
+    my ( $self, $chat_id, $bot_key ) = @_;
+    $bot_key = '' unless defined $bot_key;
 
     my $dbh = $self->{dbh};
 
@@ -99,7 +158,7 @@ sub approve {
 
     my $result = eval {
         my $deleted = $dbh->do(
-            'DELETE FROM pending WHERE chat_id = ?', undef, $chat_id,
+            'DELETE FROM pending WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
         );
 
         if ( $deleted == 0 ) {
@@ -108,8 +167,8 @@ sub approve {
         }
 
         $dbh->do(
-            'INSERT OR IGNORE INTO allow_list (chat_id) VALUES (?)',
-            undef, $chat_id,
+            'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
+            undef, $chat_id, $bot_key,
         );
         $dbh->commit;
         return 1;
@@ -300,27 +359,50 @@ C<duplicate column name> on any database that's already been migrated -
 that specific, already-handled case never reaches C<STDERR> (TGT-053,
 C<PrintError> suppressed just for that one statement); a genuinely
 different, unexpected failure still propagates via C<die> as before.
+It also re-runs C<allow_list>/C<pending>'s C<bot_key> migration
+(TGT-098) on every call, via C<PRAGMA table_info> detection rather than
+a bare C<ALTER TABLE ... ADD COLUMN> - a C<PRIMARY KEY> change can't be
+done that way in SQLite, so a pre-migration table (detected once, no
+C<bot_key> column) is rebuilt: renamed aside, replaced with the new
+composite-C<(chat_id, bot_key)>-PK shape, every row copied across with
+C<bot_key=''>, old table dropped, the whole sequence wrapped in one
+transaction so a failure partway through rolls back to the untouched
+original state (a genuine, testable concern for a rename/create/copy/drop
+sequence, unlike the single-statement C<ADD COLUMN> migration above) -
+re-opening after a failed attempt migrates cleanly from scratch rather
+than working against a half-migrated table. Already-migrated databases
+are a no-op (the C<PRAGMA> check finds C<bot_key> already present).
 
-=head2 is_allowed($chat_id)
+=head2 is_allowed($chat_id, $bot_key)
 
-True if C<$chat_id> is in the allow-list.
+True if C<$chat_id> is in the allow-list under C<$bot_key> (TGT-098,
+default C<''> - the single-bot/unscoped sentinel, so every existing
+caller that never passes C<$bot_key> is unaffected). A Telegram group
+shared by more than one of this skill's configured bots has the same
+C<$chat_id> for each - passing the actual bot's own key here is what
+stops an approval granted under one bot from silently applying to
+another.
 
-=head2 add_pending($chat_id)
+=head2 add_pending($chat_id, $bot_key)
 
-Records C<$chat_id> as pending approval. Idempotent. Returns true the
-first time a given C<$chat_id> is recorded, false on every subsequent
-call for the same id (already pending) - this is what lets a caller
-notify only once per new sender.
+Records C<$chat_id> as pending approval under C<$bot_key> (TGT-098,
+default C<''>). Idempotent. Returns true the first time a given
+C<($chat_id, $bot_key)> pair is recorded, false on every subsequent call
+for the same pair (already pending) - this is what lets a caller notify
+only once per new sender per bot.
 
-=head2 approve($chat_id)
+=head2 approve($chat_id, $bot_key)
 
-Moves C<$chat_id> from C<pending> to C<allow_list>, atomically. Returns
-true if it was genuinely pending and is now approved; returns false
-(without error) if it was not pending - already approved, or never seen.
-If anything inside the transaction throws (a transient DB error), the
-transaction is always rolled back before the error is re-thrown, so the
-Store's connection is never left in a dangling open-transaction state -
-a subsequent C<approve> call on the same object still works normally.
+Moves C<($chat_id, $bot_key)> (TGT-098, default C<''>) from C<pending>
+to C<allow_list>, atomically. Returns true if it was genuinely pending
+under that C<$bot_key> and is now approved; returns false (without
+error) if it was not pending under that C<$bot_key> - already approved
+under it, or never seen under it (a chat pending under a *different*
+bot_key doesn't count). If anything inside the transaction throws (a
+transient DB error), the transaction is always rolled back before the
+error is re-thrown, so the Store's connection is never left in a
+dangling open-transaction state - a subsequent C<approve> call on the
+same object still works normally.
 
 =head2 pending_chat_ids
 

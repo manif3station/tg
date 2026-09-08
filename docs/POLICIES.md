@@ -17,6 +17,38 @@ whenever it's running in multi-bot mode, and `d2 tg.reply` accepts that
 flag to send via the named bot instead. Single-bot/env-only mode is
 completely unaffected - no `--bot` is ever printed or required there.
 
+## Multi-bot access control is scoped per bot, not shared across them (TGT-098)
+
+Bug-hunt finding (JOB-003, cross-module interaction investigation): the
+same blind spot TGT-057 found in the multi-bot *reply* path also existed
+in *access control*. `D2TG::Store`'s `allow_list`/`pending` tables used
+to be keyed only by `chat_id` - but a Telegram **group** chat's
+`chat_id` is a property of the group itself, shared by every bot that's
+a member of it (unlike a private chat's `chat_id`, which Telegram
+allocates uniquely per bot-user pair). If a multi-bot config
+(TGT-049) had two of this skill's own bots in the same group,
+approving that group for one bot (`d2 tg.approve <chat_id>`) silently
+also approved it for the other - the operator had no way to scope the
+grant to just one bot.
+
+Both tables now carry a composite `(chat_id, bot_key)` PRIMARY KEY,
+with `bot_key=''` as the single-bot sentinel - deliberately not SQL
+`NULL`, since SQLite's own uniqueness checks don't treat two `NULL`s as
+equal, which would have silently defeated this exact constraint. A
+pre-existing database (the old single-column-PK shape) is migrated in
+place the first time it's opened: SQLite can't `ALTER` a `PRIMARY KEY`,
+so the old table is renamed aside, replaced with the new shape, every
+row copied across with `bot_key=''`, and the old table dropped -
+matching what every existing single-bot install already had, just now
+explicitly scoped. The whole rename/create/copy/drop sequence is
+wrapped in one transaction, so a failure partway through (a real
+concern, unlike the project's other, single-statement schema
+migrations) rolls back cleanly rather than leaving a half-migrated
+database - a subsequent open retries the migration from the original,
+untouched state. `d2 tg.approve` gains an optional `--bot <token>`
+flag (the same shape as `d2 tg.reply`'s own) to grant access scoped to
+one bot; omitting it behaves exactly as before this ticket.
+
 ## Access control: not everyone can talk to the bot
 
 `D2TG_CHAT_ID` is auto-seeded as allowed on every start. Any other chat
