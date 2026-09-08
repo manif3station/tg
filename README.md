@@ -1,6 +1,9 @@
 # tg
 
-**Status: early implementation (v0.79).** `d2 tg.reply --voice-only
+**Status: early implementation (v0.80).** `d2 tg.send <chat_id>
+<file_path>` pushes a local file to a chat as a Telegram photo or
+document (TGT-103, user-supplied feature-gap analysis) - the outbound
+counterpart to inbound media, which already worked fully. `d2 tg.reply --voice-only
 <chat_id> <text...>` resends just the voice half of a reply whose text
 already went out but whose voice synthesis/send then failed (TGT-109, a
 live-experienced incident) - never calling `send_message`, so it can't

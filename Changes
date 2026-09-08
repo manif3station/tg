@@ -1044,3 +1044,20 @@ Revision history for the tg skill
         `D2TG::Reply::resend_voice`, never calling `send_message`. Same
         fail-loud behavior as the normal path - a synthesis/send_voice
         failure still dies, exit non-zero, temp file still cleaned up.
+
+0.80  2026-09-08
+      - FEATURE (TGT-103, user-supplied feature-gap analysis): the old
+        ~/skills/tg blueprint had two dedicated senders for pushing a
+        local file to Telegram as a photo or document message - this
+        skill had no outbound-media primitive at all. New
+        `D2TG::Telegram::send_photo`/`send_document` (mirroring
+        `send_voice`'s own multipart pattern via a shared `_send_file`
+        helper) plus a new `d2 tg.send [--bot <token>] <chat_id>
+        <file_path> [--caption <text>] [--reply-to-message-id <id>]`
+        entrypoint. Photo vs document is decided by file extension
+        (`.jpg`/`.jpeg`/`.png`/`.gif`/`.webp` send as a photo, everything
+        else as a document) - no content sniffing needed, Telegram
+        accepts any file via `sendDocument` regardless. `chat_id` is
+        validated numeric and the file's existence is checked before any
+        network call, matching this skill's existing fail-fast
+        conventions.

@@ -878,6 +878,26 @@ failure on this path still dies loudly (non-zero exit), matching the
 normal reply's own fail-loud convention - it just never risks
 duplicating text that already reached the chat.
 
+## Pushing a local file back to a chat (TGT-103)
+
+User-supplied feature-gap analysis, 2026-09-08: the old `~/skills/tg`
+blueprint had two dedicated senders (one for images, one for any other
+file type) that took a local file path and pushed it to Telegram as a
+photo or document message. This skill had no outbound-media primitive
+at all until `d2 tg.send` - inbound media (arriving FROM the owner) has
+always worked fully via `D2TG::Download`; the gap was entirely on the
+outbound side.
+
+`D2TG::Telegram::send_photo`/`send_document` mirror `send_voice`'s own
+multipart pattern via a shared `_send_file` helper. Whether a file sends
+as a photo or a document is decided purely by its extension
+(`.jpg`/`.jpeg`/`.png`/`.gif`/`.webp` send as a photo, everything else
+as a document) - no content sniffing, since Telegram accepts any file
+type via `sendDocument` regardless of what it actually contains.
+`chat_id` is validated numeric and the file's existence on disk is
+checked before any network call, matching this skill's existing
+fail-fast conventions (the same shape as `cli/reply.pl`'s own guards).
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

@@ -192,6 +192,60 @@ sub send_voice {
     );
 }
 
+sub send_photo {
+    my ( $self, $chat_id, $file_path, %opts ) = @_;
+    return $self->_send_file( 'sendPhoto', 'photo', $chat_id, $file_path, %opts );
+}
+
+sub send_document {
+    my ( $self, $chat_id, $file_path, %opts ) = @_;
+    return $self->_send_file( 'sendDocument', 'document', $chat_id, $file_path, %opts );
+}
+
+sub _send_file {
+    my ( $self, $method, $field_name, $chat_id, $file_path, %opts ) = @_;
+
+    open my $fh, '<:raw', $file_path
+      or die "D2TG::Telegram $method: cannot read $file_path: $!\n";
+    local $/;
+    my $data = <$fh>;
+    close $fh;
+
+    my ( undef, undef, $filename ) = File::Spec->splitpath($file_path);
+    my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
+
+    my $body = "--$boundary\r\n"
+      . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
+      . "$chat_id\r\n";
+
+    if ( defined $opts{reply_to_message_id} ) {
+        die "D2TG::Telegram $method: reply_to_message_id must be numeric\n"
+          unless $opts{reply_to_message_id} =~ /^\d+$/;
+
+        $body .= "--$boundary\r\n"
+          . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
+          . "$opts{reply_to_message_id}\r\n";
+    }
+
+    if ( defined $opts{caption} && length $opts{caption} ) {
+        $body .= "--$boundary\r\n"
+          . qq{Content-Disposition: form-data; name="caption"\r\n\r\n}
+          . "$opts{caption}\r\n";
+    }
+
+    $body .= "--$boundary\r\n"
+      . qq{Content-Disposition: form-data; name="$field_name"; filename="$filename"\r\n}
+      . "Content-Type: application/octet-stream\r\n\r\n"
+      . $data . "\r\n"
+      . "--$boundary--\r\n";
+
+    return $self->_call(
+        $method, undef,
+        headers     => { 'Content-Type' => "multipart/form-data; boundary=$boundary" },
+        raw_content => $body,
+    );
+}
+
 1;
 
 =head1 NAME
