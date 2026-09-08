@@ -128,9 +128,24 @@ sub heartbeat_path {
 sub write_heartbeat {
     my ($path) = @_;
 
-    open my $fh, '>', $path or die "D2TG::Config::write_heartbeat: cannot write $path: $!\n";
-    print {$fh} time();
-    close $fh;
+    # Codex review finding (TGT-116): opening the live path with '>'
+    # truncates it before the new timestamp is written, so a concurrent
+    # 'd2 tg.status' read - or a crash between truncate and write - could
+    # see an empty file (misread as heartbeat: never) or permanently lose
+    # the last valid timestamp. Write to a temp file in the same
+    # directory, then rename() over the real path - rename is atomic on
+    # the same filesystem, so a reader never observes a partial write.
+    my $tmp_path = "$path.tmp.$$";
+
+    open my $fh, '>', $tmp_path
+      or die "D2TG::Config::write_heartbeat: cannot write $tmp_path: $!\n";
+    print {$fh} time()
+      or die "D2TG::Config::write_heartbeat: cannot write $tmp_path: $!\n";
+    close $fh
+      or die "D2TG::Config::write_heartbeat: cannot close $tmp_path: $!\n";
+
+    rename( $tmp_path, $path )
+      or die "D2TG::Config::write_heartbeat: cannot rename $tmp_path to $path: $!\n";
 
     return;
 }

@@ -21,7 +21,16 @@ use D2TG::Lock;
 # are different questions, per a real, confirmed incident this session
 # where a poller stayed alive and held its lock for 80+ minutes while
 # doing nothing at all, silently losing a message.
-use constant STALE_THRESHOLD_SECONDS => 600;
+#
+# Codex review finding: the heartbeat is written once per bot/chat pair
+# (after each pair's own run_once_safe call), not once per full poll
+# cycle - but a single pair can still legitimately take up to ~900s on
+# its own (D2TG::Transcribe's 3-tier medium->small->base retry ladder,
+# 300s per tier, for one slow voice transcription). 1200s gives genuine
+# safety margin above that worst case rather than sitting right on top
+# of it, so a healthy, actively-transcribing poller is never reported
+# STALE.
+use constant STALE_THRESHOLD_SECONDS => 1200;
 
 my $db_alias;
 while (@ARGV) {
@@ -122,7 +131,10 @@ stayed alive and held its lock for 80+ minutes while doing nothing at
 all, silently losing a message. C<heartbeat: never> means the poller has
 never completed a full poll cycle since this heartbeat file's location
 was last cleared; C<heartbeat: <N>s ago (ok)> or C<(STALE)> reports the
-age against a fixed threshold (C<STALE_THRESHOLD_SECONDS>, 600s).
+age against a fixed threshold (C<STALE_THRESHOLD_SECONDS>, 1200s - kept
+safely above the worst-case time a single bot/chat pair's own poll
+cycle can legitimately take, including a slow voice transcription's
+full retry ladder).
 
 C<--db>/C<-d> match every other C<d2 tg.*> command's own resolution
 (L<D2TG::Config/resolve_alias_dir>) - the same storage location the

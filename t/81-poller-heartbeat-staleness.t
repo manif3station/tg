@@ -93,4 +93,52 @@ require D2TG::Config;
     }
 }
 
+# Codex review finding: write_heartbeat's non-atomic '>' truncate could
+# transiently or permanently show "never" on a concurrent read or a
+# crash mid-write. Verify the fix: it writes via a temp file + rename,
+# leaves no stray temp file behind, and correctly overwrites an existing
+# heartbeat (not just creates a fresh one).
+{
+    my $dir  = tempdir( CLEANUP => 1 );
+    my $path = File::Spec->catfile( $dir, 'telegram.heartbeat' );
+
+    D2TG::Config::write_heartbeat($path);
+    my $first_age = D2TG::Config::heartbeat_age($path);
+    ok( defined $first_age, 'first write_heartbeat call produces a readable heartbeat' );
+
+    D2TG::Config::write_heartbeat($path);
+    my $second_age = D2TG::Config::heartbeat_age($path);
+    ok( defined $second_age, 'write_heartbeat overwrites an existing heartbeat file, still readable' );
+
+    opendir my $dh, $dir or die $!;
+    my @leftover_tmp = grep { /\.tmp\.\d+$/ } readdir $dh;
+    closedir $dh;
+    is_deeply( \@leftover_tmp, [], 'write_heartbeat leaves no stray .tmp.<pid> file behind' );
+}
+
+# Codex review finding: this file exercised D2TG::Config and cli/status.pl
+# directly, but never confirmed the real call site in cli/poller.pl's
+# main loop - it would still pass even if the write_heartbeat() call
+# were misplaced, made conditional, or removed. Structurally verify the
+# call sits inside the per-pair for-loop (so a heartbeat is written
+# after EACH bot/chat pair's own run_once_safe/set_offset, not only once
+# after the whole loop finishes) - the fix for the "a healthy poller can
+# be reported STALE" finding above.
+{
+    my $poller_path = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
+    open my $fh, '<', $poller_path or die $!;
+    my $source = do { local $/; <$fh> };
+    close $fh;
+
+    ok(
+        $source =~ /for\s+my\s+\$pair\s*\(\@pairs\)\s*\{.*?write_heartbeat\(\$heartbeat_path\);/s,
+        'cli/poller.pl calls write_heartbeat(...) inside the per-pair for-loop, not only after it'
+    );
+
+    ok(
+        $source =~ /write_heartbeat\(\$heartbeat_path\);\s*\}\s*D2TG::Download::prune_vault/s,
+        'the per-pair heartbeat write happens before prune_vault, still inside the pair loop body'
+    );
+}
+
 done_testing();

@@ -222,9 +222,18 @@ until ($shutting_down) {
             bot_token        => $pair->{bot_key},
         );
         $store->set_offset( $pair->{offset}, $pair->{bot_key} ) if defined $pair->{offset};
+
+        # TGT-116 (Codex review finding): written after EACH pair, not
+        # once after the whole for-loop - a single voice transcription
+        # can legitimately take up to 900s on its own (D2TG::Transcribe's
+        # 3-tier retry ladder, 300s per tier), and multiple pairs are
+        # processed serially in one cycle. Writing only once per full
+        # cycle could report a healthy, actively-working poller as STALE
+        # during exactly the kind of long-running work this project has
+        # already hit live (TGT-100).
+        D2TG::Config::write_heartbeat($heartbeat_path);
     }
     D2TG::Download::prune_vault($attachments_dir);
-    D2TG::Config::write_heartbeat($heartbeat_path);
 
     unless ($shutting_down) {
         my $current_version = D2TG::Config::skill_version( default_root => $skill_root );
