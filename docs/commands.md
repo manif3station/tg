@@ -48,8 +48,11 @@ Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
 if `D2TG_CHAT_ID` is not set AND no `--chat_id` was given on the command
 line at all (a CLI-declared group supplies its own chat id
 independently of the env var). Also acquires an exclusive lock
-(`poller.pid` under the resolved `--db`/`-d`/`D2TG_DB` storage location,
-TGT-062) before doing anything else. As of TGT-084 (a live user request
+(`.tira/telegram.pid` under the resolved `--db`/`-d`/`D2TG_DB` storage
+location, TGT-062; nested under `.tira/` as of TGT-087, matching
+TGT-081's own nesting of the vault's other files - was a flat
+`poller.pid` directly under the storage location before that) before
+doing anything else. As of TGT-084 (a live user request
 and a live production incident), starting a new `d2 tg.poller` no longer
 refuses when another instance already holds that lock and is still
 alive - it kills that instance (`SIGKILL`) and takes over: "last one

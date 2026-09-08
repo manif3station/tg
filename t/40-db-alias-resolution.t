@@ -91,6 +91,22 @@ require D2TG::Config;
 }
 
 {
+    # TGT-087: cli/poller's lock file follows the same .tira/ nesting as
+    # TGT-081's state_db_path/attachments_dir, matching Michael's own
+    # live request to finish what TGT-081 started.
+    my $dir = tempdir( CLEANUP => 1 );
+    my $lock_path = D2TG::Config::lock_path( base_dir => $dir );
+    is( $lock_path, "$dir/.tira/telegram.pid", 'lock_path with an explicit base_dir nests under .tira/ as telegram.pid (TGT-087)' );
+    ok( -d "$dir/.tira", 'lock_path creates the .tira/ directory if missing' );
+}
+
+{
+    my $dir = tempdir( CLEANUP => 1 );
+    my $lock_path = D2TG::Config::lock_path( default_root => $dir );
+    is( $lock_path, "$dir/state/poller.pid", 'lock_path without base_dir falls back to default_root/state/poller.pid, mirroring state_db_path' );
+}
+
+{
     my ( $alias, @rest ) = D2TG::Config::extract_db_flag( '--db', 'foobar', '123456', 'hello' );
     is( $alias, 'foobar', 'extract_db_flag pulls out the --db value' );
     is_deeply( \@rest, [ '123456', 'hello' ], 'extract_db_flag leaves the remaining args in order' );

@@ -171,6 +171,15 @@ poller (and every `d2 tg.*` command) still refuses to start with a
 clear error, exactly as TGT-059 originally established - there is no
 silent fallback to an undefined or default location.
 
+**Update, TGT-087 (2026-09-08), a live follow-up request:** the single-
+instance lock file (`D2TG::Lock`, TGT-062/TGT-084) was the one
+vault-resident file TGT-081 missed - it stayed flat (`poller.pid`
+directly under the base directory) while the state DB and attachments
+moved under `.tira/`. It now lives at `.tira/telegram.pid`, resolved by
+a new `D2TG::Config::lock_path` that mirrors `state_db_path`/
+`attachments_dir`'s own pattern exactly. All three vault-resident
+artifacts are consistently nested under `.tira/` as of this ticket.
+
 ## A content-addressed download can never leave a corrupted, silently-trusted file
 
 Live-reproduced finding (TGT-080): a process killed mid-download used

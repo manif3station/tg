@@ -83,4 +83,29 @@ for my $missing_value ( undef, '' ) {
     close $_ for grep { defined } ( $in, $child_out, $child_err );
 }
 
+{
+    # TGT-087 (live user request, following on from TGT-081's own vault
+    # nesting): the lock file must live at .tira/telegram.pid under the
+    # resolved vault, not the old flat poller.pid.
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN}   = 'test-token';
+    $ENV{D2TG_CHAT_ID} = '12345';
+
+    my ( $child_out, $child_err ) = ( gensym, gensym );
+    my $pid = open3( my $in, $child_out, $child_err, $poller );
+
+    my $first_line = <$child_out>;    # wait for the lock to have been acquired
+
+    my $lock_path = File::Spec->catfile( $fake_db_dir, '.tira', 'telegram.pid' );
+    my $old_path  = File::Spec->catfile( $fake_db_dir, 'poller.pid' );
+
+    ok( -e $lock_path, 'the lock file lands at .tira/telegram.pid under the resolved vault (TGT-087)' );
+    ok( !-e $old_path, 'the old flat poller.pid location is not used' );
+
+    kill 'KILL', $pid;
+    waitpid( $pid, 0 );
+
+    close $_ for grep { defined } ( $in, $child_out, $child_err );
+}
+
 done_testing();

@@ -87,6 +87,25 @@ sub attachments_dir {
     return $dir;
 }
 
+sub lock_path {
+    my (%args) = @_;
+
+    if ( defined $args{base_dir} ) {
+        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
+        make_path($vault_dir) unless -d $vault_dir;
+        return File::Spec->catfile( $vault_dir, 'telegram.pid' );
+    }
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+      // $args{default_root}
+      // '.';
+
+    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
+    make_path($state_dir) unless -d $state_dir;
+
+    return File::Spec->catfile( $state_dir, 'poller.pid' );
+}
+
 sub shift_flag_value {
     my ( $args, $flag_label ) = @_;
 
@@ -269,6 +288,21 @@ ticket), otherwise C<files/> under the skill root
 (C<DEVELOPER_DASHBOARD_SKILL_ROOT> or C<default_root>) - and, like
 C<state_db_path>, the C<base_dir>-omitted branch is test-only as of
 TGT-059, for the same reason.
+
+=head2 lock_path(default_root => $path, base_dir => $path)
+
+Resolves and returns the path to C<cli/poller>'s single-instance PID
+lock file (L<D2TG::Lock>), creating whichever directory it resolves to
+if missing. Mirrors C<state_db_path>/C<attachments_dir>'s own
+resolution exactly: with an explicit C<base_dir>, the file is
+C<telegram.pid> under a C<.tira/> subdirectory of C<base_dir> (TGT-087,
+a live user request following on from TGT-081's own vault nesting - was
+C<poller.pid> directly under C<base_dir>, no subdirectory, before this
+ticket); with no C<base_dir>, C<state/poller.pid> under the skill root
+(C<DEVELOPER_DASHBOARD_SKILL_ROOT> or the given C<default_root>). As
+with the other two resolvers, the C<base_dir>-omitted branch is
+test-only as of TGT-059 - C<cli/poller> always supplies C<base_dir> in
+practice.
 
 =head2 shift_flag_value($args_arrayref, $flag_label)
 

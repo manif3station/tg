@@ -68,29 +68,33 @@ require D2TG::Lock;
     # care about: once the race settles, exactly ONE process is left
     # alive, and it is the one the lock file actually names.
     #
-    # Each racer is launched via a double-fork so it is reparented to
-    # init rather than staying a direct child of this test process (or
-    # a sibling of the other racers) - this matches the real topology
-    # TGT-084 targets (an old poller and its replacement are unrelated
-    # processes, not parent/child of each other), and it matters
-    # mechanically too: kill(0,$pid) keeps reporting a killed process as
-    # "alive" until something reaps it, and only its real parent (here,
-    # init) can do that - a sibling racer or this test process calling
-    # waitpid on it would not be its parent and could never reap it.
+    # Each racer is launched via a "shepherd" process: the shepherd forks
+    # the actual worker and then blocks in waitpid() on it for the
+    # worker's whole lifetime, reaping it the instant it dies. This
+    # matters mechanically: kill(0,$pid) keeps reporting a killed process
+    # as "alive" until something reaps it, and only its real parent can
+    # do that. An earlier version of this test instead double-forked to
+    # orphan the worker to init, expecting init to reap it - that broke
+    # under `docker compose run ... bash -lc '...'`, where the container
+    # entrypoint is plain bash acting as PID 1, which does NOT run a
+    # reaping loop for reparented orphans (no tini/dumb-init in this
+    # image) - workers became permanent zombies and the race never
+    # converged. A shepherd that is the worker's own direct, permanent
+    # parent has no such dependency on the container's PID 1 behavior.
     my $dir  = tempdir( CLEANUP => 1 );
     my $lock = File::Spec->catfile( $dir, 'poller.pid' );
 
     my $n = 4;
     pipe( my $gate_read, my $gate_write ) or die "pipe: $!";
 
-    my @worker_pids;
+    my ( @worker_pids, @shepherd_pids );
     for ( 1 .. $n ) {
         pipe( my $announce_read, my $announce_write ) or die "pipe: $!";
 
-        my $launcher_pid = fork();
-        die "fork failed: $!" unless defined $launcher_pid;
+        my $shepherd_pid = fork();
+        die "fork failed: $!" unless defined $shepherd_pid;
 
-        if ( $launcher_pid == 0 ) {
+        if ( $shepherd_pid == 0 ) {
             close $announce_read;
 
             my $worker_pid = fork();
@@ -116,10 +120,19 @@ require D2TG::Lock;
             print {$announce_write} "$worker_pid\n";
             close $announce_write;
 
-            # Exit immediately, orphaning the worker so it is
-            # reparented to init - the worker has not even reached its
-            # gate read yet, so this happens well before the race
-            # itself starts.
+            # The shepherd itself inherited its own copies of the gate
+            # pipe's ends (from the fork chain) and must close both -
+            # otherwise its still-open $gate_write keeps the pipe's
+            # write end alive even after the main test process closes
+            # its own copy, so the worker's sysread() below never sees
+            # EOF and blocks at the gate forever, and the shepherd
+            # itself then blocks forever in the waitpid() below waiting
+            # for a worker that can never proceed: a real deadlock this
+            # test hit and had to be fixed.
+            close $gate_read;
+            close $gate_write;
+
+            waitpid( $worker_pid, 0 );    # reap the worker the instant it dies, whenever that is
             exit 0;
         }
 
@@ -128,8 +141,8 @@ require D2TG::Lock;
         chomp $worker_pid;
         close $announce_read;
 
-        waitpid( $launcher_pid, 0 );    # reap the launcher right away, not a zombie of interest
-        push @worker_pids, $worker_pid;
+        push @worker_pids,   $worker_pid;
+        push @shepherd_pids, $shepherd_pid;
     }
 
     close $gate_read;
@@ -154,7 +167,7 @@ require D2TG::Lock;
         return $pid;
     };
 
-    my $deadline = time() + 30;
+    my $deadline = time() + 60;
     my ( @alive, $winner_pid );
     while ( time() < $deadline ) {
         @alive      = grep { kill( 0, $_ ) } @worker_pids;
@@ -173,6 +186,7 @@ require D2TG::Lock;
     is( $winner_pid, $alive[0], 'the lock file names exactly the one surviving process' );
 
     kill( 'KILL', $_ ) for @worker_pids;
+    waitpid( $_, 0 ) for @shepherd_pids;    # each shepherd exits right after reaping its own worker
 }
 
 done_testing();

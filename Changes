@@ -805,3 +805,15 @@ Revision history for the tg skill
         value in multi-bot mode is consequently no longer directly
         runnable as-is; whoever runs d2 tg.reply for that chat must
         supply the real token themselves.
+
+0.63  2026-09-08
+      - FEATURE (TGT-087, live user request, following on from TGT-081's
+        own vault nesting): cli/poller's single-instance lock file moved
+        from a flat poller.pid directly under the resolved --db/-d/
+        D2TG_DB storage location to .tira/telegram.pid, matching how
+        TGT-081 already nested the vault's other files. New
+        D2TG::Config::lock_path helper mirrors state_db_path/
+        attachments_dir's own resolution pattern exactly. This is a
+        breaking layout change for an already-running poller's lock file
+        location - no migration needed, since a lock file has no
+        persistent value across a restart.

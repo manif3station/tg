@@ -47,8 +47,13 @@ if ($@) {
 # TGT-062: refuse to start a second instance against the same storage
 # location - a prior poller merely suspended (Ctrl-Z, not killed) still
 # holds a live connection to Telegram and would otherwise silently
-# compete with this one for the same bot's getUpdates slot.
-my $lock_path = File::Spec->catfile( $base_dir, 'poller.pid' );
+# compete with this one for the same bot's getUpdates slot. TGT-087: the
+# lock lives at .tira/telegram.pid under the resolved vault, matching
+# TGT-081's own nesting of the other vault-resident files.
+my $lock_path = D2TG::Config::lock_path(
+    default_root => File::Spec->catdir( $Bin, '..' ),
+    base_dir     => $base_dir,
+);
 eval { D2TG::Lock::acquire($lock_path) };
 if ($@) {
     print STDERR $@;
