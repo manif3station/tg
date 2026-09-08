@@ -817,3 +817,13 @@ Revision history for the tg skill
         breaking layout change for an already-running poller's lock file
         location - no migration needed, since a lock file has no
         persistent value across a restart.
+
+0.64  2026-09-08
+      - DOC ACCURACY (TGT-088, found via JOB-005's scheduled doc-accuracy
+        hunt): docs/commands.md's module reference table still described
+        D2TG::Reply::send_reply as "voice sent first, text only after
+        voice succeeds; never text-only" - stale since TGT-083 reversed
+        that order. Corrected to describe the current text-first order
+        and its narrowed guarantee. Also added D2TG::Config's new
+        lock_path helper (TGT-087) to its table row, which had been
+        missing.
