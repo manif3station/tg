@@ -3,8 +3,10 @@ use warnings;
 use Test::More;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
+use lib "$Bin/lib";
 use File::Spec;
 use File::Temp qw(tempfile tempdir);
+use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 require D2TG::Store;
 
@@ -58,13 +60,7 @@ sub fresh_db_path {
     $ENV{D2TG_CHAT_ID}                   = '999';
     $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} = $skill_root;
 
-    # TGT-059: --db/-d/D2TG_DB is now mandatory, so cli/approve below
-    # needs it resolvable without a real Developer Dashboard install -
-    # see t/lib/Developer/Dashboard.pm.
-    $ENV{PERL5LIB} = join( ':', File::Spec->catdir( $Bin, 'lib' ), $ENV{PERL5LIB} // '' );
-    $ENV{D2TG_DB}            = 'testalias';
-    $ENV{D2TG_TEST_DB_ALIAS} = 'testalias';
-    $ENV{D2TG_TEST_DB_DIR}   = $skill_root;
+    setup_mandatory_db_env( $Bin, $skill_root );
 
     my $db_path = File::Spec->catfile( $skill_root, 'store.sqlite' );
     D2TG::Store->new( db_path => $db_path, admin_chat_id => 999 )->add_pending(444);

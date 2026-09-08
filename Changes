@@ -705,3 +705,15 @@ Revision history for the tg skill
         even though D2TG::Reply.pm's own POD already documented it
         correctly. Both docs now describe the TGT-074 case, mirroring
         --db's own already-correct documentation of the analogous case.
+
+0.56  2026-09-08
+      - IMPROVEMENT (TGT-077, found via a scheduled improvement-hunt):
+        the 4-line --db/D2TG_DB mandatory-env-setup boilerplate (TGT-059)
+        was duplicated verbatim across 5 test files (t/02-poller.t,
+        t/06-approve.t, t/21-reply-chat-id-validation.t,
+        t/57-reply-bare-bot-flag-no-hang.t,
+        t/58-history-since-until-validation.t). Extracted into a new
+        t/lib/Test/MandatoryDb.pm (setup_mandatory_db_env), same
+        precedent as t/lib/Fake/{Telegram,Store}.pm (TGT-018) and
+        t/lib/Test/CaptureStdio.pm (TGT-034) - pure refactor, zero
+        assertion changes, full suite green.

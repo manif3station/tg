@@ -8,17 +8,13 @@ use IPC::Open3;
 use Symbol qw(gensym);
 use POSIX qw(:sys_wait_h);
 use File::Temp qw(tempdir);
+use lib "$Bin/lib";
+use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 my $poller = File::Spec->catfile( $Bin, '..', 'cli', 'poller' );
 
-# TGT-059: --db/-d/D2TG_DB is now mandatory, so every subprocess spawned
-# below needs it resolvable without a real Developer Dashboard install -
-# see t/lib/Developer/Dashboard.pm.
 my $fake_db_dir = tempdir( CLEANUP => 1 );
-$ENV{PERL5LIB} = join( ':', File::Spec->catdir( $Bin, 'lib' ), $ENV{PERL5LIB} // '' );
-$ENV{D2TG_DB}             = 'testalias';
-$ENV{D2TG_TEST_DB_ALIAS}  = 'testalias';
-$ENV{D2TG_TEST_DB_DIR}    = $fake_db_dir;
+setup_mandatory_db_env( $Bin, $fake_db_dir );
 
 sub run_poller {
     my ( $stderr_fh, $stderr_file ) = tempfile( UNLINK => 1 );

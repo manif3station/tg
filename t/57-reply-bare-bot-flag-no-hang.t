@@ -6,14 +6,10 @@ use File::Spec;
 
 my $reply_cli = File::Spec->catfile( $Bin, '..', 'cli', 'reply' );
 
-# TGT-059: --db/-d/D2TG_DB is now mandatory, so the subprocess below
-# needs it resolvable without a real Developer Dashboard install - see
-# t/lib/Developer/Dashboard.pm.
 use File::Temp qw(tempdir);
-$ENV{PERL5LIB} = join( ':', File::Spec->catdir( $Bin, 'lib' ), $ENV{PERL5LIB} // '' );
-$ENV{D2TG_DB}            = 'testalias';
-$ENV{D2TG_TEST_DB_ALIAS} = 'testalias';
-$ENV{D2TG_TEST_DB_DIR}   = tempdir( CLEANUP => 1 );
+use lib "$Bin/lib";
+use Test::MandatoryDb qw(setup_mandatory_db_env);
+setup_mandatory_db_env( $Bin, tempdir( CLEANUP => 1 ) );
 
 # TGT-068: cli/reply's flag-parsing loop must always make forward
 # progress on @ARGV. A bare trailing --bot (no token following it)

@@ -7,14 +7,10 @@ use File::Temp qw(tempdir);
 
 my $history_cli = File::Spec->catfile( $Bin, '..', 'cli', 'history' );
 
-# TGT-059: --db/-d/D2TG_DB is now mandatory, so every subprocess spawned
-# below needs it resolvable without a real Developer Dashboard install -
-# see t/lib/Developer/Dashboard.pm.
-$ENV{PERL5LIB} = join( ':', File::Spec->catdir( $Bin, 'lib' ), $ENV{PERL5LIB} // '' );
-$ENV{D2TG_DB}            = 'testalias';
-$ENV{D2TG_TEST_DB_ALIAS} = 'testalias';
-$ENV{D2TG_TEST_DB_DIR}   = tempdir( CLEANUP => 1 );
-$ENV{D2TG_CHAT_ID}       = '999999';
+use lib "$Bin/lib";
+use Test::MandatoryDb qw(setup_mandatory_db_env);
+setup_mandatory_db_env( $Bin, tempdir( CLEANUP => 1 ) );
+$ENV{D2TG_CHAT_ID} = '999999';
 
 # TGT-070: a bare trailing --since (no value) previously silently ran
 # the query unscoped instead of erroring on the malformed invocation -
