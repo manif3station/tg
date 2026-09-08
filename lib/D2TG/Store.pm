@@ -68,6 +68,23 @@ sub _ensure_schema {
     }
     die $@ if $@ && $@ !~ /duplicate column name/;
 
+    # TGT-104: a failed inbound photo/document download used to be
+    # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
+    # to retry it later, even though Telegram's own file_id stays valid
+    # for a limited window after the message arrives. This table
+    # persists exactly what's needed to retry: which message, which
+    # Telegram file_id, and why it failed the first time.
+    $self->{dbh}->do(
+        'CREATE TABLE IF NOT EXISTS failed_downloads (
+             id         INTEGER PRIMARY KEY AUTOINCREMENT,
+             chat_id    INTEGER NOT NULL,
+             message_id INTEGER NOT NULL,
+             file_id    TEXT NOT NULL,
+             error      TEXT,
+             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+         )'
+    );
+
     # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
     # only by chat_id (a single-column PRIMARY KEY), which silently let
     # an approval leak across bots for a Telegram group shared by more
@@ -320,6 +337,34 @@ sub messages_in_range {
     my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
 
     return @$rows;
+}
+
+sub record_failed_download {
+    my ( $self, $chat_id, $message_id, $file_id, $error ) = @_;
+
+    $self->{dbh}->do(
+        'INSERT INTO failed_downloads (chat_id, message_id, file_id, error) VALUES (?, ?, ?, ?)',
+        undef, $chat_id, $message_id, $file_id, $error,
+    );
+
+    return $self->{dbh}->last_insert_id( '', '', 'failed_downloads', '' );
+}
+
+sub failed_downloads {
+    my ($self) = @_;
+
+    return $self->{dbh}->selectall_arrayref(
+        'SELECT id, chat_id, message_id, file_id, error, created_at FROM failed_downloads ORDER BY created_at',
+        { Slice => {} }
+    );
+}
+
+sub remove_failed_download {
+    my ( $self, $id ) = @_;
+
+    $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
+
+    return;
 }
 
 sub disconnect {

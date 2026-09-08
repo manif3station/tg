@@ -119,14 +119,26 @@ sub run_once {
                   . "(${mb}MB, Telegram's Bot API getFile limit is 20MB)\n";
             }
             else {
-                my ( $ok, $local_path ) =
+                my ( $ok, $result_or_error ) =
                   _run_non_fatal( $download_media, $telegram, $file_id, $chat_id, $sender, 'MEDIA DOWNLOAD ERROR' );
 
                 if ($ok) {
+                    my $local_path = $result_or_error;
                     print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$caption_note$msg_note$reply_ctx\n";
                     _print_reply_template( $chat_id, $message_id, $bot_token );
                     $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path$caption_note" )
                       if $store && defined $message_id;
+                }
+                elsif ( $store && defined $message_id && defined $file_id ) {
+
+                    # TGT-104 (user-supplied feature-gap analysis): a
+                    # transient download failure (a network hiccup mid-
+                    # transfer) used to be reported once and forgotten -
+                    # no way to retry it later, even though Telegram's
+                    # own file_id stays valid for a limited window after
+                    # the message arrives. Persist enough to retry:
+                    # which message, which file_id, and why it failed.
+                    $store->record_failed_download( $chat_id, $message_id, $file_id, $result_or_error );
                 }
             }
         }
@@ -248,7 +260,7 @@ sub _run_non_fatal {
         my $error = $@;
         $error =~ s/\n\z//;
         print STDERR "$error_prefix [$chat_id] $sender: $error\n";
-        return ( 0, undef );
+        return ( 0, $error );
     }
 
     return ( 1, $result );

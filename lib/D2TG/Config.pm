@@ -291,6 +291,15 @@ sub is_transient_error {
     return 0;
 }
 
+sub is_expired_file_error {
+    my ($error) = @_;
+
+    return 0 unless defined $error;
+    return 1 if $error =~ /file is (?:no longer available|temporarily unavailable)/i;
+    return 1 if $error =~ /wrong file_id/i;
+    return 0;
+}
+
 sub _developer_dashboard_paths {
     require Developer::Dashboard;
     return Developer::Dashboard::d2()->paths;
@@ -641,6 +650,17 @@ L</write_heartbeat>, or C<undef> if the file doesn't exist or doesn't
 contain a bare integer timestamp. C<cli/status.pl> flags this stale past
 a fixed threshold (1200 seconds), kept safely above the worst-case time
 a single bot/chat pair's own poll cycle can legitimately take.
+
+=head2 is_expired_file_error($error)
+
+Returns true if C<$error> looks like Telegram's own shape for a
+C<getFile> call against a file_id whose retention window has passed -
+matches C</file is (no longer available|temporarily unavailable)/i> or
+C</wrong file_id/i>, the description text L<D2TG::Telegram>'s C<_call>
+forwards verbatim from a failed Bot API response - false otherwise
+(TGT-104). C<cli/retry-download.pl> uses this to give a retry against an
+expired handle a specific, actionable message instead of the same
+generic download-failure text a fresh, still-recoverable failure gets.
 
 =head2 is_transient_error($error)
 

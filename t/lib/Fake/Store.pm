@@ -34,6 +34,22 @@ sub get_message {
     return $self->{messages}{$chat_id}{$message_id};
 }
 
+sub record_failed_download {
+    my ( $self, $chat_id, $message_id, $file_id, $error ) = @_;
+    push @{ $self->{failed_downloads} }, {
+        chat_id    => $chat_id,
+        message_id => $message_id,
+        file_id    => $file_id,
+        error      => $error,
+    };
+    return scalar @{ $self->{failed_downloads} };
+}
+
+sub failed_downloads {
+    my ($self) = @_;
+    return $self->{failed_downloads} || [];
+}
+
 1;
 
 =head1 NAME
@@ -57,5 +73,10 @@ call per id.
 C<record_message>/C<get_message> (TGT-038/TGT-039) are simple in-memory
 mirrors of L<D2TG::Store>'s same-named methods, keyed by
 C<chat_id>+C<message_id>.
+
+C<record_failed_download>/C<failed_downloads> (TGT-104) are simple
+in-memory mirrors of L<D2TG::Store>'s same-named methods - an ordered
+array of hashrefs rather than a real table, since no test needs to
+remove/query them individually.
 
 =cut
