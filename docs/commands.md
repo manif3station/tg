@@ -183,6 +183,10 @@ before this ticket - falls back to `D2TG_TOKEN`, exactly as every
 single-bot-mode reply always has. A bare trailing `--bot` with no value
 following it is rejected with the usual `Usage` error instead of
 hanging (TGT-068, a real live-reproduced infinite loop before this fix).
+`--bot` immediately followed by another flag (e.g. `--bot --db myalias`)
+is also rejected (TGT-074, same bug class as `--db`'s own case above):
+it dies with a clear `--bot requires a value` message instead of
+silently treating that flag's own name as the bot token.
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)

@@ -108,7 +108,12 @@ directly (TGT-068) rather than left for C<extract_bot_flag> (which needs
 two elements to consume anything) - falls through to the C<chat_id>/text
 C<Usage> check below like any other malformed invocation, instead of
 looping forever on the same unconsumed argument (a real, live-reproduced
-hang before this fix).
+hang before this fix). C<--bot> immediately followed by another flag
+(e.g. C<--bot --db myalias>) is also rejected (TGT-074, same bug class
+as C<--db>'s own fix below): C<extract_bot_flag> dies with C<--bot
+requires a value> instead of silently treating that flag's own name as
+the bot token - see L<D2TG::Reply/extract_bot_flag>'s own POD for the
+exact predicate.
 
 C<--db>/C<-d>'s own shifted value is validated (TGT-071, same bug class
 as TGT-068/069/070): if it's missing, empty, or itself looks like a flag

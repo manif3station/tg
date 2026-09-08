@@ -693,3 +693,15 @@ Revision history for the tg skill
         out of sequence despite promising "oldest first." Both now add
         message_id ascending as the tiebreaker, matching
         recent_messages's own already-correct pattern.
+
+0.55  2026-09-08
+      - DOC ACCURACY (TGT-076, found via a scheduled doc-accuracy hunt):
+        cli/reply's own POD and docs/commands.md's d2 tg.reply section
+        both documented --bot's validation as covering only the bare-
+        trailing-no-value case (TGT-068), but TGT-074 additionally
+        hardened D2TG::Reply::extract_bot_flag to reject --bot
+        immediately followed by another flag (e.g. --bot --db myalias)
+        - a real behavior change the CLI-facing docs never picked up,
+        even though D2TG::Reply.pm's own POD already documented it
+        correctly. Both docs now describe the TGT-074 case, mirroring
+        --db's own already-correct documentation of the analogous case.
