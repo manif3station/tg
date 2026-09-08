@@ -3,6 +3,7 @@ package D2TG::Reply;
 use strict;
 use warnings;
 use D2TG::TTS;
+use Encode qw(decode);
 
 sub send_reply {
     my (%args) = @_;
@@ -44,6 +45,8 @@ sub extract_bot_flag {
 
 sub parse_cli_args {
     my (@args) = @_;
+
+    @args = map { decode( 'UTF-8', $_ ) } @args;
 
     my $reply_to_message_id;
     if ( @args >= 2 && $args[-2] eq '--reply-to-message-id' ) {
@@ -134,5 +137,26 @@ flag isn't given (or isn't trailing) - unchanged from before this
 ticket. Does not validate that C<$chat_id> or C<$reply_to_message_id>
 are numeric; C<cli/reply> does that itself before using the parsed
 result.
+
+Decodes every argument as UTF-8 before doing anything else (TGT-073, a
+real bug found by a scheduled hourly bug-hunt): C<@ARGV> is always raw
+bytes - Perl never decodes it as UTF-8 on its own - so non-ASCII reply
+text (accents, CJK, Cyrillic, emoji) previously reached
+L<D2TG::Telegram>'s C<encode_json> call as un-decoded bytes, which
+C<JSON::PP::encode_json> treats as Latin-1 codepoints and re-encodes as
+UTF-8, double-encoding every multi-byte character into mojibake (e.g.
+C<h\x{e9}llo> arrived on Telegram as C<hÃ©llo>). Decoding here, once,
+before C<$chat_id>/C<$reply_to_message_id> are even split off, fixes it
+at the single chokepoint every C<cli/reply> invocation passes through -
+C<$chat_id>/C<$reply_to_message_id> are always plain ASCII digits, so
+decoding them as UTF-8 is a harmless no-op. Only C<cli/reply> reaches
+this function via raw C<@ARGV>; no other C<cli/*> command's own
+argv (C<--since>/C<--until> ISO timestamps, chat/message ids) carries
+free-form user text through a similar chokepoint, so this is the only
+place that needed the fix. A caller that ever passed an
+I<already-decoded> wide-character Perl string here (rather than raw
+bytes, which is what real C<@ARGV> always is) could in principle see
+C<decode> mis-handle it - not a concern for the actual C<cli/reply>
+invocation path today, since C<@ARGV> is never pre-decoded.
 
 =cut

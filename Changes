@@ -653,3 +653,16 @@ Revision history for the tg skill
         exercised a negative chat id. Narrowed to only reject a dash
         immediately followed by a letter (an actual flag name), with
         new regression tests covering the negative-chat-id case.
+
+0.52  2026-09-08
+      - BUGFIX (TGT-073, found via a scheduled hourly bug-hunt pass,
+        live-reproduced): d2 tg.reply mojibaked non-ASCII reply text
+        (accented characters, CJK, Cyrillic, emoji). @ARGV is always
+        raw bytes - Perl never decodes it as UTF-8 on its own - so
+        D2TG::Reply::parse_cli_args composed reply text straight from
+        undecoded bytes, which JSON::PP::encode_json then treated as
+        Latin-1 codepoints and re-encoded as UTF-8, double-encoding
+        every multi-byte character (e.g. "héllo" arrived on Telegram as
+        "hÃ©llo"). parse_cli_args now decodes every argument as UTF-8
+        first, fixing it at the one chokepoint every d2 tg.reply
+        invocation passes through.

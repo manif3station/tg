@@ -145,6 +145,20 @@ single implementation all 4 call sites share - any future flag added
 anywhere in this skill gets the same guard for free instead of needing
 its own copy.
 
+## Non-ASCII reply text needs a UTF-8 decode before it reaches JSON
+
+Hourly bug-hunt finding (TGT-073): `@ARGV` is always raw bytes - Perl
+never decodes it as UTF-8 on its own. `D2TG::Reply::parse_cli_args`
+composed `$text` directly from `@ARGV`, so any accented, CJK, Cyrillic,
+or emoji character in reply text reached `D2TG::Telegram`'s
+`encode_json` call still as un-decoded bytes. `JSON::PP::encode_json`
+treats an un-decoded string as Latin-1 codepoints and re-encodes it as
+UTF-8, double-encoding every multi-byte character - live-reproduced as
+`encode_json({text=>"h\xc3\xa9llo"})` (raw UTF-8 bytes for "héllo")
+producing `{"text":"hÃ©llo"}` instead of `{"text":"héllo"}`.
+`parse_cli_args` now decodes every argument as UTF-8 first, fixing it
+at the one chokepoint every `d2 tg.reply` invocation passes through.
+
 ## A reply can thread natively under the original Telegram message
 
 Live follow-up question (TGT-040): "where is the message id?" - every
