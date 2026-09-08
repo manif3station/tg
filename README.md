@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.73).** `d2 tg.poller` no longer
+**Status: early implementation (v0.74).** Inbound voice-note
+transcription now scales the Whisper model to the voice note's own
+length - short clips (up to 5 minutes) still use `medium`, longer ones
+automatically drop to `small` or `base` so transcription completes
+within the existing timeout instead of a long note being silently lost
+(TGT-100, live user request). `d2 tg.poller` no longer
 prints a `POLL ERROR` line for a known-transient failure (a network
 timeout or a 5xx status) - it keeps retrying silently, since these are
 routine and self-heal on their own; a genuinely unexpected failure is

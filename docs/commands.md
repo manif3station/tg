@@ -210,6 +210,12 @@ per-segment transcript lines) never reaches the poller's stdout/stderr
 (TGT-030) - only the structured `NEW TG VOICE`/`REPLY WITH` lines do,
 keeping the watched stream clean.
 
+The Whisper model itself scales with the voice note's length (TGT-100):
+a clip up to 5 minutes uses `medium` (unchanged quality for the common
+case), up to 15 minutes drops to `small`, and anything longer uses
+`base` - keeping transcription within `$TIMEOUT` instead of a long note
+being killed with no transcript at all.
+
 ## `d2 tg.approve <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
@@ -367,7 +373,7 @@ implemented and where:
 | `D2TG::TTS` | `synthesize` — text → gTTS → ffmpeg → Ogg/Opus, fatal on failure; `_run`'s subprocess output is suppressed, never leaks onto the caller's stdout/stderr (TGT-033). |
 | `D2TG::Reply` | `send_reply` — text sent first, then the voice note is synthesized and sent (TGT-083; reversed from the original voice-first order). No flag or code path skips voice, and a synthesis/`send_voice` failure still fails the whole reply loudly, but it can no longer prevent the text half from having already reached the user. Threads an optional `reply_to_message_id` through both sends for a native Telegram reply (TGT-040); given a `store` too, marks that message read only after both sends succeed (TGT-046). `parse_cli_args` — parses `cli/reply.pl`'s argv, recognizing `--reply-to-message-id` only in trailing position (TGT-042); decodes every argument as UTF-8 first (TGT-073), fixing a real bug where non-ASCII reply text (accents, CJK, emoji) arrived on Telegram as mojibake since `@ARGV`'s raw bytes were never decoded before reaching `encode_json`. `format_send_error` (TGT-096) appends an explicit "try again" instruction to a `send_reply` failure's error text when it looks transient (a network timeout or a `5\d\d` status, matching `D2TG::Telegram`'s own die message shapes) - a permanent failure (bad token, invalid chat_id) is returned unchanged, with no misleading retry suggestion; `cli/reply.pl` now wraps `send_reply` in `eval` and routes any failure through this before printing to STDERR. |
 | `D2TG::Download` | `download_file` — any Telegram `file_id` → local file. Given a `dir` (TGT-051), the file is content-addressed by its own SHA256 hash and deduplicated; without one, an OS-temp-dir file as before. A dedup hit refreshes the existing file's modification time to now (TGT-054), so a repeatedly re-sent file counts as recently used. `prune_vault` keeps a directory at or under a byte cap (100MB default), deleting oldest-modified files first (TGT-052). |
-| `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). |
+| `D2TG::Transcribe` | `transcribe` — local `whisper` CLI, refuses `*.en` models; `_run` is timeout-bounded and killable (`kill_current`, TGT-031). `select_model($duration_seconds)` (TGT-100) tiers the model by audio length - `<=300s` 'medium', `<=900s` 'small', longer 'base' - so a long voice note stays within `$TIMEOUT` instead of being killed with no transcript; `transcribe()` probes duration via `_probe_duration` (an `ffprobe` list-form pipe open, no shell) unless an explicit `model` argument is given, which always overrides the automatic choice. |
 
 `cli/poller.pl`, `cli/approve.pl`, `cli/reply.pl`, `cli/unread.pl`, `cli/history.pl`, `cli/help.pl`
 are the thin `d2 tg.*` entrypoints described above; each just wires the

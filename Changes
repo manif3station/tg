@@ -934,3 +934,16 @@ Revision history for the tg skill
         D2TG::Config::is_transient_error is a shared classifier now
         used by both this and D2TG::Reply::format_send_error (TGT-096),
         avoiding duplicated regex (same precedent as TGT-072).
+
+0.74  2026-09-08
+      - IMPROVEMENT (TGT-100, live user request via Telegram): a voice
+        note transcribed with the fixed default 'medium' Whisper model
+        could exceed D2TG::Transcribe's $TIMEOUT (300s) and get killed,
+        losing the transcript entirely instead of degrading gracefully.
+        New D2TG::Transcribe::select_model($duration_seconds) tiers the
+        model by audio length - <=5min stays 'medium' (unchanged
+        quality for the common case), <=15min drops to 'small', longer
+        uses 'base' - and transcribe() now probes duration via ffprobe
+        (list-form pipe open, no shell involved) before invoking
+        whisper. An explicitly-passed model still overrides the
+        automatic choice, unchanged from before.

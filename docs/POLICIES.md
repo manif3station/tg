@@ -458,6 +458,27 @@ it ran). `D2TG::Transcribe::_run` is bounded by `$TIMEOUT` (default
 in-flight transcription is killed immediately at shutdown time rather
 than waited out.
 
+## A long voice note gets a faster model instead of getting killed (TGT-100)
+
+Live user request via the Telegram bridge, 2026-09-08, verbatim: *"Seems
+like the tg poller cannot process any voice note bigger than 10 minutes.
+Can it be dynamic, check the length of the voice note and use different
+size of model?"* Root cause: `transcribe()` always used a fixed default
+`medium` model regardless of audio length, and `$TIMEOUT` (300s, see the
+section above) kills whatever `whisper` is running once it runs too long
+- a long clip transcribed with `medium` could exceed that budget and be
+killed, losing the transcript entirely instead of finishing more slowly.
+
+`D2TG::Transcribe::select_model($duration_seconds)` now tiers the model:
+up to 5 minutes stays `medium` (today's quality, unchanged for the
+common case), up to 15 minutes drops to `small`, longer uses `base` -
+each step trading transcription accuracy for speed to stay within
+`$TIMEOUT`. `transcribe()` measures the audio's actual duration via
+`ffprobe` (a list-form pipe `open`, never a shell string, so the audio
+path can never reach a shell) before choosing, unless the caller passes
+an explicit `model` argument, which always wins - unchanged from before
+this ticket.
+
 ## A transcription's own console output never reaches the watched stream
 
 `whisper` prints its own chatter (warnings, language-detection lines,

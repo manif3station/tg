@@ -13,10 +13,39 @@ our $TIMEOUT     = 300;
 our $CURRENT_PID = undef;
 our $FORKER      = sub { return fork() };
 
+sub select_model {
+    my ($duration) = @_;
+
+    $duration = 0 unless defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+
+    return 'medium' if $duration <= 300;
+    return 'small'  if $duration <= 900;
+    return 'base';
+}
+
+sub _probe_duration {
+    my ($audio_path) = @_;
+
+    open my $fh, '-|', 'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+      '-of', 'csv=p=0', $audio_path
+      or die "D2TG::Transcribe::_probe_duration: failed to run ffprobe: $!\n";
+    my $duration = <$fh>;
+    close $fh;
+
+    # A failed/unparseable probe (ffprobe missing, corrupt audio, no
+    # output) deliberately falls back to 0 seconds, i.e. select_model's
+    # 'medium' tier - the same model transcribe() always used before
+    # this feature existed, so a probe failure never behaves worse than
+    # pre-TGT-100 code did.
+    return 0 unless defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+    return $duration + 0;
+}
+
 sub transcribe {
     my ( $audio_path, %args ) = @_;
 
-    my $model = $args{model} || 'medium';
+    my $duration_fn = $args{duration_fn} || \&_probe_duration;
+    my $model = $args{model} || select_model( $duration_fn->($audio_path) );
     die "D2TG::Transcribe::transcribe: model must not be an English-only (.en) checkpoint\n"
       if $model =~ /\.en$/;
 
@@ -106,12 +135,33 @@ cloud transcription service. Per the blueprint, refuses any C<*.en>
 
 =head1 FUNCTIONS
 
-=head2 transcribe($audio_path, model => $name, runner => \&coderef)
+=head2 select_model($duration_seconds)
 
-Runs C<whisper> against C<$audio_path> with the given C<model> (default
-C<medium>), reads back its C<--output_format txt> transcript, and
-returns the trimmed text. Dies if C<model> ends in C<.en>, if C<whisper>
-exits non-zero, or if its expected output file is missing. The
+Returns a Whisper model name tiered by audio duration (TGT-100, a live
+user request): C<medium> up to 300 seconds (today's quality, unchanged
+for the common case), C<small> up to 900 seconds, C<base> beyond that -
+each step trading accuracy for speed so a long voice note finishes
+within L</transcribe>'s C<$TIMEOUT> instead of being killed with no
+transcript at all.
+
+=head2 _probe_duration($audio_path)
+
+Returns C<$audio_path>'s duration in seconds via C<ffprobe>, invoked
+through a list-form pipe C<open> (never a shell string) so the path can
+never reach a shell. C<transcribe> calls this only when no explicit
+C<model> was given.
+
+=head2 transcribe($audio_path, model => $name, runner => \&coderef, duration_fn => \&coderef)
+
+Runs C<whisper> against C<$audio_path> with the given C<model> (default:
+L</select_model>'s answer for the audio's own duration, TGT-100 -
+previously always the fixed C<medium>), reads back its
+C<--output_format txt> transcript, and returns the trimmed text. Dies if
+C<model> ends in C<.en>, if C<whisper> exits non-zero, or if its expected
+output file is missing. C<duration_fn> is an optional coderef taking the
+audio path and returning its duration in seconds; it defaults to
+L</_probe_duration> and exists so callers (tests) can inject a fake
+instead of invoking a real C<ffprobe>. The
 whisper-output temp directory is removed before returning or dying
 either way - it is not left for process-exit cleanup, since a
 long-running poller could otherwise accumulate one per transcribed
