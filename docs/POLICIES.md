@@ -641,6 +641,21 @@ meantime, it disconnects its DB handle and re-execs itself in place
 then loads the newly-installed code. A version change never interrupts
 an in-progress shutdown (`SIGTERM`/`SIGINT` still takes priority).
 
+**BUGFIX (TGT-094, live production incident):** the re-exec originally
+targeted the literal `$0` path captured at launch. `TGT-093` renamed
+every `cli/*` script to add a `.pl` extension while a real poller
+(JOB-007) was mid-poll; its version check fired, tried to
+`exec($^X, $0, ...)` against the now-renamed-away `cli/poller`, and died
+with `Can't open perl script ... No such file or directory` instead of
+restarting - a real ~1 minute outage, recovered manually via
+`d2 tira.job.stop`/`.start` (whose own command, `d2 tg.poller`,
+re-dispatches through `SkillDispatcher` rather than trusting a stale
+path). Fixed: the restart now calls
+`D2TG::Config::resolve_self_exec_path`, which re-checks its own bin
+directory for the current `poller.pl` basename at restart time -
+resilient to a rename because only the filename changed, not the
+directory - falling back to `$0` only if that lookup fails.
+
 ## An agent can always self-serve this skill's own documentation
 
 Live request (TGT-089): `d2 tg.help` prints `SKILLS.md` then

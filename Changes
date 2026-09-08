@@ -888,3 +888,17 @@ Revision history for the tg skill
         command name, so d2 tg.<command> dispatch is unaffected - verified
         empirically in a tira:latest container both before and after the
         rename. Pure file-naming change; no script logic/content changed.
+
+0.70  2026-09-08
+      - BUGFIX (TGT-094, live production incident found during TGT-093's
+        own install): the poller's version-change self-restart (TGT-036)
+        used to exec() the literal $0 path captured at launch. TGT-093
+        renamed cli/poller to cli/poller.pl while a real poller was
+        mid-poll; its version check fired and the exec died against the
+        now-nonexistent old path, killing the poller (~1 minute real
+        outage, recovered manually). Fixed: new
+        D2TG::Config::resolve_self_exec_path re-checks the script's own
+        bin directory for the current poller.pl basename at restart
+        time, falling back to $0 only if that lookup fails - resilient
+        to a rename because only the filename changed, not the
+        directory.

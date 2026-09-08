@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.69).** This file is a procedure to
+**Status: early implementation (v0.70).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -199,6 +199,12 @@ Module-by-module and per-ticket implementation detail (which file
 implements what, exact function signatures) lives in the POD of each
 `lib/D2TG/*.pm` module and in `docs/commands.md`'s command/event
 reference - not here. This file stays a procedure, not a changelog.
+
+The poller's own automatic version-change restart (see section 6) is now
+resilient to an install renaming its own entrypoint file mid-run
+(TGT-094, live production incident) - it re-resolves its current
+`poller.pl` path fresh at restart time rather than trusting a path
+captured at launch.
 
 Every `cli/*` entrypoint file carries a `.pl` extension internally
 (`cli/poller.pl`, `cli/reply.pl`, `cli/approve.pl`, `cli/unread.pl`,

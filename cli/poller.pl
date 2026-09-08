@@ -179,7 +179,22 @@ until ($shutting_down) {
         if ( $current_version ne $starting_version ) {
             print "d2tg poller detected version change ($starting_version -> $current_version), restarting...\n";
             $store->disconnect;
-            exec( $^X, $0, @original_argv ) or die "d2tg poller: exec failed: $!\n";
+
+            # TGT-094 (live production incident): $0 is the path this
+            # process was originally launched with, captured once at
+            # startup. An install that renames this very file out from
+            # under a still-running process (as TGT-093 did for real)
+            # leaves $0 pointing at a path that no longer exists, so a
+            # blind exec($0) dies instead of restarting. $Bin, though,
+            # only depends on the script's DIRECTORY, which a rename
+            # doesn't change - re-checking for the known current
+            # basename there finds the live file regardless.
+            my $exec_path = D2TG::Config::resolve_self_exec_path(
+                bin_dir  => $Bin,
+                basename => 'poller.pl',
+                fallback => $0,
+            );
+            exec( $^X, $exec_path, @original_argv ) or die "d2tg poller: exec failed: $!\n";
         }
     }
 }
@@ -293,5 +308,12 @@ Any such descriptor would be closed by the kernel once the re-exec'd
 process no longer references it - a one-off, low-severity resource note
 rather than a correctness issue, since this only happens once per
 version change, not on every poll cycle.
+
+The re-exec target is resolved via
+L<D2TG::Config/resolve_self_exec_path>, not the literal C<$0> captured
+at launch (TGT-094, a live production incident): if the install that
+triggered this restart also renamed this very script (as TGT-093 did
+for real, killing a live poller), C<$0> would point at a path that no
+longer exists.
 
 =cut

@@ -218,6 +218,15 @@ sub require_existing_base_dir {
       . "value (typo?) or create the directory yourself first.\n";
 }
 
+sub resolve_self_exec_path {
+    my (%args) = @_;
+
+    my $candidate = File::Spec->catfile( $args{bin_dir}, $args{basename} );
+
+    return $candidate if -f $candidate;
+    return $args{fallback};
+}
+
 sub _developer_dashboard_paths {
     require Developer::Dashboard;
     return Developer::Dashboard::d2()->paths;
@@ -518,5 +527,21 @@ C<state_db_path> does. Dies with a clear message if C<.env> can't be
 read at all, or if it has no C<VERSION> line. C<cli/poller.pl> uses this
 to detect when a newer version has been installed while it is still
 running, so it can restart itself.
+
+=head2 resolve_self_exec_path(bin_dir => $dir, basename => $name, fallback => $path)
+
+Returns C<catfile($bin_dir, $basename)> if that file exists on disk,
+otherwise returns C<$fallback> unchanged (TGT-094, a live production
+incident). C<cli/poller.pl>'s version-change restart (see
+L</skill_version>) uses this instead of blindly C<exec()>ing the literal
+C<$0> path captured at process launch: C<$0> is fixed once at startup, so
+if an install renames the running poller's own entrypoint file while it
+is still up (as TGT-093 did for real, killing a live poller with C<Can't
+open perl script ... No such file or directory>), C<$0> points at a path
+that no longer exists. C<$Bin> (from C<FindBin>), by contrast, only
+depends on the script's I<directory>, which a filename-only rename
+doesn't change - re-checking there for the known current basename
+(C<poller.pl>) finds the live file regardless of what C<$0> says,
+falling back to C<$0> only if that lookup itself fails.
 
 =cut

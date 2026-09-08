@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.69).** Every `cli/*` entrypoint now
+**Status: early implementation (v0.70).** The poller's own version-change
+self-restart (TGT-036) no longer trusts a stale `$0` - live production
+incident, TGT-094: a running poller mid-restart during TGT-093's own
+install died because `$0` pointed at the just-renamed-away `cli/poller`
+path. It now re-checks its own bin directory for the current
+`poller.pl` at restart time, falling back to `$0` only if that lookup
+fails - so a poller survives an install that renames its own entrypoint
+out from under it. Every `cli/*` entrypoint now
 carries a `.pl` extension (`cli/poller.pl`, `cli/reply.pl`, etc. — TGT-093);
 `d2 tg.<command>` dispatch is unaffected, since Developer Dashboard's
 `SkillDispatcher` already tries a `.pl` fallback for an extensionless
