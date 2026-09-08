@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v0.59).** `d2 tg.poller` runs for real —
+**Status: early implementation (v0.60).** `d2 tg.poller` runs for real —
 it long-polls Telegram, gates inbound senders against an allow-list (only
 `D2TG_CHAT_ID` is allowed by default; anyone else is silently recorded
 pending — and prints a one-time notification when they do), and prints
@@ -74,10 +74,13 @@ To reply to a chat (text + voice note together, always):
 d2 tg.reply <chat_id> <text...>
 ```
 
-This shells out to `gtts-cli` and `ffmpeg` to synthesize the voice note —
-both must be installed on the machine running this. Voice-note
-transcription similarly requires a local `whisper` install with a
-multilingual (non `.en`) model. See `docs/commands.md` for the full
-command reference and `docs/POLICIES.md` for the operational rules
-(access control, the always-voice-with-text rule, etc.) this skill
-follows.
+The text message is sent first, then the voice note is synthesized and
+sent (TGT-083) — so if voice synthesis or sending fails, the failure is
+still reported loudly (non-zero exit), but the text half has already
+reached the chat; Telegram messages can't be unsent. This shells out to
+`gtts-cli` and `ffmpeg` to synthesize the voice note — both must be
+installed on the machine running this. Voice-note transcription
+similarly requires a local `whisper` install with a multilingual (non
+`.en`) model. See `docs/commands.md` for the full command reference and
+`docs/POLICIES.md` for the operational rules (access control, the
+always-voice-with-text rule, etc.) this skill follows.

@@ -257,18 +257,29 @@ letting it reach the Telegram API and fail there (TGT-027) - a mistyped
 or missing chat id should read as a clear local usage error, not an
 opaque remote failure.
 
-## A reply is always text + voice, never text-only
+## A reply always sends text first, then voice (TGT-083)
 
-`d2 tg.reply` (via `D2TG::Reply::send_reply`) synthesizes the voice note
-first, then sends the voice note, and only sends the text message once
-the voice note has actually been delivered. If synthesis fails
-(`gtts-cli` or `ffmpeg` unavailable or erroring) or the voice-note send
-itself fails, the whole reply fails and the text message is never sent —
-there is deliberately no fallback that degrades to a text-only reply. A
-caller that wants to know a reply failed needs to see the failure, not a
-silently incomplete answer on the other end.
+`d2 tg.reply` (via `D2TG::Reply::send_reply`) sends the text message
+first, then synthesizes the voice note, then sends the voice note — a
+deliberate, explicit reversal (live user request, 2026-09-08: *"text goes
+out first and create voice note and send voice note afterward. not other
+way round"*) of this module's original order (synthesize and send voice
+first, text only once voice succeeded).
 
-## Only one poller may run against a given storage location at a time
+There is still deliberately no flag or code path that skips voice, and a
+synthesis or `send_voice` failure still fails the whole reply loudly
+(`cli/reply` exits non-zero) rather than silently reporting success. What
+changed: because the text message is now sent *before* synthesis/voice
+can fail, a failure at either of those later steps can no longer prevent
+the text from having already reached the user — Telegram messages can't
+be unsent by this code. The guarantee is now "voice always follows a
+successful text send, and any failure after that point is always
+reported loudly," not "a text-only reply can never happen at all." See
+`tg-skill-design.md`'s "Reply design lessons" section (and its TGT-083
+update) for the full incident history this guarantee is built on and why
+it changed.
+
+## Only one poller may ever hold the lock, and the last one to try wins (TGT-084)
 
 Live production incident (TGT-062): "it is not always works. when send
 message. the poller no showing new messages. i need to kill it and
@@ -280,12 +291,43 @@ allows only one active long-poll consumer per bot token). A stopped
 process cannot be interrupted by any signal-based fix - including
 TGT-044's own hard timeout - since the OS never schedules a stopped
 process to run, so this had to be closed at startup instead. `d2
-tg.poller` now acquires an exclusive PID-file lock (`poller.pid`, under
-the resolved `--db`/`-d`/`D2TG_DB` storage location) before doing
-anything else and refuses to start while a live process already holds
-it, naming the exact PID to kill. A lock naming a PID that's no longer
-alive (an unclean death, e.g. `kill -9`) is reclaimed automatically -
-a stale lock must never itself prevent recovery from a crash.
+tg.poller` acquires an exclusive PID-file lock (`poller.pid`, under the
+resolved `--db`/`-d`/`D2TG_DB` storage location) before doing anything
+else. A lock naming a PID that's no longer alive (an unclean death, e.g.
+`kill -9`) is reclaimed automatically - a stale lock must never itself
+prevent recovery from a crash.
+
+**Update, TGT-084 (2026-09-08), a second live production incident:** a
+monitor job kept restarting `d2 tg.poller` while a still-live previous
+instance held the lock, and TGT-062's original "refuse to start, name the
+PID to kill manually" behavior meant every restart attempt just failed
+again in a loop (`D2TG::Lock: could not acquire ... - contended for too
+long`), with nobody actually killing the stale instance by hand. Michael,
+live: *"only 1 poller can be run and the last one to run is the winner
+and the one is running will be killed and replaced by the new
+process."* `D2TG::Lock::acquire` no longer refuses when it finds a live
+conflicting PID - it sends that process `SIGKILL` immediately (not
+`SIGTERM`: `D2TG::Poller`'s own known limitation means graceful shutdown
+handling can be delayed up to `DEFAULT_HARD_TIMEOUT` by an in-flight
+long-poll call, which would make "last one wins" take just as long to
+actually happen), waits in a short bounded loop for the process to
+actually die, then reclaims the lock. If the target refuses to die within
+that bound, `acquire` still dies naming the PID - this should be rare,
+since `SIGKILL` cannot be caught or blocked.
+
+This makes "more than one live process can transiently believe it holds
+the lock" a normal, expected outcome when multiple fresh instances start
+at nearly the same instant (each is entitled to try to take over from
+whoever it finds), not a bug - what must still hold, and does, is that
+the race always settles to exactly one process left alive holding a lock
+file that names it. Reclaiming a now-dead PID's lock file was also
+hardened to route through the same kernel-atomic `O_CREAT|O_EXCL` create
+used for a brand-new lock (unlink the stale file, then retry from the
+top) instead of a plain, non-atomic overwrite - before TGT-084, that
+overwrite path could only ever be reached by one live process at a time
+(any rival simply refused instead of racing to reclaim), so its lack of
+atomicity was latent; TGT-084 makes several racers reaching it at once a
+real, exercised scenario.
 
 ## No log file — stdout/stderr only
 

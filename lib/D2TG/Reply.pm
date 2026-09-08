@@ -18,14 +18,14 @@ sub send_reply {
       ? ( reply_to_message_id => $args{reply_to_message_id} )
       : ();
 
+    my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
+
     my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
 
     my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
     my $send_voice_error = $@;
     unlink $voice_path if -e $voice_path;
     die $send_voice_error if $send_voice_error;
-
-    my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
 
     $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
       if $args{store} && defined $args{reply_to_message_id};
@@ -78,13 +78,24 @@ D2TG::Reply - send a text + voice-note reply to a chat, never text-only
 =head1 DESCRIPTION
 
 Wires L<D2TG::TTS> and L<D2TG::Telegram> together for the owner's "always
-voice with text" reply rule: synthesizes the voice note first, then sends
-the voice note, and only sends the text message once the voice note has
-actually been delivered. If synthesis dies, or C<send_voice> itself
-fails, C<send_reply> dies too and C<send_message> is never called - so a
-failure at either point never produces a text-only reply. The
-synthesized temp file is removed after C<send_voice> is attempted,
-whether it succeeded or not.
+voice with text" reply rule. As of TGT-083 (a live, explicit user
+request), the order is: send the text message first, THEN synthesize
+the voice note, THEN send the voice note. This deliberately reverses
+this module's own prior order (voice synthesized and sent first, text
+only once voice succeeded) and the guarantee that came with it - before
+TGT-083, a synthesis or C<send_voice> failure happened I<before>
+C<send_message> was ever called, so a failure at either point could
+never produce a text-only reply. Under the new order, C<send_message>
+has already run by the time synthesis or C<send_voice> could fail;
+C<send_reply> still dies loudly in that case (so C<cli/reply> exits
+non-zero and never claims success), but it can no longer prevent the
+text from having already reached the user - Telegram messages can't be
+unsent by this code. This is a deliberate, explicit reversal of the
+prior rule, not a silent regression - see C<tg-skill-design.md>'s
+"Reply design lessons" section and C<docs/POLICIES.md> for the full
+incident history both fixes are built on. The synthesized temp file is
+still removed after C<send_voice> is attempted, whether it succeeded or
+not.
 
 =head1 FUNCTIONS
 

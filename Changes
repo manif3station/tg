@@ -763,3 +763,16 @@ Revision history for the tg skill
         35s timeout figure - DEFAULT_HARD_TIMEOUT was widened to 50 by
         TGT-066. Updated to reference the constant instead of a
         hardcoded value.
+
+0.60  2026-09-08
+      - FEATURE (TGT-083, live user request): D2TG::Reply::send_reply's
+        order was reversed - text is now sent FIRST, then the voice note
+        is synthesized, then sent (previously: synthesize, send voice,
+        then send text). This is a deliberate, explicit reversal of this
+        project's own prior "never text-only" reply-ordering rule (see
+        tg-skill-design.md's "Reply design lessons" section and its
+        TGT-083 update, and docs/POLICIES.md). A synthesis or send_voice
+        failure after the text has already gone out can no longer prevent
+        a text-only outcome (Telegram messages can't be unsent), but
+        send_reply still dies/propagates the failure loudly so cli/reply
+        never falsely reports success.

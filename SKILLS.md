@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.59).** This file is a procedure to
+**Status: early implementation (v0.60).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -17,7 +17,10 @@ alongside each one. Registered as a Tira monitor job, that stream
 reaches the project's `tira.policy.bridge`, so the agent watching that
 board sees new Telegram messages as board notifications and can reply
 via `d2 tg.reply <chat_id> "..."` - a real text message plus a spoken
-voice note, always both, never text-only.
+voice note, always both. The text is sent first, then the voice note is
+synthesized and sent (TGT-083); a synthesis/send failure after that point
+is still reported loudly (non-zero exit) but can no longer un-send the
+text half.
 
 ## 2. Prep before install
 

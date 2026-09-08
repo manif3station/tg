@@ -195,12 +195,20 @@ it dies with a clear `--bot requires a value` message instead of
 silently treating that flag's own name as the bot token.
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
-note — never text-only. If speech synthesis (`gtts-cli` then `ffmpeg`)
-fails for any reason, the command dies before sending anything at all;
-there is no partial/degraded reply. Text longer than 4000 UTF-16 code
-units is split across multiple `sendMessage` calls without ever breaking
-a single character (a supplementary-plane character, which is a UTF-16
-surrogate pair, is always kept in one chunk).
+note. As of TGT-083 (a live, explicit user request), the text message is
+sent **first**, then the voice note is synthesized (`gtts-cli` then
+`ffmpeg`) and sent — the reverse of this command's original order. There
+is still no flag or code path that sends text without also attempting
+voice, and a synthesis or send-voice failure still makes the whole
+command die with a non-zero exit — but because that failure now happens
+*after* the text has already gone out, it can no longer prevent a
+text-only outcome the way the original order could (Telegram messages
+can't be unsent). See `docs/POLICIES.md`'s reply-ordering section and
+`.claude/rules/tg-skill-design.md`'s "Reply design lessons" section for
+the full incident history and rationale. Text longer than 4000 UTF-16
+code units is split across multiple `sendMessage` calls without ever
+breaking a single character (a supplementary-plane character, which is a
+UTF-16 surrogate pair, is always kept in one chunk).
 
 `chat_id` must be numeric (matching `d2 tg.approve`'s own guard,
 TGT-027) — a non-numeric first argument exits 2 with a `Usage` message
