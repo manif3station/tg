@@ -138,7 +138,16 @@ sub is_held {
     # evict a genuinely live poller per TGT-084's own "last one wins"
     # policy, which is exactly the kind of side effect a read-only
     # status check must not risk causing.
-    return kill( 0, $pid ) ? $pid : undef;
+    #
+    # Codex review finding: kill(0, $pid) returning false means EITHER
+    # "no such process" OR "process exists but we lack permission to
+    # signal it" ($!{EPERM}) - the latter still means the process is
+    # alive, just owned by a different user. Not expected in this
+    # project's normal single-user operation, but treating EPERM as
+    # "dead" would be a real, if narrow, correctness gap.
+    return $pid if kill( 0, $pid );
+    return $pid if $!{EPERM};
+    return undef;
 }
 
 sub _read_pid {

@@ -66,6 +66,29 @@ require D2TG::Lock;
     ok( kill( 0, $$ ), 'is_held never sent a real signal to the live PID either - this process is still very much alive' );
 }
 
+{
+    # Codex review finding: the inode/signal checks above don't
+    # DIRECTLY prove acquire() is never called - is_held reading its
+    # own PID happens to leave the file untouched even if it went
+    # through acquire() first (acquire() is itself a no-op for the
+    # caller's own PID, TGT-102). Mock acquire() to die and confirm
+    # is_held still succeeds - the only way that's possible is if
+    # is_held genuinely never calls it at all.
+    my $dir  = tempdir( CLEANUP => 1 );
+    my $lock = File::Spec->catfile( $dir, 'poller.pid' );
+
+    open my $fh, '>', $lock or die $!;
+    print {$fh} "$$\n";
+    close $fh;
+
+    no warnings 'redefine';
+    local *D2TG::Lock::acquire = sub { die "acquire() must never be called by is_held\n" };
+
+    my $pid = eval { D2TG::Lock::is_held($lock) };
+    is( $@, '', 'is_held raised no error even with acquire() mocked to die - proves it never calls acquire()' );
+    is( $pid, $$, 'is_held still returns the correct PID with acquire() mocked out' );
+}
+
 # CLI-level: d2 tg.status reports alive/not-running correctly.
 {
     my $status_cli  = File::Spec->catfile( $Bin, '..', 'cli', 'status.pl' );
@@ -81,7 +104,10 @@ require D2TG::Lock;
         my $out = `$status_cli`;
         my $rc  = $? >> 8;
         is( $rc, 0, 'd2 tg.status exits 0 when the poller is not running' );
-        like( $out, qr/not running/i, 'd2 tg.status reports not running when no lock file exists' );
+        # Codex review finding: qr/running/i also matches "not running" -
+        # anchor to the exact expected line so this can't pass on the
+        # opposite outcome by accident.
+        like( $out, qr/^poller: not running$/m, 'd2 tg.status reports not running when no lock file exists' );
     }
 
     {
@@ -93,8 +119,7 @@ require D2TG::Lock;
         my $out = `$status_cli`;
         my $rc  = $? >> 8;
         is( $rc, 0, 'd2 tg.status exits 0 when the poller is running' );
-        like( $out, qr/running/i, 'd2 tg.status reports the poller as alive' );
-        like( $out, qr/\Q$$\E/, "d2 tg.status names the live PID ($$)" );
+        like( $out, qr/^poller: running \(pid \Q$$\E\)$/m, "d2 tg.status reports the poller as alive and names the live PID ($$)" );
 
         unlink $lock_path;
     }
