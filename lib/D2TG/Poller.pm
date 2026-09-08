@@ -191,7 +191,18 @@ sub _sanitize_for_stdout {
 
 sub _print_reply_template {
     my ( $chat_id, $message_id, $bot_token ) = @_;
-    my $bot_flag = defined $bot_token ? " --bot $bot_token" : '';
+
+    # TGT-086: never print the real token here - this line reaches the
+    # target project's tira.policy.bridge as a monitor-output event
+    # (visible to anyone who can read that board), and the token is a
+    # real credential (whoever has it can send/receive as that bot).
+    # Masked the same way D2TG::Config::masked_token already masks the
+    # startup line (TGT-045); the placeholder <MASKED> is intentionally
+    # not runnable as-is - see this template's own POD.
+    my $bot_flag =
+      defined $bot_token
+      ? ' --bot ' . D2TG::Config::masked_token($bot_token)
+      : '';
     my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
     print qq{REPLY WITH: d2 tg.reply $chat_id "..."$bot_flag$reply_flag\n};
     return;
@@ -388,12 +399,20 @@ a C<< REPLY WITH: d2 tg.reply <chat_id> "..." [--bot <token>] --reply-to-message
 line - a ready-to-run reply command template with the chat id and
 message id filled in, per the owner's answered design question (Q-004).
 The C<--reply-to-message-id> flag (TGT-040) is only included when
-C<message_id> is known. C<--bot <token>> (TGT-057) is only included when
-C<bot_token> is given to C<run_once> - C<cli/poller> passes its own
-receiving bot's token here whenever it's running in multi-bot mode
-(TGT-049), since C<d2 tg.reply>'s C<D2TG_TOKEN> fallback can't know which
-of a pool of bots to use; single-bot/env-only mode never passes
-C<bot_token>, so its template is unchanged. Passing C<--reply-to-message-id>
+C<message_id> is known. C<--bot <masked_token>> (TGT-057) is only
+included when C<bot_token> is given to C<run_once> - C<cli/poller> passes
+its own receiving bot's token here whenever it's running in multi-bot
+mode (TGT-049), since C<d2 tg.reply>'s C<D2TG_TOKEN> fallback can't know
+which of a pool of bots to use; single-bot/env-only mode never passes
+C<bot_token>, so its template is unchanged. The token is masked (TGT-086,
+via L<D2TG::Config/masked_token>, the same masking C<cli/poller>'s own
+startup line already uses, TGT-045) rather than printed in full - this
+line reaches the target project's C<tira.policy.bridge> as a
+C<monitor-output> event on a shared board, and the real token is a
+credential, not something safe to broadcast there on every inbound
+message. This means the printed C<--bot> value in multi-bot mode is not
+directly runnable as-is; whoever runs C<d2 tg.reply> for that chat must
+supply the real token themselves. Passing C<--reply-to-message-id>
 through to C<d2 tg.reply> makes the resulting reply thread natively under
 the original message in Telegram's
 UI. This is only ever a template: nothing in this module ever calls

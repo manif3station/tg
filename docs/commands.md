@@ -124,13 +124,20 @@ content from it.
   since TGT-040, the message's own `message_id` already filled in, per
   Q-004. This is only ever a template — the poller never sends a reply
   itself. In multi-bot mode (TGT-049, more than one `--chat_id`/`--bot`
-  group configured) the template also names the exact bot that received
-  the message (`--bot <token>`, TGT-057) - `d2 tg.reply` has no other way
-  to know which of the pool's bots to send through, since single-bot
-  mode's `D2TG_TOKEN` fallback doesn't apply when the poller was
-  configured purely via CLI flags. Single-bot/env-only mode is
-  unchanged - no `--bot` is ever printed there, since `D2TG_TOKEN` alone
-  is already unambiguous.
+  group configured) the template also names which bot received the
+  message via `--bot <masked_token>` (TGT-057) - **masked** as of
+  TGT-086 (first 4...last 4 characters, the same form
+  `D2TG::Config::masked_token` already uses for the poller's own startup
+  line, TGT-045): this line reaches the target project's
+  `tira.policy.bridge` as a `monitor-output` event on a shared board, and
+  the real token is a credential, not something safe to broadcast there.
+  The printed `--bot` value in multi-bot mode is therefore **not directly
+  runnable as-is** - whoever runs `d2 tg.reply` for that chat must supply
+  the real token themselves (their own `D2TG_TOKEN`, or direct knowledge
+  of which bot serves which chat), the same requirement single-bot mode
+  already has whenever `D2TG_TOKEN` isn't the right bot. Single-bot/env-
+  only mode is unchanged - no `--bot` is ever printed there, since
+  `D2TG_TOKEN` alone is already unambiguous.
 
 If the sender used Telegram's native reply-to-message feature, every
 content line above also carries a `(replying to <sender> [msg #N]:

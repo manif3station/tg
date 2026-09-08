@@ -792,3 +792,16 @@ Revision history for the tg skill
         instead of a non-atomic overwrite) - TGT-084 makes several live
         processes reaching that path at the same instant a real,
         exercised scenario for the first time.
+
+0.62  2026-09-08
+      - SECURITY FIX (TGT-086, found by the scheduled hourly bug hunt):
+        D2TG::Poller's multi-bot REPLY WITH template no longer prints the
+        receiving bot's full, unmasked token to stdout - it is now masked
+        (first 4...last 4 characters, matching TGT-045's own startup-line
+        masking). Poller stdout is designed to flow into the target
+        project's tira.policy.bridge as monitor-output events on a shared
+        board, so the previous behavior broadcast a real bot credential
+        on every inbound message in multi-bot mode. The printed --bot
+        value in multi-bot mode is consequently no longer directly
+        runnable as-is; whoever runs d2 tg.reply for that chat must
+        supply the real token themselves.

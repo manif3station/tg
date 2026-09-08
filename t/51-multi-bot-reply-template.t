@@ -24,7 +24,10 @@ sub capture_stdout {
     return $out;
 }
 
-# --- multi-bot mode: REPLY WITH names the bot that received the message ---
+# --- multi-bot mode: REPLY WITH names the bot that received the message,
+# --- but only its masked form (TGT-086 - the real token must never
+# --- reach the target project's tira.policy.bridge, which is a shared
+# --- board, not a private log) ---
 {
     my $tg = Fake::Telegram->new(
         [
@@ -41,14 +44,16 @@ sub capture_stdout {
     );
     my $store = Fake::Store->new( allowed => [4567] );
 
-    my $out = capture_stdout(
-        sub { D2TG::Poller::run_once( $tg, undef, $store, bot_token => 'abc123token' ) } );
+    my $real_token = '123456789:AAHrealSecretBotTokenLooksLikeThisxyz';
+    my $out        = capture_stdout(
+        sub { D2TG::Poller::run_once( $tg, undef, $store, bot_token => $real_token ) } );
 
     like(
         $out,
-        qr/REPLY WITH: d2 tg\.reply 4567 "\.\.\." --bot abc123token --reply-to-message-id 42/,
-        'multi-bot REPLY WITH names the receiving bot'
+        qr/REPLY WITH: d2 tg\.reply 4567 "\.\.\." --bot 1234\.\.\.sxyz --reply-to-message-id 42/,
+        'multi-bot REPLY WITH names the receiving bot by its masked token (TGT-086)'
     );
+    unlike( $out, qr/\Q$real_token\E/, 'the real, full bot token never appears in stdout (TGT-086)' );
 }
 
 # --- single-bot mode (no bot_token given): REPLY WITH is unchanged ---

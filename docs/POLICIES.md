@@ -544,6 +544,34 @@ The original single-bot case keeps using the exact same unhashed
 `offset` key it always has, so nothing about upgrading an existing
 install changes.
 
+## A bot token never appears in full on a shared board (TGT-086)
+
+Found by the scheduled hourly bug hunt, 2026-09-08: the multi-bot
+`REPLY WITH` template (TGT-057) was printing the receiving bot's full,
+unmasked token to stdout on every single inbound message. Poller stdout
+is designed (per this project's own architecture decision) to flow into
+the target project's `tira.policy.bridge` as `monitor-output` events -
+a shared board, not a private log - so this broadcast a real credential
+(whoever has it can send/receive as that bot) far more often than the
+one place this project had already taken care to mask a token
+(`cli/poller`'s own startup line, TGT-045).
+
+Fixed by routing the `--bot <token>` value in the printed template
+through the same `D2TG::Config::masked_token` helper the startup line
+already uses (first 4...last 4 characters). This closes the leak
+completely, but at a real cost: the printed template in multi-bot mode
+is no longer directly runnable as-is - whoever runs `d2 tg.reply` for
+that chat must supply the real token themselves (their own
+`D2TG_TOKEN`, or direct knowledge of which bot serves which chat). A
+design that would keep the template fully self-contained (e.g. `d2
+tg.reply` resolving a masked value back to the real token from a locally
+known bot pool) was considered and rejected for this ticket's scope -
+`cli/reply` runs as its own fresh process with no access to the poller's
+own `--chat_id`/`--bot` CLI arguments, which today exist only in that
+other, already-exited process's argv, not in anything `cli/reply` could
+read. Single-bot/env-only mode (`D2TG_TOKEN` alone) was never affected -
+it never printed `--bot` at all.
+
 ## No systemd, no cron
 
 The poller is meant to be registered as a Tira monitor-kind job on the
