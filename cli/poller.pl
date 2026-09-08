@@ -56,30 +56,37 @@ if ($@) {
 }
 @ARGV = @rest;
 
+# TGT-107 (Codex review finding): validate every remaining CLI token is
+# a recognized --chat_id/--bot pair BEFORE the D2TG_CHAT_ID-missing
+# guard below - otherwise, whenever D2TG_CHAT_ID happens to be unset,
+# that guard fires first and masks an unrecognized-flag error behind
+# its own, less specific message (an earlier version of this fix had
+# exactly that gap). This validation must NOT depend on env vars at all
+# (env_chat_id/env_token => undef bypasses bot_groups' own env-folding),
+# so it can't itself die on an unrelated env-only misconfiguration
+# (a bare D2TG_TOKEN with no D2TG_CHAT_ID/--chat_id makes bot_groups'
+# real, env-folding call die with "--bot given before any --chat_id" -
+# irrelevant here, since this pass only looks at what the CLI itself
+# declared).
+my ( undef, @cli_leftover ) = D2TG::Config::bot_groups(
+    argv         => [@ARGV],
+    env_chat_id  => undef,
+    env_token    => undef,
+);
+if (@cli_leftover) {
+    print STDERR "Unrecognized argument(s): " . join( ' ', @cli_leftover ) . "\n";
+    exit 1;
+}
+
 # Multi-bot/multi-chat support (TGT-049): peek whether the CLI declared
 # any --chat_id groups BEFORE consuming them, so the original single-var
 # startup guard (exact message, for exact backward compatibility) only
 # fires for the plain env-var-only case - CLI-declared groups supply
-# their own chat ids independently of D2TG_CHAT_ID. This guard must run
-# BEFORE bot_groups() below: bot_groups() itself dies on a bare
-# D2TG_TOKEN with no D2TG_CHAT_ID/--chat_id at all ("--bot given before
-# any --chat_id"), which would otherwise mask this guard's own, more
-# specific D2TG_CHAT_ID message.
+# their own chat ids independently of D2TG_CHAT_ID.
 my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
 exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
 
 my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
-
-# TGT-107: any argv token neither --db/-d nor a recognized --chat_id/
-# --bot group must refuse HERE, before the base_dir/lock are ever
-# touched - not merely before the poll loop starts. Acquiring the lock
-# is itself the dangerous side effect (it can SIGKILL a live poller via
-# TGT-084's "last one wins"), so full argv validation must complete
-# first.
-if (@leftover) {
-    print STDERR "Unrecognized argument(s): " . join( ' ', @leftover ) . "\n";
-    exit 1;
-}
 @ARGV = @leftover;
 
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };

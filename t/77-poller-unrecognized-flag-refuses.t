@@ -63,6 +63,29 @@ sub run_capturing_stderr {
 }
 
 {
+    # Codex review finding: an unrecognized flag must still be named
+    # correctly even when D2TG_CHAT_ID is ALSO unset - otherwise the
+    # D2TG_CHAT_ID-missing guard (which also refuses, correctly, but
+    # for a different reason) fires first and masks the unrecognized-
+    # flag error entirely, contradicting this ticket's own acceptance
+    # criterion. Both are genuinely missing here; the unrecognized flag
+    # must still be the one named.
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    local %ENV = %ENV;
+    delete $ENV{D2TG_TOKEN};
+    delete $ENV{D2TG_CHAT_ID};
+
+    my ( $out, $rc, $err ) = run_capturing_stderr($poller_cli, '--some-unknown-flag');
+
+    isnt( $rc, 0, 'an unrecognized flag exits non-zero even with D2TG_CHAT_ID also unset' );
+    like( $err, qr/--some-unknown-flag/, 'the flag is still named, not masked by the D2TG_CHAT_ID guard' );
+
+    my $lock_path = File::Spec->catfile( $fake_db_dir, '.tira', 'telegram.pid' );
+    ok( !-e $lock_path, 'no lock file created in this case either' );
+}
+
+{
     # Regression: every currently-recognized flag combination must keep
     # working exactly as before - this ticket must not break TGT-049's
     # own multi-bot/--chat_id parsing.
