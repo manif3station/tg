@@ -312,7 +312,7 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
     d2 tg.poller [--db <alias> | -d <alias>]
     d2 tg.poller --chat_id <id> --bot <token> [--bot <token> ...] [--chat_id <id> --bot <token> ...]
-    d2 tg.poller --help
+    d2 tg.poller --help | -h
 
 =head1 DESCRIPTION
 
