@@ -33,8 +33,11 @@ $| = 1;
 # and repeats for every non-ASCII message. Applied before anything else
 # runs so every print/warn path below (including --help's own usage
 # text) is covered.
+# TGT117-UTF8-LAYER-BEGIN (t/87 extracts and runs these exact two lines
+# in a real subprocess - keep this block to just the binmode calls)
 binmode STDOUT, ':encoding(UTF-8)';
 binmode STDERR, ':encoding(UTF-8)';
+# TGT117-UTF8-LAYER-END
 
 # TGT-107 (live-experienced incident): --help - or any other flag this
 # script doesn't recognize - used to be silently accepted and ignored,
