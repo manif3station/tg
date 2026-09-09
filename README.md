@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.19).** Doc fix (TGT-148, found via a
+**Status: early implementation (v1.20).** `d2 tg.unread` now refuses on
+an unrecognized flag or leftover argument (TGT-149, found via a
+scheduled bug hunt) instead of silently ignoring it, matching every
+sibling command in this project's own established convention
+(`d2 tg.status`, `d2 tg.history`, `d2 tg.whoami`,
+`d2 tg.text-only-replies`). Doc fix (TGT-148, found via a
 scheduled doc-accuracy hunt): `D2TG::Config::heartbeat_age`'s own POD
 still claimed the old fixed 1200s staleness threshold TGT-147 (below)
 replaced - the one doc location that ticket's own documentation gate

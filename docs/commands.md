@@ -614,7 +614,10 @@ summary. Prints `No unread messages.` and exits 0 when there are none,
 rather than a blank/confusing output. `--db`/`-d` (TGT-051) resolves
 the same way `d2 tg.poller`'s does. The summary text for a downloaded
 photo/document never contains its real local filesystem path (TGT-133)
-- fetch the actual bytes via `d2 tg.attachment`, below.
+- fetch the actual bytes via `d2 tg.attachment`, below. Refuses with a
+`Usage:` message and exit code 2 on any unrecognized flag or leftover
+positional argument (TGT-149, found via a scheduled bug-hunt) - the
+one sibling command in this family missing that check until now.
 
 ## `d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]`
 

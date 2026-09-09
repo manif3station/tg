@@ -1,5 +1,15 @@
 Revision history for the tg skill
 
+1.20  2026-09-09
+      - CONSISTENCY FIX (TGT-149, found via scheduled hourly bug hunt
+        JOB-003): d2 tg.unread now refuses with a Usage message and
+        exit code 2 on any unrecognized flag or leftover positional
+        argument, matching every sibling command in the same family
+        (d2 tg.status, d2 tg.history per TGT-122, d2 tg.whoami, d2
+        tg.text-only-replies) - it was the one command in this exact
+        family silently ignoring one instead of refusing, exactly the
+        failure mode TGT-107/TGT-122 both exist to close elsewhere.
+
 1.19  2026-09-09
       - DOC ACCURACY (TGT-148, found via JOB-005's scheduled doc-accuracy
         hunt): D2TG::Config::heartbeat_age's own POD still claimed

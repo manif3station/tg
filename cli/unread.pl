@@ -17,6 +17,16 @@ if ($@) {
 }
 @ARGV = @rest;
 
+# TGT-149 (found via a scheduled hourly bug-hunt): every sibling
+# command in this exact family (cli/status.pl, cli/history.pl -
+# TGT-122, cli/whoami.pl, cli/text-only-replies.pl) already refuses an
+# unrecognized flag or leftover positional argument instead of
+# silently ignoring it - this command was the one missing it.
+if (@ARGV) {
+    print STDERR "Usage: d2 tg.unread [--db <alias> | -d <alias>]\n";
+    exit 2;
+}
+
 my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
 if ($@) {
     print STDERR $@;
@@ -69,5 +79,12 @@ been marked read (TGT-046, via a successful C<d2 tg.reply
 --reply-to-message-id>), oldest first: chat id, message id, sender,
 timestamp, and the stored summary. Prints C<No unread messages.> and
 exits 0 when there are none, rather than an empty/confusing output.
+
+Refuses with a C<Usage:> message and exit code 2 on any unrecognized
+flag or leftover positional argument (TGT-149, found via a scheduled
+bug-hunt) - matching every sibling command in this same family
+(C<cli/status.pl>, C<cli/history.pl> per TGT-122, C<cli/whoami.pl>,
+C<cli/text-only-replies.pl>), all of which already refused rather than
+silently ignoring one.
 
 =cut
