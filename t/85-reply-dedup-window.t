@@ -49,6 +49,54 @@ ok( !$store->is_recent_duplicate_reply( 1000, 'hello there' ), 'the same text to
     ok( $window_store->is_recent_duplicate_reply( 999, 'stale text', window_seconds => 4000 ), 'the same match IS flagged with an explicitly widened window' );
 }
 
+# Codex review finding: window_seconds must be validated, not silently
+# accept a negative/non-numeric value and build a nonsensical SQLite
+# date modifier.
+{
+    my $bad_store = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
+
+    eval { $bad_store->is_recent_duplicate_reply( 999, 'x', window_seconds => -5 ) };
+    like( $@, qr/non-negative/, 'a negative window_seconds is refused' );
+
+    eval { $bad_store->is_recent_duplicate_reply( 999, 'x', window_seconds => 'banana' ) };
+    like( $@, qr/non-negative/, 'a non-numeric window_seconds is refused' );
+
+    ok( eval { $bad_store->is_recent_duplicate_reply( 999, 'x', window_seconds => 0 ); 1 },
+        'window_seconds => 0 is accepted as a valid (if trivial) value, not refused' );
+}
+
+# Codex review finding (critical): CREATE TABLE IF NOT EXISTS alone is a
+# no-op against a database whose sent_replies table already exists from
+# a prior TGT-105-only install, without the text column TGT-114 adds -
+# a real ALTER TABLE migration (mirroring messages.read_at's own
+# pattern) must actually run against such a database.
+{
+    my ( undef, $upgrade_db_path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
+
+    # Simulate a pre-TGT-114 database: create sent_replies in its OLD
+    # shape (no text column) via a bare DBI connection, bypassing
+    # D2TG::Store::new's own (already-current) _ensure_schema entirely.
+    require DBI;
+    my $raw_dbh = DBI->connect( "dbi:SQLite:dbname=$upgrade_db_path", '', '', { RaiseError => 1 } );
+    $raw_dbh->do(
+        "CREATE TABLE sent_replies (
+             chat_id INTEGER NOT NULL, bot_key TEXT NOT NULL DEFAULT '',
+             text_message_id INTEGER NOT NULL, voice_message_id INTEGER,
+             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             PRIMARY KEY (chat_id, bot_key, text_message_id)
+         )"
+    );
+    $raw_dbh->disconnect;
+
+    my $upgraded_store = D2TG::Store->new( db_path => $upgrade_db_path, admin_chat_id => 1 );
+
+    ok( eval { $upgraded_store->record_sent_text( 999, 801, text => 'post-upgrade text' ); 1 },
+        'record_sent_text succeeds against a database upgraded from the pre-TGT-114 schema' )
+      or diag("died with: $@");
+    ok( $upgraded_store->is_recent_duplicate_reply( 999, 'post-upgrade text' ),
+        'is_recent_duplicate_reply works correctly after the migration' );
+}
+
 # D2TG::Reply::send_reply wiring: a duplicate is refused, not sent twice.
 package Fake::DedupTelegram;
 

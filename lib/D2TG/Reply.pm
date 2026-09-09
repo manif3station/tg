@@ -227,10 +227,15 @@ checks whether this exact C<text> was already sent to this C<chat_id>
 (and C<bot_key>) within the last few seconds - if so, C<send_reply>
 dies immediately, before touching Telegram at all, rather than
 delivering the identical message a second time. This closes a real gap:
-a retried C<send_reply> call after a transient failure, or an agent
-accidentally re-running the same C<d2 tg.reply> command, previously had
-no way to avoid sending the same text twice. Only checked when C<store>
-is given - unchanged behavior for a caller that never opts in.
+an agent accidentally re-running the same C<d2 tg.reply> command, or
+retrying after a I<confirmed> prior success (e.g. TGT-083's own
+synthesis/C<send_voice>-failure case, where the text definitely already
+went out), previously had no way to avoid sending the same text twice.
+Only checked when C<store> is given - unchanged behavior for a caller
+that never opts in. Does NOT protect against retrying after an
+I<ambiguous> C<send_message> failure (the request errored/timed out
+without confirming whether Telegram actually received it) - see
+L<D2TG::Store/is_recent_duplicate_reply>'s own documented limitations.
 
 =head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store, bot_key => $key, text_message_id => $id)
 

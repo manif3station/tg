@@ -128,11 +128,22 @@ sub _ensure_schema {
              bot_key          TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
              text_message_id  INTEGER NOT NULL,
              voice_message_id INTEGER,
-             text             TEXT,
              created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
              PRIMARY KEY (chat_id, bot_key, text_message_id)
          )'
     );
+
+    # TGT-114, Codex review finding (also matches a bug-hunt observation
+    # flagged earlier this session): CREATE TABLE IF NOT EXISTS above is
+    # a no-op against a database that already has sent_replies from a
+    # prior install of TGT-105 alone, without this column - the exact
+    # same ALTER-with-duplicate-tolerance pattern messages.read_at
+    # already uses above.
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE sent_replies ADD COLUMN text TEXT') };
+    }
+    die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
     # only by chat_id (a single-column PRIMARY KEY), which silently let
@@ -504,6 +515,13 @@ sub is_recent_duplicate_reply {
     my $bot_key        = $args{bot_key}        // DEFAULT_BOT_KEY;
     my $window_seconds = $args{window_seconds} // 10;
 
+    # Codex review finding: a negative window_seconds silently builds a
+    # nonsensical SQLite modifier ("--10 seconds") that would otherwise
+    # make the comparison behave unpredictably rather than obviously
+    # wrong. A non-numeric value is rejected the same way.
+    die "D2TG::Store::is_recent_duplicate_reply: window_seconds must be a non-negative number\n"
+      unless $window_seconds =~ /^\d+(?:\.\d+)?$/;
+
     my $row = $self->{dbh}->selectrow_hashref(
         "SELECT 1 FROM sent_replies
          WHERE chat_id = ? AND bot_key = ? AND text = ?
@@ -759,16 +777,46 @@ a substantial improvement over no record at all, not a guarantee.
 
 Returns true if the exact same C<$text> was already sent to C<$chat_id>
 under C<$bot_key> (default C<DEFAULT_BOT_KEY>) within the last
-C<window_seconds> (default 10) (TGT-114). C<D2TG::Reply::send_reply>
+C<window_seconds> (default 10, must be a non-negative number - a
+Codex review finding, a negative value would otherwise build a
+nonsensical SQLite date modifier) (TGT-114). C<D2TG::Reply::send_reply>
 checks this before calling C<send_message> at all, and refuses (dies)
 rather than delivering an identical message twice - closing a real gap
-where a retried C<send_reply> call after a transient failure, or an
-agent accidentally re-running the same C<d2 tg.reply> command, had no
-way to avoid sending the same text twice. Scoped by C<bot_key> for the
-same reason C<text_only_replies> is: a Telegram group shared by more
-than one configured bot must never let one bot's own recent send be
-mistaken for a duplicate of a different bot's identical text to the
-same C<chat_id>.
+where an agent accidentally re-running the same C<d2 tg.reply> command,
+or a caller retrying after a synthesis/C<send_voice> failure (the
+message TGT-083 already reports loudly), had no way to avoid sending
+the same text twice. Scoped by C<bot_key> for the same reason
+C<text_only_replies> is: a Telegram group shared by more than one
+configured bot must never let one bot's own recent send be mistaken for
+a duplicate of a different bot's identical text to the same C<chat_id>.
+
+Known, accepted limitations (Codex review findings):
+
+=over 4
+
+=item * This does not protect against a C<send_message> call whose own
+request errors or times out ambiguously - if Telegram actually
+delivered the text but the response never reached this process,
+C<record_sent_text> never runs, so a subsequent retry sees no recorded
+match and sends again. Only a I<confirmed> prior success is ever
+checked against; an ambiguous prior failure is a different, unprotected
+case, not something this feature claims to solve.
+
+=item * This is a best-effort, sequential check, not an atomic claim -
+two truly concurrent C<send_reply> calls for the same text could both
+pass the check before either records its own send. Acceptable for this
+skill's actual usage pattern (a human-paced CLI tool, one operator
+issuing one command at a time), not a guarantee under real concurrency.
+
+=item * C<created_at>/the window comparison are both second-granular
+(SQLite's C<CURRENT_TIMESTAMP> and C<datetime()> discard fractional
+seconds), so the true elapsed time between a check and the original
+send can exceed the stated C<window_seconds> by up to slightly under a
+second. Not corrected for, since sub-second precision isn't meaningful
+for this feature's actual purpose (catching an operator-paced retry
+seconds later, not a strict timing guarantee).
+
+=back
 
 =head2 disconnect
 
