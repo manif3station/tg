@@ -83,12 +83,18 @@ sub synthesize_to_file {
     # construction).
     my $renamer = $args{renamer} || sub { return rename( $_[0], $_[1] ); };
 
-    my $copied  = copy( $ogg_path, $staging_path );
+    # Codex review finding: $! must be captured immediately after
+    # whichever step actually failed - the later `unlink $ogg_path`
+    # call (needed regardless of outcome) would otherwise silently
+    # clobber a real copy() failure's own errno before it's ever read.
+    my $copied    = copy( $ogg_path, $staging_path );
+    my $copy_err  = $!;
     unlink $ogg_path;
-    my $renamed = $copied && $renamer->( $staging_path, $args{out} );
+    my $renamed   = $copied && $renamer->( $staging_path, $args{out} );
+    my $rename_err = $!;
 
     unless ($renamed) {
-        my $err = $!;
+        my $err = $copied ? $rename_err : $copy_err;
         unlink $staging_path;
         die "D2TG::TTS::synthesize_to_file: cannot write to $args{out}: $err\n";
     }
@@ -185,6 +191,15 @@ true on success; it exists purely so tests can force the otherwise
 very-hard-to-trigger "everything succeeded up to the final same-
 directory rename, and then that one step itself failed" case
 deterministically.
+
+Accepted, documented limitation (a Codex review raised it, not fixed
+here as disproportionate to this ticket's own scope): between the
+staging path being reserved and C<copy> writing to it, another process
+with write access to the same directory could in principle replace it
+with a symlink (a classic TOCTOU race) - relevant only if C<--out>'s
+directory is itself writable by an untrusted party, which is true of
+any local file this skill writes regardless of this function.
+
 
 =head2 _run(@cmd)
 
