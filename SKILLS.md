@@ -256,8 +256,11 @@ resilient to an install renaming its own entrypoint file mid-run
 captured at launch.
 
 Every `cli/*` entrypoint file carries a `.pl` extension internally
-(`cli/poller.pl`, `cli/reply.pl`, `cli/approve.pl`, `cli/unread.pl`,
-`cli/history.pl`, `cli/help.pl` - TGT-093). This is purely a source-tree
+(`cli/approve.pl`, `cli/help.pl`, `cli/history.pl`, `cli/poller.pl`,
+`cli/reply.pl`, `cli/retry-download.pl`, `cli/send.pl`, `cli/status.pl`,
+`cli/text-only-replies.pl`, `cli/unread.pl`, `cli/whoami.pl` - TGT-093;
+TGT-123 kept this list current after 5 later entrypoints were added).
+This is purely a source-tree
 naming convention and does not change how you run the skill: `d2
 tg.<command>` (e.g. `d2 tg.poller`) dispatches exactly as documented
 above, because Developer Dashboard's `SkillDispatcher` already tries a
