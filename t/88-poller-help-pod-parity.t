@@ -24,16 +24,22 @@ sub extract_flags {
     return \%flags;
 }
 
-my $source = read_source();
+# Run the actual script's --help path in a real subprocess and extract
+# flags from what it genuinely prints (a Codex review finding on an
+# earlier draft: extracting from the enclosing `if (...) { ... }`
+# source block instead included the argument-detection condition
+# itself, so `-h`/`--help` would always appear "mentioned" even if a
+# future edit removed them from the printed usage text - this closes
+# that gap).
+my $help_output = qx{$^X "$Bin/../cli/poller.pl" --help 2>&1};
+die "cli/poller.pl --help produced no output\n" unless length $help_output;
 
-my ($help_block) = $source =~
-  /if \( grep \{ \$_ eq '--help' \|\| \$_ eq '-h' \} \@ARGV \) \{(.*?)\n\}/s;
-die "--help block not found in cli/poller.pl\n" unless $help_block;
+my $source = read_source();
 
 my ($synopsis) = $source =~ /=head1 SYNOPSIS\n\n(.*?)\n\n=head1/s;
 die "SYNOPSIS section not found in cli/poller.pl's POD\n" unless $synopsis;
 
-my $help_flags     = extract_flags($help_block);
+my $help_flags     = extract_flags($help_output);
 my $synopsis_flags = extract_flags($synopsis);
 
 for my $flag ( sort keys %$help_flags ) {
