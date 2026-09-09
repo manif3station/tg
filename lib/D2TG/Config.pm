@@ -65,8 +65,13 @@ sub changes_summary {
     my $changes = <$fh>;
     close $fh;
 
+    # Codex review finding: bound the entry at the next actual version
+    # header (e.g. "0.92  2026-09-09"), not at any unindented line -
+    # a bare "(?=\n\S|\z)" would truncate the entry early if it ever
+    # contained an unindented continuation/prose line, potentially
+    # missing a real bullet further down.
     return undef
-      unless $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=\n\S|\z)/ms;
+      unless $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=^\d+\.\d+\s|\z)/ms;
     my $block = $1;
 
     my ($first_bullet_line) = $block =~ /^\s*-\s*(.+?)\s*$/m;

@@ -65,6 +65,30 @@ CHANGES
     );
 }
 
+# Codex review finding: the entry boundary must anchor on the next
+# real version header, not just any unindented line - otherwise an
+# unindented line inside a still-valid entry would truncate it early
+# and miss a real bullet further down.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+0.06  2026-09-08
+      - First bullet (TGT-006): fine on its own.
+Note: an unindented aside line that is not a new version header.
+      - A second bullet, still part of 0.06's own entry.
+
+0.07  2026-09-09
+      - Unrelated later entry.
+CHANGES
+
+    is(
+        D2TG::Config::changes_summary( version => '0.06', default_root => $skill_root ),
+        'First bullet (TGT-006): fine on its own.',
+        'an unindented non-header line inside a valid entry does not corrupt extraction of its own first bullet'
+    );
+}
+
 # No entry for the requested version at all.
 {
     my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
