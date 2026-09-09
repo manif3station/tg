@@ -279,7 +279,12 @@ until ($shutting_down) {
     unless ($shutting_down) {
         my $current_version = D2TG::Config::skill_version( default_root => $skill_root );
         if ( $current_version ne $starting_version ) {
-            print "d2tg poller detected version change ($starting_version -> $current_version), restarting...\n";
+            my $summary = D2TG::Config::changes_summary(
+                version      => $current_version,
+                default_root => $skill_root,
+            );
+            my $summary_note = defined $summary ? " - $summary" : '';
+            print "d2tg poller detected version change ($starting_version -> $current_version)$summary_note, restarting...\n";
             $store->disconnect;
 
             # TGT-094 (live production incident): $0 is the path this

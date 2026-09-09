@@ -51,6 +51,28 @@ sub skill_version {
     return $version;
 }
 
+sub changes_summary {
+    my (%args) = @_;
+
+    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
+      // $args{default_root}
+      // '.';
+    my $version = $args{version};
+
+    my $changes_path = File::Spec->catfile( $skill_root, 'Changes' );
+    open my $fh, '<', $changes_path or return undef;
+    local $/;
+    my $changes = <$fh>;
+    close $fh;
+
+    return undef
+      unless $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=\n\S|\z)/ms;
+    my $block = $1;
+
+    my ($first_bullet_line) = $block =~ /^\s*-\s*(.+?)\s*$/m;
+    return $first_bullet_line;
+}
+
 sub state_db_path {
     my (%args) = @_;
 
@@ -607,6 +629,18 @@ C<state_db_path> does. Dies with a clear message if C<.env> can't be
 read at all, or if it has no C<VERSION> line. C<cli/poller.pl> uses this
 to detect when a newer version has been installed while it is still
 running, so it can restart itself.
+
+=head2 changes_summary(version => $version, default_root => $path)
+
+Returns the first bullet line of the given C<$version>'s own entry in
+this skill's installed C<Changes> file (resolving the skill root the
+same way L</skill_version> does), or C<undef> if C<Changes> can't be
+read at all or has no entry for that version (TGT-112, user-supplied
+live-experienced feedback: the version-bump restart notice named the
+old/new version numbers but not what actually changed). A multi-line
+bullet is truncated to its first physical line only - a short summary,
+not a full reflow. C<cli/poller.pl>'s version-change restart notice
+uses this to make itself self-describing without a separate lookup.
 
 =head2 resolve_self_exec_path(bin_dir => $dir, basename => $name, fallback => $path)
 
