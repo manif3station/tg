@@ -212,6 +212,21 @@ sub _send_file {
     close $fh;
 
     my ( undef, undef, $filename ) = File::Spec->splitpath($file_path);
+
+    # TGT-125 (found via a scheduled hourly bug-hunt): $filename is
+    # inserted directly into a quoted Content-Disposition attribute
+    # below, and cli/tg.send's own $file_path is a user-supplied local
+    # path - a literal double-quote in its basename would otherwise
+    # prematurely close that attribute, corrupting the header line
+    # (Telegram then sees a malformed multipart request). Escape
+    # backslashes first, then quotes, matching RFC 2388/6266's own
+    # quoted-string escaping convention (backslash-escape both
+    # characters). send_voice's own equivalent filename (below, a
+    # separate code path) is deliberately not touched here - it always
+    # comes from D2TG::TTS::synthesize's own File::Temp-generated name,
+    # never user-controlled, so it's out of this ticket's scope.
+    ( my $escaped_filename = $filename ) =~ s/([\\"])/\\$1/g;
+
     my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
 
     my $body = "--$boundary\r\n"
@@ -234,7 +249,7 @@ sub _send_file {
     }
 
     $body .= "--$boundary\r\n"
-      . qq{Content-Disposition: form-data; name="$field_name"; filename="$filename"\r\n}
+      . qq{Content-Disposition: form-data; name="$field_name"; filename="$escaped_filename"\r\n}
       . "Content-Type: application/octet-stream\r\n\r\n"
       . $data . "\r\n"
       . "--$boundary--\r\n";
