@@ -18,7 +18,7 @@ sub read_source {
 sub extract_flags {
     my ($text) = @_;
     my %flags;
-    while ( $text =~ /(--[a-z][a-z_]*|-[a-z]\b)/g ) {
+    while ( $text =~ /(--[a-z][a-z0-9_-]*\b|-[a-z]\b)/g ) {
         $flags{$1} = 1;
     }
     return \%flags;
