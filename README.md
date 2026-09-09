@@ -1,6 +1,8 @@
 # tg
 
-**Status: early implementation (v1.08).** docs/commands.md now has a
+**Status: early implementation (v1.09).** `D2TG::Config::masked_token`'s
+short-token fallback (<8 chars) no longer returns the raw value - a
+fixed, non-revealing placeholder instead (TGT-138). docs/commands.md now has a
 worked example of the NEW TG MEDIA + GET ATTACHMENT WITH flow (TGT-136)
 instead of only separate prose. SKILLS.md's onboarding
 overview now names `d2 tg.attachment` explicitly (TGT-135) - previously

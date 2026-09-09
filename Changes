@@ -1540,3 +1540,17 @@ Revision history for the tg skill
         multiple media messages in one poll cycle each get their own
         independent GET ATTACHMENT WITH line. Previously this flow was
         only described in separate prose across two sections.
+
+1.09  2026-09-09
+      - D2TG::Config::masked_token (TGT-138, self-review while
+        completing TGT-136's pending-push gate): the fallback for a
+        token too short to usefully mask (<8 characters) used to return
+        the token unmodified - the exact opposite of what a masking
+        function exists to prevent. Now returns a fixed placeholder,
+        "(short token, not shown)", instead. Real Telegram bot tokens
+        are always far longer than 8 characters, so this path was never
+        reachable in normal operation, but a masking function's one
+        edge case must never be the one that leaks the full secret.
+        This edge case was previously identified and deliberately
+        scoped out of TGT-115 (whoami) as that ticket's own concern -
+        this ticket picks up that deferred work.

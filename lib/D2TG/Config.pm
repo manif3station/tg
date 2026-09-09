@@ -13,7 +13,18 @@ sub masked_token {
     my ($token) = @_;
 
     return '(not set)' unless defined $token && length $token;
-    return $token if length($token) < 8;
+
+    # TGT-138: a token too short to mask usefully (first-4/last-4) used
+    # to be returned raw - the exact opposite of what this function
+    # exists to prevent. A Codex review caught that <= 8, not < 8, is
+    # the correct boundary: an exactly-8-character token's first 4 and
+    # last 4 characters are the whole string, so substr(...,0,4).'...'.
+    # substr(...,-4) would show every character, just reformatted with
+    # '...' in the middle - not masked at all. Real Telegram bot tokens
+    # are always far longer than 8 characters, so this path is
+    # unreachable in normal operation, but a masking function's one
+    # edge case must never leak the full secret regardless.
+    return '(short token, not shown)' if length($token) <= 8;
 
     return substr( $token, 0, 4 ) . '...' . substr( $token, -4 );
 }
@@ -388,9 +399,13 @@ the numeric chat id.
 Returns C<$token> masked to its first 4 and last 4 characters joined by
 C<...> (TGT-045), for safe display (e.g. the poller's own startup line)
 without printing a live credential in full. C<undef> or an empty string
-returns C<(not set)>; a token shorter than 8 characters (too short to
-usefully mask) is returned unchanged rather than crashing or producing a
-confusing result.
+returns C<(not set)>; a token 8 characters or shorter (too short to
+usefully mask that way - at exactly 8 characters, "first 4 and last 4"
+is the whole string) returns the fixed placeholder
+C<(short token, not shown)> (TGT-138) - never the raw value, since a
+masking function's one edge case must never be the one that leaks the
+full secret. Real Telegram bot tokens are always far longer than 8
+characters, so this branch is not reachable in normal operation.
 
 =head2 require_chat_id_or_warn
 

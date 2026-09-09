@@ -44,13 +44,9 @@ sub _run_capturing_stderr {
     like( $out, qr/^attachments: /m, 'prints the resolved attachments location too' );
 }
 
-# Codex review finding: masked_token's own existing short-token
-# behavior (< 8 chars printed unmasked) is D2TG::Config's established
-# design, already relied on by cli/status.pl and cli/poller.pl's own
-# startup line - out of scope for this ticket to change (scope_out:
-# "Any change to how the token/chat_id/storage location are themselves
-# resolved"). Confirmed here as existing, not a new regression this
-# ticket introduces.
+# TGT-138: masked_token's own short-token fallback no longer returns
+# the raw value - it now shows a fixed, non-revealing placeholder
+# instead, the same as everywhere else this function is used.
 {
     my $fake_db_dir = tempdir( CLEANUP => 1 );
     setup_mandatory_db_env( $Bin, $fake_db_dir );
@@ -59,7 +55,8 @@ sub _run_capturing_stderr {
     $ENV{D2TG_CHAT_ID} = '1';
 
     my $out = `$whoami_cli`;
-    like( $out, qr/token: short/, 'a short (<8 char) token is shown as-is - existing D2TG::Config::masked_token behavior, not something this ticket changes' );
+    unlike( $out, qr/token: short\b/, 'a short (<8 char) token is never shown raw (TGT-138)' );
+    like( $out, qr/token: \(short token, not shown\)/, 'a short token gets the fixed, non-revealing placeholder instead' );
 }
 
 # Codex review finding: --db/-d must actually change the reported
