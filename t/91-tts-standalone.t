@@ -58,6 +58,18 @@ require D2TG::TTS;
 }
 
 {
+    # The move() itself (not the synthesis step) failing - e.g. the
+    # requested --out path's parent directory doesn't exist - must
+    # still die loudly and never leave a partial file at $out.
+    my $runner   = sub { return 0; };    # synthesis itself succeeds
+    my $out_path = File::Spec->catfile( '/nonexistent-dir-for-tgt106-test', 'unreachable.ogg' );
+
+    eval { D2TG::TTS::synthesize_to_file( 'hello', out => $out_path, runner => $runner ) };
+    like( $@, qr/cannot write to/, 'a failure to move the file to --out (not a synthesis failure) still dies loudly' );
+    ok( !-e $out_path, 'no file is left behind when the destination itself is unreachable' );
+}
+
+{
     # A synthesis failure must still propagate loudly - no silent empty
     # file at the requested --out path.
     my $runner = sub { return 1; };    # gtts fails immediately
