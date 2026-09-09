@@ -1297,3 +1297,14 @@ Revision history for the tg skill
         --db/-d (consumed earlier still) - live-verified as a false
         alarm, but added explicit --db/-d regression test cases and
         tightened the refusal assertions to the actual exit code (2).
+
+0.92  2026-09-09
+      - Test-only refactor (TGT-121, found via a scheduled
+        improvement-hunt pass): extracted a shared
+        t/lib/Fake/ReplyTelegram.pm test double, replacing 6
+        independently-reinvented copies of the same outbound
+        send_message/send_voice shape across 5 test files (t/14, t/37,
+        t/78, t/84 x2, t/85) - the same class of duplication TGT-018
+        already fixed once for the inbound get_updates shape. No
+        production code changed; identical test count/assertions
+        confirmed before and after.

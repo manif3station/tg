@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v0.91).** `d2 tg.history` now refuses
+**Status: early implementation (v0.92).** Test-only refactor (TGT-121,
+found via a scheduled improvement hunt): a shared
+`t/lib/Fake/ReplyTelegram.pm` test double now replaces 6
+independently-reinvented copies of the same outbound test fake across 5
+test files - no user-facing behavior change. `d2 tg.history` now refuses
 with a Usage message and exit 2 if any unrecognized flag or leftover
 positional argument remains after `--since`/`--until` parsing (TGT-122,
 found via a scheduled bug-hunt) - previously silently ignored, exiting
