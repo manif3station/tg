@@ -8,6 +8,7 @@ use File::Spec;
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 require D2TG::Reply;
+require Fake::ReplyTelegram;
 
 # TGT-109 (live-experienced incident, user-supplied /tmp/missing2.md,
 # item 3): TGT-083 orders send_reply as text-first-then-voice, so a
@@ -15,33 +16,6 @@ require D2TG::Reply;
 # - re-running d2 tg.reply would duplicate the already-delivered text.
 # resend_voice() must synthesize and send ONLY the voice half for an
 # already-sent message, never touching send_message at all.
-
-package Fake::Telegram;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless {
-        sent_messages => [],
-        sent_voices   => [],
-        call_order    => [],
-        fail_voice    => $args{fail_voice},
-    }, $class;
-}
-
-sub send_message {
-    my ( $self, $chat_id, $text ) = @_;
-    push @{ $self->{call_order} }, 'send_message';
-    push @{ $self->{sent_messages} }, { chat_id => $chat_id, text => $text };
-    return [ { message_id => 1 } ];
-}
-
-sub send_voice {
-    my ( $self, $chat_id, $path, %opts ) = @_;
-    push @{ $self->{call_order} }, 'send_voice';
-    die "sendVoice failed: network error\n" if $self->{fail_voice};
-    push @{ $self->{sent_voices} }, { chat_id => $chat_id, path => $path, %opts };
-    return { message_id => 2 };
-}
 
 package Fake::Store;
 
@@ -60,7 +34,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram   = Fake::Telegram->new;
+    my $telegram   = Fake::ReplyTelegram->new;
     my $synthesize = sub {
         push @{ $telegram->{call_order} }, 'synthesize';
         return $voice_path;
@@ -90,7 +64,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram   = Fake::Telegram->new;
+    my $telegram   = Fake::ReplyTelegram->new;
     my $store      = Fake::Store->new;
     my $synthesize = sub { return $voice_path };
 
@@ -117,7 +91,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram   = Fake::Telegram->new( fail_voice => 1 );
+    my $telegram   = Fake::ReplyTelegram->new( fail_voice => 1 );
     my $store      = Fake::Store->new;
     my $synthesize = sub { return $voice_path };
 
@@ -142,7 +116,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram   = Fake::Telegram->new( fail_voice => 1 );
+    my $telegram   = Fake::ReplyTelegram->new( fail_voice => 1 );
     my $synthesize = sub { return $voice_path };
 
     eval {

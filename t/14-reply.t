@@ -2,10 +2,11 @@ use strict;
 use warnings;
 use Test::More;
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 use File::Temp qw(tempfile);
 
 require D2TG::Reply;
+require Fake::ReplyTelegram;
 
 # TGT-083 (live user request): send_reply's order was reversed - text is
 # now sent FIRST, then the voice note is synthesized, then sent. This is
@@ -17,33 +18,6 @@ require D2TG::Reply;
 # send_reply still dies/propagates the failure loudly so the operator
 # knows to follow up, rather than silently reporting success.
 
-package Fake::Telegram;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless {
-        sent_messages => [],
-        sent_voices   => [],
-        call_order    => [],
-        fail_voice    => $args{fail_voice},
-    }, $class;
-}
-
-sub send_message {
-    my ( $self, $chat_id, $text ) = @_;
-    push @{ $self->{call_order} }, 'send_message';
-    push @{ $self->{sent_messages} }, { chat_id => $chat_id, text => $text };
-    return [ { message_id => 1 } ];
-}
-
-sub send_voice {
-    my ( $self, $chat_id, $path ) = @_;
-    push @{ $self->{call_order} }, 'send_voice';
-    die "sendVoice failed: network error\n" if $self->{fail_voice};
-    push @{ $self->{sent_voices} }, { chat_id => $chat_id, path => $path };
-    return { message_id => 2 };
-}
-
 package main;
 
 {
@@ -51,7 +25,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram    = Fake::Telegram->new;
+    my $telegram    = Fake::ReplyTelegram->new;
     my $synth_calls = 0;
     my $synthesize  = sub {
         $synth_calls++;
@@ -78,7 +52,7 @@ package main;
 }
 
 {
-    my $telegram   = Fake::Telegram->new;
+    my $telegram   = Fake::ReplyTelegram->new;
     my $synthesize = sub { die "boom: tts unavailable\n"; };
 
     eval {
@@ -101,7 +75,7 @@ package main;
     print {$fh} 'fake voice bytes';
     close $fh;
 
-    my $telegram   = Fake::Telegram->new( fail_voice => 1 );
+    my $telegram   = Fake::ReplyTelegram->new( fail_voice => 1 );
     my $synthesize = sub { return $voice_path; };
 
     eval {

@@ -3,28 +3,11 @@ use warnings;
 use Test::More;
 use File::Temp qw(tempfile);
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 
 require D2TG::Store;
 require D2TG::Reply;
-
-package Fake::TelegramForRead;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { fail_voice => $args{fail_voice} }, $class;
-}
-
-sub send_voice {
-    my ($self) = @_;
-    die "sendVoice failed: network error\n" if $self->{fail_voice};
-    return { message_id => 2 };
-}
-
-sub send_message {
-    my ($self) = @_;
-    return [ { message_id => 1 } ];
-}
+require Fake::ReplyTelegram;
 
 package main;
 
@@ -65,7 +48,7 @@ sub new_store {
     my $store = new_store();
     $store->record_message( 999, 100, 'bob', 'hello' );
 
-    my $telegram = Fake::TelegramForRead->new;
+    my $telegram = Fake::ReplyTelegram->new;
 
     D2TG::Reply::send_reply(
         telegram             => $telegram,
@@ -83,7 +66,7 @@ sub new_store {
     my $store = new_store();
     $store->record_message( 999, 100, 'bob', 'hello' );
 
-    my $telegram = Fake::TelegramForRead->new( fail_voice => 1 );
+    my $telegram = Fake::ReplyTelegram->new( fail_voice => 1 );
 
     eval {
         D2TG::Reply::send_reply(
@@ -104,7 +87,7 @@ sub new_store {
     my $store = new_store();
     $store->record_message( 999, 100, 'bob', 'hello' );
 
-    my $telegram = Fake::TelegramForRead->new;
+    my $telegram = Fake::ReplyTelegram->new;
 
     D2TG::Reply::send_reply(
         telegram   => $telegram,

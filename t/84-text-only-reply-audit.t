@@ -9,6 +9,7 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 require D2TG::Store;
 require D2TG::Reply;
+require Fake::ReplyTelegram;
 
 # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
 # send text first, then synthesize+send voice - a synthesis/send_voice
@@ -86,24 +87,6 @@ is( scalar @{ $store->text_only_replies }, 1, 'recording the same text send agai
 # D2TG::Reply::send_reply wiring: a complete reply is never flagged; a
 # reply whose voice half fails IS flagged (and reported loudly, per
 # TGT-083's own tradeoff - the die still happens).
-package Fake::ReplyTelegram;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { fail_voice => $args{fail_voice} }, $class;
-}
-
-sub send_message {
-    my ( $self, $chat_id, $text ) = @_;
-    return [ { message_id => 601 } ];
-}
-
-sub send_voice {
-    my ( $self, $chat_id, $path ) = @_;
-    die "sendVoice failed: network error\n" if $self->{fail_voice};
-    return { message_id => 701 };
-}
-
 package main;
 
 {
@@ -112,7 +95,7 @@ package main;
     close $fh;
 
     my $store    = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
-    my $telegram = Fake::ReplyTelegram->new;
+    my $telegram = Fake::ReplyTelegram->new( text_message_id => 601, voice_message_id => 701 );
 
     D2TG::Reply::send_reply(
         telegram   => $telegram,
@@ -127,7 +110,7 @@ package main;
 
 {
     my $store    = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
-    my $telegram = Fake::ReplyTelegram->new( fail_voice => 1 );
+    my $telegram = Fake::ReplyTelegram->new( fail_voice => 1, text_message_id => 601 );
 
     eval {
         D2TG::Reply::send_reply(
@@ -212,16 +195,10 @@ package main;
 # t/32's own pre-existing Fake::TelegramForReply (returns a bare
 # hashref) breaking when this feature's first draft assumed an arrayref
 # unconditionally.
-package Fake::ShapelessTelegram;
-
-sub new { return bless {}, shift }
-sub send_message { return { ok => 1 } }    # NOT an arrayref
-sub send_voice    { return { ok => 1 } }
-
 package main;
 
 {
-    my $telegram = Fake::ShapelessTelegram->new;
+    my $telegram = Fake::ReplyTelegram->new( shapeless => 1 );
 
     my $result = D2TG::Reply::send_reply(
         telegram   => $telegram,
@@ -236,7 +213,7 @@ package main;
 
 {
     my $store    = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
-    my $telegram = Fake::ShapelessTelegram->new;
+    my $telegram = Fake::ReplyTelegram->new( shapeless => 1 );
 
     my $result = D2TG::Reply::send_reply(
         telegram   => $telegram,

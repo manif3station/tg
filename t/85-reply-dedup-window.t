@@ -3,10 +3,11 @@ use warnings;
 use Test::More;
 use File::Temp qw(tempfile);
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 
 require D2TG::Store;
 require D2TG::Reply;
+require Fake::ReplyTelegram;
 
 # TGT-114: a reply sent seconds apart with near-identical text (e.g. a
 # retry after a transient send_reply failure, or an agent accidentally
@@ -98,29 +99,11 @@ ok( !$store->is_recent_duplicate_reply( 1000, 'hello there' ), 'the same text to
 }
 
 # D2TG::Reply::send_reply wiring: a duplicate is refused, not sent twice.
-package Fake::DedupTelegram;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { calls => 0 }, $class;
-}
-
-sub send_message {
-    my ( $self, $chat_id, $text ) = @_;
-    $self->{calls}++;
-    return [ { message_id => 801 } ];
-}
-
-sub send_voice {
-    my ( $self, $chat_id, $path ) = @_;
-    return { message_id => 802 };
-}
-
 package main;
 
 {
     my $store    = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
-    my $telegram = Fake::DedupTelegram->new;
+    my $telegram = Fake::ReplyTelegram->new( text_message_id => 801, voice_message_id => 802 );
 
     D2TG::Reply::send_reply(
         telegram   => $telegram,
@@ -147,7 +130,7 @@ package main;
 {
     # Regression: without a store, dedup checking must not apply (no
     # behavior change for a caller that never opts in).
-    my $telegram = Fake::DedupTelegram->new;
+    my $telegram = Fake::ReplyTelegram->new( text_message_id => 801, voice_message_id => 802 );
 
     D2TG::Reply::send_reply(
         telegram   => $telegram,
