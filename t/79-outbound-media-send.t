@@ -8,6 +8,7 @@ use File::Spec;
 use JSON::PP qw(decode_json);
 use HTTP::Response;
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Fake::UA;
 
 require D2TG::Telegram;
 
@@ -16,21 +17,6 @@ require D2TG::Telegram;
 # file to Telegram as a photo or document message - the new skill had no
 # outbound-media primitive at all. send_photo/send_document mirror
 # send_voice's own multipart pattern exactly.
-
-package Fake::UA;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { responses => $args{responses} || [], calls => [] }, $class;
-}
-
-sub request {
-    my ( $self, $req ) = @_;
-    push @{ $self->{calls} }, { method => 'request', url => $req->uri->as_string, req => $req };
-    return shift @{ $self->{responses} };
-}
-
-package main;
 
 sub http_response {
     my (%args) = @_;

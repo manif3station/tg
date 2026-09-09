@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.21).** SECURITY FIX (TGT-151, found
+**Status: early implementation (v1.22).** Test-only refactor (TGT-153,
+found via a scheduled improvement hunt): a shared `t/lib/Fake/UA.pm`
+test double now replaces 5 independently-reinvented copies of the same
+outbound-HTTP test fake across 5 test files (md5sum identified two
+exact-duplicate clusters before extraction, the remaining difference
+inspected by hand) - a sixth pair of files sharing the same package name
+was found to be a genuinely different, unrelated fake and deliberately
+left untouched rather than forced into the same module. No
+user-facing behavior change, zero production code touched. SECURITY FIX (TGT-151, found
 via a scheduled hourly bug hunt): message reactions (see TGT-143 below)
 now go through the same `is_allowed` access-control gate every other
 inbound event uses - previously an unapproved, non-pending chat_id's

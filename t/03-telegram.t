@@ -2,25 +2,11 @@ use strict;
 use warnings;
 use Test::More;
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 use HTTP::Response;
+use Fake::UA;
 
 require D2TG::Telegram;
-
-package Fake::UA;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { responses => $args{responses} || [], calls => [] }, $class;
-}
-
-sub request {
-    my ( $self, $req ) = @_;
-    push @{ $self->{calls} }, { method => 'request', url => $req->uri->as_string, req => $req };
-    return shift @{ $self->{responses} };
-}
-
-package main;
 
 sub http_response {
     my (%args) = @_;

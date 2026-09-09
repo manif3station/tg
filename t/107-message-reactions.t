@@ -9,6 +9,7 @@ use HTTP::Response;
 require D2TG::Telegram;
 require D2TG::Poller;
 use Fake::Telegram;
+use Fake::UA;
 
 # TGT-143 (live Telegram question, msg #176, Michael: "the user can
 # give a like or mark a message with emoji, is that something can be
@@ -17,21 +18,6 @@ use Fake::Telegram;
 # allowed_updates at all, so message_reaction updates (Bot API's opt-in
 # reaction-change type) never reached the poller regardless of whether
 # a user reacted - not a platform limitation, a missing request param.
-
-package Fake::UA;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { responses => $args{responses} || [], calls => [] }, $class;
-}
-
-sub request {
-    my ( $self, $req ) = @_;
-    push @{ $self->{calls} }, { url => $req->uri->as_string, req => $req };
-    return shift @{ $self->{responses} };
-}
-
-package main;
 
 sub http_response {
     my (%args) = @_;

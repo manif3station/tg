@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.22  2026-09-09
+      - TEST REFACTOR (TGT-153, found via scheduled improvement hunt
+        JOB-004): a shared t/lib/Fake/UA.pm test double now replaces 5
+        independently-reinvented, near-identical copies of the same
+        outbound-HTTP test fake across t/03-telegram.t,
+        t/12-telegram-send.t, t/79-outbound-media-send.t,
+        t/107-message-reactions.t, and
+        t/32-message-id-and-reply-threading.t. md5sum identified two
+        exact-duplicate clusters before extraction, not assumed; the
+        remaining difference between the two clusters was inspected by
+        hand - three of the five copies carried an extra, entirely
+        unused 'method' key inside each recorded call, confirmed unused
+        (grepped all 5 files) before dropping it in the shared version. A sixth pair of files
+        (t/48-dedup-refreshes-mtime.t, t/83-failed-download-queue.t)
+        sharing the identical package name turned out, on closer
+        inspection during implementation, to be a genuinely different,
+        get()-only fake with no request() method at all - deliberately
+        left untouched rather than forced into the shared module. Pure
+        test-infrastructure change, zero production code (lib/, cli/)
+        touched, zero behavior change to any test's own assertions.
+
 1.21  2026-09-09
       - SECURITY FIX (TGT-151, found via scheduled hourly bug hunt
         JOB-003): D2TG::Poller::run_once's message_reaction branch

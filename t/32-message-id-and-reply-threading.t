@@ -11,21 +11,7 @@ require D2TG::Telegram;
 require D2TG::Reply;
 require Fake::Telegram;
 require Fake::Store;
-
-package Fake::UA;
-
-sub new {
-    my ( $class, %args ) = @_;
-    return bless { responses => $args{responses} || [], calls => [] }, $class;
-}
-
-sub request {
-    my ( $self, $req ) = @_;
-    push @{ $self->{calls} }, { url => $req->uri->as_string, req => $req };
-    return shift @{ $self->{responses} };
-}
-
-package main;
+require Fake::UA;
 
 sub http_response {
     my (%args) = @_;
