@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.22).** Test-only refactor (TGT-153,
+**Status: early implementation (v1.23).** BUG FIX (TGT-154, found via a
+scheduled hourly bug hunt): an anonymous channel/chat reaction (Telegram
+omits `MessageReactionUpdated`'s `user` field entirely and supplies
+`actor_chat` instead) previously printed `sender: unknown` even though
+Telegram had supplied the channel's real name - the sender resolution
+now reads `actor_chat.title`/`.username` when present, same failure
+class TGT-142 already fixed once for forwarded messages. Test-only
+refactor (TGT-153,
 found via a scheduled improvement hunt): a shared `t/lib/Fake/UA.pm`
 test double now replaces 5 independently-reinvented copies of the same
 outbound-HTTP test fake across 5 test files (md5sum identified two

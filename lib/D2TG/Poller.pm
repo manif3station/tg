@@ -67,8 +67,19 @@ sub run_once {
             next if $store && !$store->is_allowed( $chat_id, $bot_token );
 
             my $message_id = $reaction->{message_id};
-            my $sender     = _sanitize_for_stdout(
-                _display_name( $chat_id, $reaction->{user}{username} ) );
+
+            # TGT-154 (JOB-003 scheduled hourly bug hunt finding):
+            # MessageReactionUpdated's own 'user' field is optional -
+            # an anonymous chat/channel reaction (e.g. a channel admin
+            # reacting as the channel itself) omits 'user' entirely and
+            # supplies 'actor_chat' (a Chat object) instead. Same
+            # failure class TGT-142 already fixed once for
+            # forward_origin's own sender_chat/chat fields.
+            my $sender =
+              $reaction->{actor_chat}
+              ? _sanitize_for_stdout(
+                $reaction->{actor_chat}{title} // $reaction->{actor_chat}{username} // 'unknown' )
+              : _sanitize_for_stdout( _display_name( $chat_id, $reaction->{user}{username} ) );
 
             # A Codex review finding: MessageReactionUpdated reports
             # the FULL current/previous reaction sets, not a single
@@ -631,7 +642,15 @@ scheduled bug hunt: this branch originally ran entirely before that
 gate, so an unapproved, non-pending chat id's reaction was printed
 unconditionally) - an unapproved chat id's reaction is silently
 ignored, never queued via C<add_pending> since a reaction isn't a
-first-contact event the way a message is. C<MessageReactionUpdated>
+first-contact event the way a message is. The sender name prefers
+C<actor_chat.title>/C<.username> when C<actor_chat> is present (TGT-154,
+found via a scheduled bug hunt: Telegram's own C<user> field is
+optional - an anonymous chat/channel reaction omits it entirely and
+supplies C<actor_chat> instead, so this branch previously fell through
+to printing C<unknown> even though Telegram had supplied the channel's
+real name; same failure class L</_forward_origin_name> already fixed
+once for forwarded messages), falling back to the ordinary C<user>-based
+L</_display_name> resolution otherwise. C<MessageReactionUpdated>
 reports the I<full> current and previous reaction sets, not a single
 before/after pair, since a user can have multiple reactions on one
 message and a single update can add one reaction while removing

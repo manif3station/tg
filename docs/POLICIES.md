@@ -78,6 +78,22 @@ message, an unapproved chat id's reaction is silently ignored rather than
 queued via `add_pending` - a reaction isn't itself an attempt to start a
 conversation.
 
+## Anonymous channel reactions name the channel, not "unknown" (TGT-154)
+
+Scheduled hourly bug hunt finding, 2026-09-09: Telegram's own
+`MessageReactionUpdated.user` field is optional - when a reaction is made
+anonymously on behalf of a chat/channel (a channel admin reacting as the
+channel itself), Telegram omits `user` entirely and supplies `actor_chat`
+(a `Chat` object) instead. The reaction branch only ever read
+`$reaction->{user}{username}`, so an anonymous channel reaction silently
+printed `sender: unknown` even though Telegram had supplied the channel's
+real identifying information via `actor_chat` - the identical failure
+class TGT-142 already fixed once for forwarded messages' own
+`sender_chat`/`chat` fields. Fixed by preferring `actor_chat.title` /
+`actor_chat.username` (matching `_forward_origin_name`'s own established
+fallback order) whenever `actor_chat` is present, falling back to the
+ordinary `user`-based resolution otherwise.
+
 ## Oversized files are rejected clearly, before a doomed download attempt
 
 Telegram's Bot API `getFile` endpoint has a hard, documented 20MB limit

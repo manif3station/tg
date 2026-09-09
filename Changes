@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+1.23  2026-09-09
+      - BUG FIX (TGT-154, found via scheduled hourly bug hunt JOB-003):
+        message_reaction's own sender resolution only ever read
+        Telegram's 'user' field, but MessageReactionUpdated.user is
+        optional - an anonymous chat/channel reaction (a channel admin
+        reacting as the channel itself) omits 'user' entirely and
+        supplies 'actor_chat' (a Chat object) instead, so it silently
+        printed "sender: unknown" even though Telegram had supplied the
+        channel's real name. Same failure class TGT-142 already fixed
+        once for forwarded messages' own sender_chat/chat fields. Now
+        prefers actor_chat.title/.username when actor_chat is present,
+        falling back to the ordinary user-based resolution otherwise.
+
 1.22  2026-09-09
       - TEST REFACTOR (TGT-153, found via scheduled improvement hunt
         JOB-004): a shared t/lib/Fake/UA.pm test double now replaces 5
