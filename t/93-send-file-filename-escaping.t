@@ -91,6 +91,38 @@ sub http_response {
         'a literal backslash in the filename is escaped too' );
 }
 
+{
+    # Codex review finding (high severity): a filename can legally
+    # contain a literal CR/LF on Unix - left unstripped, that would
+    # inject an ADDITIONAL raw header line into the multipart request
+    # regardless of the quote/backslash escaping above, since CR/LF is
+    # what actually terminates a header line here. This must never
+    # result in an injected header reaching the request at all.
+    my $dir  = tempdir( CLEANUP => 1 );
+    my $path = File::Spec->catfile( $dir, "evil\r\nX-Injected: 1.jpg" );
+    open my $fh, '>', $path or die $!;
+    print {$fh} 'fake jpeg bytes';
+    close $fh;
+
+    my $ua = Fake::UA->new(
+        responses => [ http_response( content => '{"ok":true,"result":{"message_id":5}}' ) ],
+    );
+    my $tg = D2TG::Telegram->new( token => 'test-token', ua => $ua );
+
+    $tg->send_photo( 42, $path );
+
+    my $content = $ua->{calls}[0]{req}->content;
+    # The CR/LF itself must never survive to actually terminate a
+    # header line - it's fine for the literal text "X-Injected" to
+    # still appear as harmless text inside the filename attribute
+    # (nothing dangerous about the substring on its own); what matters
+    # is that it can never become a REAL header line (i.e. never
+    # preceded by an actual \r\n at the start of a line).
+    unlike( $content, qr/\r\nX-Injected:/, 'the CR/LF never survives to actually start a new (injected) header line' );
+    like( $content, qr/filename="evilX-Injected: 1\.jpg"/,
+        'the CR/LF is stripped and the rest of the filename is preserved as harmless inline text, not an injected header' );
+}
+
 # Regression: a completely ordinary filename must be totally unaffected.
 {
     my ( $fh, $path ) = tempfile( SUFFIX => '.jpg' );

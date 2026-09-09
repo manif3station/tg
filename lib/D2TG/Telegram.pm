@@ -225,7 +225,18 @@ sub _send_file {
     # separate code path) is deliberately not touched here - it always
     # comes from D2TG::TTS::synthesize's own File::Temp-generated name,
     # never user-controlled, so it's out of this ticket's scope.
-    ( my $escaped_filename = $filename ) =~ s/([\\"])/\\$1/g;
+    #
+    # Codex review finding (real, high-severity): on Unix a filename can
+    # legally contain CR/LF (and other control characters) - left in
+    # place, those would inject additional raw header lines into this
+    # multipart request regardless of the quote/backslash escaping
+    # below, since CR/LF is what actually terminates a header line
+    # here. Strip C0 control characters (0x00-0x1F) entirely first -
+    # the file is still sent correctly, just with a sanitized displayed
+    # filename, rather than refusing the whole send over a cosmetic
+    # detail Telegram never surfaces to the recipient anyway.
+    ( my $safe_filename = $filename ) =~ s/[\x00-\x1F]//g;
+    ( my $escaped_filename = $safe_filename ) =~ s/([\\"])/\\$1/g;
 
     my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
 
