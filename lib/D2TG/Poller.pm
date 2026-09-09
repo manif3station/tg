@@ -53,7 +53,19 @@ sub run_once {
         # taken on a reaction, matching the existing pattern for every
         # other inbound event this poller only ever reports.
         if ( my $reaction = $update->{message_reaction} ) {
-            my $chat_id    = $reaction->{chat}{id};
+            my $chat_id = $reaction->{chat}{id};
+
+            # TGT-151 (JOB-003 scheduled hourly bug hunt finding): this
+            # branch previously ran entirely before the is_allowed gate
+            # below, which only guarded the plain message/media branch -
+            # any chat_id, including one never approved and not even
+            # pending, could react and have it printed unconditionally,
+            # leaking its chat_id/username onto the monitored stream.
+            # Reuses the exact same gate the message branch uses; no
+            # add_pending here since a reaction isn't a first-contact
+            # event the way a message is.
+            next if $store && !$store->is_allowed( $chat_id, $bot_token );
+
             my $message_id = $reaction->{message_id};
             my $sender     = _sanitize_for_stdout(
                 _display_name( $chat_id, $reaction->{user}{username} ) );
@@ -613,7 +625,13 @@ own opt-in reaction-change type, requested via
 L<D2TG::Telegram/get_updates>'s own C<allowed_updates> default - is
 handled as its own branch, before any C<message> handling, and never
 recorded into C<$store> (detection/printing only, per the ticket's own
-scope; no reply action is taken on a reaction). C<MessageReactionUpdated>
+scope; no reply action is taken on a reaction). Gated by the same
+C<is_allowed> check the C<message> branch uses (TGT-151, found via a
+scheduled bug hunt: this branch originally ran entirely before that
+gate, so an unapproved, non-pending chat id's reaction was printed
+unconditionally) - an unapproved chat id's reaction is silently
+ignored, never queued via C<add_pending> since a reaction isn't a
+first-contact event the way a message is. C<MessageReactionUpdated>
 reports the I<full> current and previous reaction sets, not a single
 before/after pair, since a user can have multiple reactions on one
 message and a single update can add one reaction while removing

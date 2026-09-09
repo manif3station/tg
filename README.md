@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.20).** `d2 tg.unread` now refuses on
+**Status: early implementation (v1.21).** SECURITY FIX (TGT-151, found
+via a scheduled hourly bug hunt): message reactions (see TGT-143 below)
+now go through the same `is_allowed` access-control gate every other
+inbound event uses - previously an unapproved, non-pending chat_id's
+reaction was printed unconditionally, leaking its chat_id/username onto
+the monitored stream and letting an unapproved party interact with the
+bot in a way the rest of this codebase explicitly designs against.
+`d2 tg.unread` now refuses on
 an unrecognized flag or leftover argument (TGT-149, found via a
 scheduled bug hunt) instead of silently ignoring it, matching every
 sibling command in this project's own established convention

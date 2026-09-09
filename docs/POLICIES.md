@@ -63,6 +63,21 @@ it sends reaches stdout — until an operator runs `d2 tg.approve
 operator notices; repeat messages from the same still-pending sender do
 not repeat the notification.
 
+## Message reactions are gated by access control too (TGT-151)
+
+Scheduled hourly bug hunt finding, 2026-09-09: TGT-143's message-reaction
+detection was added directly ahead of the `is_allowed` check above in
+`run_once`, rather than after it - so an unapproved, non-pending chat id
+reacting to any message the bot had sent/seen was printed unconditionally
+(`NEW TG REACTION [chat_id] sender: ...`), leaking that chat id and
+username onto the monitored stream and letting an unapproved party
+interact with the bot in exactly the way this section exists to prevent.
+Fixed by reusing the same `is_allowed` check inline in the reaction
+branch, before it reads or prints anything. Unlike a first-contact
+message, an unapproved chat id's reaction is silently ignored rather than
+queued via `add_pending` - a reaction isn't itself an attempt to start a
+conversation.
+
 ## Oversized files are rejected clearly, before a doomed download attempt
 
 Telegram's Bot API `getFile` endpoint has a hard, documented 20MB limit

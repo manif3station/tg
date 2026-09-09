@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+1.21  2026-09-09
+      - SECURITY FIX (TGT-151, found via scheduled hourly bug hunt
+        JOB-003): D2TG::Poller::run_once's message_reaction branch
+        (TGT-143) ran entirely before the is_allowed access-control
+        gate that guards every other inbound event - an unapproved,
+        non-pending chat_id's reaction was printed unconditionally,
+        leaking its chat_id/username onto the monitored stream and
+        letting an unapproved party interact with the bot in a way this
+        codebase otherwise consistently designs against. Now reuses the
+        exact same is_allowed check the message branch uses; an
+        unapproved chat_id's reaction is silently ignored (not queued
+        via add_pending, since a reaction isn't a first-contact event
+        the way a message is).
+
 1.20  2026-09-09
       - CONSISTENCY FIX (TGT-149, found via scheduled hourly bug hunt
         JOB-003): d2 tg.unread now refuses with a Usage message and
