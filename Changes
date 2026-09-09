@@ -1,5 +1,14 @@
 Revision history for the tg skill
 
+1.19  2026-09-09
+      - DOC ACCURACY (TGT-148, found via JOB-005's scheduled doc-accuracy
+        hunt): D2TG::Config::heartbeat_age's own POD still claimed
+        cli/status.pl flags a heartbeat stale past "a fixed threshold
+        (1200 seconds)" - stale since TGT-147 (this same session)
+        changed that to a value derived from D2TG::Transcribe's own
+        constants (14400s/4h), which every OTHER doc location was
+        correctly updated for except this one POD section. Corrected.
+
 1.18  2026-09-09
       - RELIABILITY FIX (TGT-147, found via scheduled hourly bug hunt
         JOB-003, a real regression this same session's own earlier

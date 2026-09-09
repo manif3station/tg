@@ -731,9 +731,14 @@ unwritable filesystem.
 
 Returns the number of seconds since C<$path> was last written via
 L</write_heartbeat>, or C<undef> if the file doesn't exist or doesn't
-contain a bare integer timestamp. C<cli/status.pl> flags this stale past
-a fixed threshold (1200 seconds), kept safely above the worst-case time
-a single bot/chat pair's own poll cycle can legitimately take.
+contain a bare integer timestamp. C<cli/status.pl> flags this stale
+past a threshold derived from L<D2TG::Transcribe>'s own
+C<$TIMEOUT_CEILING> and C<@MODEL_TIERS> constants (multiplied together,
+plus a safety margin - currently 14400 seconds/4h, TGT-147 - not a
+fixed literal, so it can never silently drift out of sync with the
+transcription timeout it's meant to stay safely above again), kept
+safely above the worst-case time a single
+bot/chat pair's own poll cycle can legitimately take.
 
 =head2 is_expired_file_error($error)
 

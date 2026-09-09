@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v1.18).** `d2 tg.status`'s staleness
+**Status: early implementation (v1.19).** Doc fix (TGT-148, found via a
+scheduled doc-accuracy hunt): `D2TG::Config::heartbeat_age`'s own POD
+still claimed the old fixed 1200s staleness threshold TGT-147 (below)
+replaced - the one doc location that ticket's own documentation gate
+missed, now corrected. `d2 tg.status`'s staleness
 threshold no longer falsely flags a healthy, still-transcribing poller
 (TGT-147, a real regression found via a scheduled bug hunt - this
 session's own earlier TGT-140 changed the transcription timeout it
