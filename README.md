@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.23).** BUG FIX (TGT-154, found via a
+**Status: early implementation (v1.24).** SECURITY/RELIABILITY FIX
+(TGT-155, found via a scheduled hourly bug hunt): a non-canonical
+`D2TG_CHAT_ID` - whitespace-only, or leading/trailing whitespace around
+an otherwise-valid id (a copy-paste error, a shell quoting mistake) -
+previously passed the startup guard and let the poller start, silently
+seeding that mangled value as the admin's chat id; Telegram's real
+numeric chat id can never string-eq match it, so the real owner was
+permanently locked out with zero warning. The guard now validates the
+full expected shape (bare digits, or a leading `-` for a
+group/supergroup/channel) rather than merely excluding known-bad
+shapes. BUG FIX (TGT-154, found via a
 scheduled hourly bug hunt): an anonymous channel/chat reaction (Telegram
 omits `MessageReactionUpdated`'s `user` field entirely and supplies
 `actor_chat` instead) previously printed `sender: unknown` even though

@@ -63,6 +63,28 @@ it sends reaches stdout — until an operator runs `d2 tg.approve
 operator notices; repeat messages from the same still-pending sender do
 not repeat the notification.
 
+## A non-canonical D2TG_CHAT_ID refuses to start, same as a missing one (TGT-155)
+
+Scheduled hourly bug hunt finding, 2026-09-09, widened after a Codex
+review finding of its own: the startup guard above only ever excluded
+`undef`/an exactly-empty string as "not set" - `D2TG_CHAT_ID` is read
+completely raw, with no trimming or validation, so any value that
+wasn't Telegram's own canonical integer chat-id shape passed the check
+and let the poller start normally, silently seeding that mangled value
+as the admin's chat id. A whitespace-only value (a copy-paste error, a
+shell quoting mistake) was the first case found, but the identical
+silent lockout equally applies to leading/trailing whitespace around an
+otherwise-valid id too (e.g. `' 12345 '`) - a narrower whitespace-only
+check would still miss this. Telegram's real numeric chat id can never
+string-eq match a mangled one, so the real owner was permanently locked
+out with no warning at all - the poller looked healthy while quietly
+denying its own intended admin. `require_chat_id_or_warn` now validates
+the full expected shape (bare digits, or a leading `-` for a
+group/supergroup/channel) rather than merely excluding known-bad
+shapes, refusing with the identical warning/exit path already used for
+the missing case whenever the value doesn't match - deliberately never
+auto-trimming and proceeding with a stripped value.
+
 ## Message reactions are gated by access control too (TGT-151)
 
 Scheduled hourly bug hunt finding, 2026-09-09: TGT-143's message-reaction

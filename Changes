@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.24  2026-09-09
+      - SECURITY/RELIABILITY FIX (TGT-155, found via scheduled hourly
+        bug hunt JOB-003, widened after a Codex review finding of its
+        own): D2TG::Config::require_chat_id_or_warn only ever excluded
+        undef/an exactly-empty string as "not set" - D2TG_CHAT_ID is
+        read completely raw, no trimming or validation, so any value
+        that wasn't Telegram's own canonical integer chat-id shape
+        passed the check and let the poller start normally, silently
+        seeding that mangled value as the admin's chat id in
+        D2TG::Store. A whitespace-only value was the first case found,
+        but the identical silent lockout equally applies to leading/
+        trailing whitespace around an otherwise-valid id (e.g.
+        ' 12345 ') - a narrower whitespace-only check would still miss
+        this. Telegram's real numeric chat id can never string-eq match
+        a mangled one, so the real owner was permanently locked out
+        with zero warning. Now validates the full expected shape (bare
+        digits, or a leading '-' for a group/supergroup/channel) rather
+        than merely excluding known-bad shapes, refusing (identical
+        warning/exit path already used for the missing case) whenever
+        the value doesn't match - never auto-trimming and proceeding.
+
 1.23  2026-09-09
       - BUG FIX (TGT-154, found via scheduled hourly bug hunt JOB-003):
         message_reaction's own sender resolution only ever read

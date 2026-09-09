@@ -32,7 +32,23 @@ sub masked_token {
 sub require_chat_id_or_warn {
     my $chat_id = chat_id();
 
-    if ( !defined $chat_id || $chat_id eq '' ) {
+    # TGT-155 (JOB-003 scheduled hourly bug hunt finding, widened after
+    # a Codex review finding of its own): chat_id() returns
+    # D2TG_CHAT_ID completely raw, with no trimming or validation - any
+    # value that isn't Telegram's own canonical integer chat-id shape
+    # (bare digits, or a leading '-' for a group/supergroup/channel)
+    # previously passed this check as long as it wasn't undef or
+    # exactly ''. A whitespace-only value (a copy-paste error, a shell
+    # quoting mistake) was the first case found, but the same silent
+    # lockout equally applies to any other non-canonical value (leading/
+    # trailing whitespace around an otherwise-valid id, e.g. ' 12345 '
+    # or "\t12345" - the first fix's own /^\s*$/ check missed exactly
+    # this) - Telegram's real numeric chat_id can never string-eq match
+    # a mangled one, so the real owner is locked out forever with zero
+    # warning. Validates the full expected shape instead of merely
+    # excluding known-bad shapes, so no other mangled-but-not-blank
+    # variant can slip through the same gap again.
+    if ( !defined $chat_id || $chat_id !~ /^-?\d+$/ ) {
         warn "D2TG_CHAT_ID is not set - refusing to start the poller.\n";
         return 0;
     }
@@ -418,10 +434,31 @@ characters, so this branch is not reachable in normal operation.
 
 =head2 require_chat_id_or_warn
 
-Returns true if C<D2TG_CHAT_ID> is set to a non-empty value. Otherwise
-prints a warning to C<STDERR> naming the missing variable and returns
-false. Callers (e.g. the poller entrypoint) are expected to refuse to
-start when this returns false, rather than falling back to a default.
+Returns true if C<D2TG_CHAT_ID> matches Telegram's own canonical chat-id
+shape (bare digits, or a leading C<-> for a group/supergroup/channel).
+Otherwise prints a warning to C<STDERR> naming the missing variable and
+returns false. Callers (e.g. the poller entrypoint) are expected to
+refuse to start when this returns false, rather than falling back to a
+default.
+
+TGT-155 (JOB-003 scheduled hourly bug hunt finding, widened after a
+Codex review finding of its own): L</chat_id> returns the env var
+completely raw, with no trimming or validation - any value that wasn't
+Telegram's own canonical integer shape previously passed this check as
+long as it wasn't C<undef> or exactly C<''>. A whitespace-only value (a
+copy-paste error, a shell quoting mistake) was the first case found, but
+the identical silent lockout equally applies to any other non-canonical
+value - leading/trailing whitespace around an otherwise-valid id (e.g.
+C<' 12345 '>), which the first, narrower whitespace-only check still
+missed. Telegram's real numeric chat_id can never string-eq match a
+mangled one, so the real owner is locked out forever with zero warning.
+Validates the full expected shape instead of merely excluding
+known-bad shapes, so no other mangled-but-not-blank variant can slip
+through the same gap again - deliberately refuses rather than
+auto-trimming and proceeding with a stripped value, since silently
+continuing on a mangled value risks masking a different, more confusing
+partial-corruption case; the safe behavior is the same hard refusal
+already used for the missing case.
 
 =head2 state_db_path(default_root => $path, base_dir => $path)
 
