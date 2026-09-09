@@ -117,12 +117,18 @@ sub _ensure_schema {
     # across bots. Without this, one bot's --voice-only recovery could
     # select and clear a DIFFERENT bot's still-genuinely-text-only flag
     # for the same chat_id, and the flag would misreport across bots.
+    # TGT-114: also stores the reply's own text (`text` column) so
+    # D2TG::Store::is_recent_duplicate_reply can check whether the same
+    # text was already sent to the same chat/bot within a short window -
+    # closing a real gap where a retried or accidentally-re-run reply
+    # command could deliver the identical message twice.
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS sent_replies (
              chat_id          INTEGER NOT NULL,
              bot_key          TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
              text_message_id  INTEGER NOT NULL,
              voice_message_id INTEGER,
+             text             TEXT,
              created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
              PRIMARY KEY (chat_id, bot_key, text_message_id)
          )'
@@ -438,8 +444,8 @@ sub record_sent_text {
     # prior partial failure - must never clobber a voice_message_id
     # already recorded for it back to NULL.
     $self->{dbh}->do(
-        'INSERT OR IGNORE INTO sent_replies (chat_id, bot_key, text_message_id) VALUES (?, ?, ?)',
-        undef, $chat_id, $bot_key, $text_message_id,
+        'INSERT OR IGNORE INTO sent_replies (chat_id, bot_key, text_message_id, text) VALUES (?, ?, ?, ?)',
+        undef, $chat_id, $bot_key, $text_message_id, $args{text},
     );
 
     return;
@@ -491,6 +497,22 @@ sub text_only_replies {
          WHERE voice_message_id IS NULL ORDER BY chat_id, bot_key, text_message_id',
         { Slice => {} }
     );
+}
+
+sub is_recent_duplicate_reply {
+    my ( $self, $chat_id, $text, %args ) = @_;
+    my $bot_key        = $args{bot_key}        // DEFAULT_BOT_KEY;
+    my $window_seconds = $args{window_seconds} // 10;
+
+    my $row = $self->{dbh}->selectrow_hashref(
+        "SELECT 1 FROM sent_replies
+         WHERE chat_id = ? AND bot_key = ? AND text = ?
+           AND created_at >= datetime('now', ?)
+         LIMIT 1",
+        undef, $chat_id, $bot_key, $text, "-$window_seconds seconds",
+    );
+
+    return $row ? 1 : 0;
 }
 
 sub disconnect {
@@ -685,7 +707,7 @@ Removes one row from the C<failed_downloads> queue by its own C<id>
 C<D2TG::Download::retry_failed_download> only after a retry actually
 succeeds; a failed retry leaves the row untouched.
 
-=head2 record_sent_text($chat_id, $text_message_id, bot_key => $key)
+=head2 record_sent_text($chat_id, $text_message_id, bot_key => $key, text => $text)
 
 Records that a text reply was sent (TGT-105) - C<D2TG::Reply::send_reply>
 calls this immediately after C<send_message> succeeds, before synthesis
@@ -695,7 +717,9 @@ C<voice_message_id> already recorded for it back to C<NULL>. C<bot_key>
 defaults to C<DEFAULT_BOT_KEY> (the single-bot sentinel) when omitted -
 a Codex review finding, mirroring TGT-098's own C<allow_list>/C<pending>
 scoping, since a Telegram group shared by more than one configured bot
-means C<chat_id> alone isn't unique across bots.
+means C<chat_id> alone isn't unique across bots. C<text> (TGT-114) is
+the reply's own text, stored so L</is_recent_duplicate_reply> can check
+it later.
 
 =head2 record_sent_voice($chat_id, $text_message_id, $voice_message_id, bot_key => $key)
 
@@ -730,6 +754,21 @@ in that narrow window leaves a genuinely-sent text message with no row
 at all, invisible here if its voice half then also fails. This mirrors
 TGT-104's own accepted best-effort tradeoff for its queue write; it is
 a substantial improvement over no record at all, not a guarantee.
+
+=head2 is_recent_duplicate_reply($chat_id, $text, bot_key => $key, window_seconds => $n)
+
+Returns true if the exact same C<$text> was already sent to C<$chat_id>
+under C<$bot_key> (default C<DEFAULT_BOT_KEY>) within the last
+C<window_seconds> (default 10) (TGT-114). C<D2TG::Reply::send_reply>
+checks this before calling C<send_message> at all, and refuses (dies)
+rather than delivering an identical message twice - closing a real gap
+where a retried C<send_reply> call after a transient failure, or an
+agent accidentally re-running the same C<d2 tg.reply> command, had no
+way to avoid sending the same text twice. Scoped by C<bot_key> for the
+same reason C<text_only_replies> is: a Telegram group shared by more
+than one configured bot must never let one bot's own recent send be
+mistaken for a duplicate of a different bot's identical text to the
+same C<chat_id>.
 
 =head2 disconnect
 

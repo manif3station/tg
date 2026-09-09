@@ -18,6 +18,17 @@ sub send_reply {
       ? ( reply_to_message_id => $args{reply_to_message_id} )
       : ();
 
+    # TGT-114: refuse a send whose exact text already went out to this
+    # same chat/bot within a short window - a retried send_reply call
+    # after a transient failure, or an agent accidentally re-running the
+    # same d2 tg.reply command, previously had no way to avoid delivering
+    # the identical message twice. Only checked when a store is given -
+    # unchanged behavior for a caller that never opts into this feature.
+    if ( $args{store} && $args{store}->is_recent_duplicate_reply( $chat_id, $text, bot_key => $args{bot_key} ) ) {
+        die "D2TG::Reply::send_reply: refusing to send - this exact text was already sent to "
+          . "chat_id $chat_id moments ago (duplicate within the dedup window)\n";
+    }
+
     my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
 
     # TGT-105: record the text send BEFORE synthesis/send_voice can
@@ -38,7 +49,7 @@ sub send_reply {
     my $text_message_id;
     if ( $args{store} ) {
         $text_message_id = eval { $text_result->[-1]{message_id} };
-        $args{store}->record_sent_text( $chat_id, $text_message_id, bot_key => $args{bot_key} )
+        $args{store}->record_sent_text( $chat_id, $text_message_id, bot_key => $args{bot_key}, text => $text )
           if defined $text_message_id;
     }
 
@@ -209,6 +220,17 @@ optional and defaults to the empty-string single-bot sentinel
 identity TGT-098's C<allow_list>/C<pending> scoping already uses, so a
 Telegram group shared by more than one configured bot never lets one
 bot's text-only audit trail collide with another's.
+
+C<store> also (TGT-114) gates a de-duplication check: before calling
+C<send_message> at all, C<L<D2TG::Store/is_recent_duplicate_reply>>
+checks whether this exact C<text> was already sent to this C<chat_id>
+(and C<bot_key>) within the last few seconds - if so, C<send_reply>
+dies immediately, before touching Telegram at all, rather than
+delivering the identical message a second time. This closes a real gap:
+a retried C<send_reply> call after a transient failure, or an agent
+accidentally re-running the same C<d2 tg.reply> command, previously had
+no way to avoid sending the same text twice. Only checked when C<store>
+is given - unchanged behavior for a caller that never opts in.
 
 =head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store, bot_key => $key, text_message_id => $id)
 
