@@ -169,6 +169,17 @@ sub run_once {
         else {
             print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
+
+            # TGT-120 (found via a scheduled bug-hunt): unlike every
+            # other successful branch above (text, transcribed voice,
+            # downloaded photo/document), this fallback (a photo/
+            # document/voice message with no download_media/
+            # transcribe_voice callback given) never recorded the
+            # message in the store, making it invisible to
+            # d2 tg.history/d2 tg.unread afterward even though it was
+            # printed to stdout in real time.
+            $store->record_message( $chat_id, $message_id, $sender, "$media_kind$caption_note" )
+              if $store && defined $message_id;
         }
     }
 

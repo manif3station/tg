@@ -33,7 +33,7 @@ for my $case (
         [
             {
                 update_id => 100,
-                message   => { chat => { id => 999 }, from => { username => 'ada' }, %$media_field },
+                message   => { message_id => 100, chat => { id => 999 }, from => { username => 'ada' }, %$media_field },
             },
         ],
     );
@@ -45,6 +45,16 @@ for my $case (
 
     like( $out, qr/999/,  "$kind: stdout names the chat id" );
     like( $out, qr/$kind/i, "$kind: stdout names the media type" );
+
+    # TGT-120 (found via a scheduled bug-hunt): unlike every other
+    # successful branch (text, transcribed voice, downloaded photo/
+    # document), run_once's fallback else branch (fires when a photo/
+    # document/voice message arrives but no download_media/
+    # transcribe_voice callback was given) never called
+    # $store->record_message - so the message printed to stdout in real
+    # time was invisible to d2 tg.history/d2 tg.unread afterward.
+    ok( $store->get_message( 999, 100 ),
+        "$kind: the fallback branch still records the message in the store, not just stdout" );
 }
 
 {
