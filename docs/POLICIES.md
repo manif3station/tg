@@ -513,9 +513,11 @@ a real production incident: it was found genuinely blocking the whole
 poll loop, and `cli/poller.pl` was unresponsive to Ctrl+C for as long as
 it ran). `D2TG::Transcribe::_run` is bounded by a timeout - for an
 automatically-selected model, scaled by the same duration signal
-`select_model` uses (TGT-140: `duration * 8`, floored at the original
-flat 300s, capped at 3600s), and the flat 300s default for an
-explicitly-passed model - a run that exceeds its budget is killed and
+`select_model` uses (TGT-140: `duration * 8`, floored at `$TIMEOUT`
+itself and capped at `max(3600, $TIMEOUT)` - never a hard-coded pair, so
+a caller-configured `$TIMEOUT` is always respected), and the flat
+`$TIMEOUT` default for an explicitly-passed model - a run that exceeds
+its budget is killed and
 reported as a normal `TRANSCRIBE ERROR`, never blocks forever.
 `cli/poller.pl`'s `SIGTERM`/
 `SIGINT` handlers also call `D2TG::Transcribe::kill_current` so an
@@ -581,11 +583,14 @@ introduced to reduce, left half-closed.
 `D2TG::Transcribe::_scaled_timeout($duration)` turns the same duration
 signal `select_model` already computes into a per-attempt timeout
 budget: `duration * 8` (a safety multiplier well above the worst
-measured throughput), floored at the original flat 300s (a scaled
-budget is never worse than before this fix) and capped at 3600s (never
-unbounded). `transcribe()` `local`izes `$TIMEOUT` to this scaled value
+measured throughput), floored at `$TIMEOUT` itself (never a hard-coded
+constant - a scaled budget is never worse than whatever `$TIMEOUT` is
+currently configured to, not just its default) and capped at
+`max(3600, $TIMEOUT)` (a Codex QA-stage review finding: a fixed 3600s
+ceiling could otherwise undercut a caller-configured `$TIMEOUT` larger
+than that). `transcribe()` `local`izes `$TIMEOUT` to this scaled value
 around each attempt, but only for an *automatically-selected* model -
-an explicitly-passed `model` keeps the original flat 300s default,
+an explicitly-passed `model` keeps the original flat `$TIMEOUT` default,
 matching the same explicit-means-explicit scope the retry-on-timeout
 fallback above already uses. The kill mechanism itself (process-group
 signal, TGT-031/128) and the retry-on-timeout trigger condition are

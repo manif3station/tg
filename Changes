@@ -1,5 +1,15 @@
 Revision history for the tg skill
 
+1.12  2026-09-09
+      - DOC ACCURACY (TGT-145, found via JOB-005's scheduled doc-accuracy
+        hunt): README.md, docs/commands.md (x2), and docs/POLICIES.md
+        (x2) still described D2TG::Transcribe's scaled timeout as
+        floored at a fixed 300s and capped at a fixed 3600s - stale
+        since TGT-140's own QA-stage fix made both dynamic (floored at
+        $TIMEOUT itself, capped at max(3600, $TIMEOUT)). Only the
+        module's own POD had been updated at the time; the other 5
+        prose locations drifted. Corrected to match the shipped code.
+
 1.11  2026-09-09
       - D2TG::Config (TGT-139, self-review while completing TGT-138's
         pending-push gate): write_heartbeat's rename-failure path now

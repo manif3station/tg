@@ -1,6 +1,6 @@
 # tg
 
-**Status: early implementation (v1.11).** `D2TG::Config::write_heartbeat`
+**Status: early implementation (v1.12).** `D2TG::Config::write_heartbeat`
 no longer leaks its staging temp file when `rename()` fails (TGT-139) -
 previously a failed heartbeat write left `$path.tmp.$$` behind, and every
 subsequent failed attempt added another orphaned file to the state
@@ -12,8 +12,10 @@ duration-tiered model selection shipped, so a clip on its own tier's real
 throughput could still be killed purely for taking longer than 300s
 wall-clock (measured: a 102.48s clip took 571s on `medium`, already past
 the old ceiling). The scaled budget is never smaller than the flat
-default and is capped at 3600s; an explicitly-passed model keeps the
-flat default unchanged. `D2TG::Config::masked_token`'s
+default and is capped at 3600s (or the flat default itself, whichever is
+larger - a caller-configured default is never undercut by the cap
+either); an explicitly-passed model keeps the flat default unchanged.
+`D2TG::Config::masked_token`'s
 short-token fallback (<8 chars) no longer returns the raw value - a
 fixed, non-revealing placeholder instead (TGT-138). docs/commands.md now has a
 worked example of the NEW TG MEDIA + GET ATTACHMENT WITH flow (TGT-136)
