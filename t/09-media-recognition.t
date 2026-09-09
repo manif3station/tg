@@ -53,8 +53,10 @@ for my $case (
     # transcribe_voice callback was given) never called
     # $store->record_message - so the message printed to stdout in real
     # time was invisible to d2 tg.history/d2 tg.unread afterward.
-    ok( $store->get_message( 999, 100 ),
-        "$kind: the fallback branch still records the message in the store, not just stdout" );
+    my $stored = $store->get_message( 999, 100 );
+    ok( $stored, "$kind: the fallback branch still records the message in the store, not just stdout" );
+    is( $stored->{sender}, 'ada', "$kind: the stored record names the right sender" );
+    is( $stored->{summary}, $kind, "$kind: the stored record's summary matches the media kind" );
 }
 
 {
