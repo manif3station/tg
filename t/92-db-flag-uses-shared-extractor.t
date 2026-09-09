@@ -114,4 +114,24 @@ for my $case ( [ 'status.pl', qr/^poller: not running$/m ], [ 'whoami.pl', qr/^d
     like( $out, qr/file not found/i, '--db in its original leading position still works exactly as before' );
 }
 
+{
+    # Codex review finding: a contrived invocation where --caption's own
+    # value looks like the --db/-d flag (extract_db_flag scans the
+    # whole argv before the --caption loop even runs) must still safely
+    # REFUSE - never silently send with a wrong/missing caption, and
+    # never silently send at all.
+    my $send_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'send.pl' );
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN}   = 'test-token';
+    $ENV{D2TG_CHAT_ID} = '12345';
+
+    my $out = `$send_cli --caption --db 123 /tmp/photo.jpg 2>&1`;
+    my $rc  = $? >> 8;
+
+    isnt( $rc, 0, 'a --caption value that looks like --db still refuses cleanly, rather than sending anything' );
+    like( $out, qr/Unknown --db\/-d alias/, 'the refusal names the actual (accepted, documented) cause - extract_db_flag claimed the token first' );
+}
+
 done_testing();

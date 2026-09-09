@@ -27,6 +27,22 @@ my $reply_to_message_id;
 # recognized before the two positional arguments (chat_id, file_path),
 # --db/-d must not have that same position restriction, since a caller
 # reasonably expects flag order to be interchangeable.
+#
+# Accepted, inherited limitation (a Codex review raised it): since this
+# scans the whole argv for a literal '--db'/'-d' token BEFORE the
+# --caption/--reply-to-message-id loop below runs, a contrived
+# invocation like `--caption --db 123 file.jpg` no longer fails with
+# "--caption requires a value" (its pre-TGT-124 behavior) - it now
+# extracts '--db 123' as an attempted db alias instead, refusing with
+# "Unknown --db/-d alias '123'" if 123 isn't registered. Both before and
+# after, this safely refuses rather than silently misbehaving (no send
+# happens, no wrong caption is used) - only the specific error message
+# differs for this unlikely, essentially-nonsensical input shape. This
+# ambiguity is inherent to extract_db_flag's own scan-the-whole-argv
+# design, already shared by every other cli/*.pl script that uses it;
+# giving send.pl its own different, position-aware extraction here would
+# defeat the entire point of this ticket (consistency with those 7
+# scripts) for a scenario with no legitimate real usage.
 my ( $db_alias, @after_db );
 eval { ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag(@ARGV) };
 if ($@) {
