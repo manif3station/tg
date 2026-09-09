@@ -347,7 +347,8 @@ this very C<SYNOPSIS> are two independently hand-maintained copies of
 the same flag list (TGT-119, found via a scheduled improvement hunt
 reviewing TGT-107) - C<t/88-poller-help-pod-parity.t> asserts they name
 the same set of flags, and caught a real drift the first time it ran
-(C<-h> documented here but missing from the C<SYNOPSIS>), now fixed.
+(C<-h> documented in the C<--help> usage text above but missing from
+the C<SYNOPSIS>), now fixed.
 That test is the ongoing enforcement mechanism against future drift.
 
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
