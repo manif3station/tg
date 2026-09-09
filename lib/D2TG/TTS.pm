@@ -40,9 +40,26 @@ sub synthesize_to_file {
 
     return $ogg_path unless defined $args{out};
 
+    # Codex review finding: File::Copy::move silently drops the file
+    # INTO an existing directory target instead of failing, which would
+    # make this return/print the directory's own path, not the file
+    # actually written - reject that shape explicitly instead.
+    if ( -d $args{out} ) {
+        unlink $ogg_path;
+        die "D2TG::TTS::synthesize_to_file: $args{out} is a directory, not a file path\n";
+    }
+
     move( $ogg_path, $args{out} ) or do {
         my $err = $!;
         unlink $ogg_path;
+
+        # Codex review finding: move()'s copy+unlink fallback (used
+        # across filesystems) can leave a partial/corrupt file at the
+        # destination if the copy itself fails partway through - clean
+        # that up too, so a failed synthesis never leaves a broken file
+        # sitting at the requested --out path.
+        unlink $args{out} if -e $args{out};
+
         die "D2TG::TTS::synthesize_to_file: cannot write to $args{out}: $err\n";
     };
 

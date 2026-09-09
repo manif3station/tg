@@ -29,7 +29,7 @@ require D2TG::TTS;
 
     is( scalar @calls, 2, 'exactly two commands are run: gtts then ffmpeg (unchanged synthesize behavior)' );
     like( $path, qr/\.ogg$/, 'with no --out, synthesize_to_file returns a sensible default path (the synthesized .ogg itself)' );
-    ok( -e $path, 'that default path is a real, playable file' );
+    ok( -e $path, 'that default path is a real file on disk (the injected fake runner never writes real audio, so content itself is not asserted here - see t/13-tts.t for synthesize\'s own coverage)' );
 
     unlink $path;
 }
@@ -43,6 +43,18 @@ require D2TG::TTS;
 
     is( $result, $out_path, 'with --out given, synthesize_to_file returns exactly that path' );
     ok( -e $out_path, 'the file actually exists at the requested --out path' );
+}
+
+{
+    # Codex review finding: File::Copy::move silently drops the file
+    # INTO an existing directory instead of failing, which would make
+    # this return/print the directory's own path, not the file that was
+    # actually written - must be rejected explicitly instead.
+    my $runner  = sub { return 0; };
+    my $out_dir = tempdir( CLEANUP => 1 );
+
+    eval { D2TG::TTS::synthesize_to_file( 'hello', out => $out_dir, runner => $runner ) };
+    like( $@, qr/is a directory, not a file path/, 'passing an existing directory as --out is rejected, not silently misplaced' );
 }
 
 {
