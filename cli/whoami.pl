@@ -92,13 +92,17 @@ command's does; the resolved base directory must already exist
 The token is always masked (a Codex review confirmed C<chat_id> is
 NOT masked, and the resolved paths are printed in full) - deliberate:
 C<chat_id> and filesystem paths are operational metadata, not secrets
-on the same level as a bot token, and C<cli/poller.pl>'s own startup
-line already prints the full C<chat_id> alongside a masked token
-(TGT-045) - this command's output is no more sensitive than what that
-startup line already shows on every run. Still, this output can end up
-in shell scrollback or captured logs like any other command's - avoid
-pasting it somewhere the storage path or chat_id shouldn't be seen, the
-same caution that already applies to any `d2 tg.*` command's own output.
+on the same level as a bot token. Printing an unmasked C<chat_id>
+follows C<cli/poller.pl>'s own existing startup-line precedent
+(TGT-045); the resolved storage/attachments paths are new information
+this command adds beyond what that precedent covers, not something
+already exposed elsewhere - a second Codex review pass caught that an
+earlier draft overstated the comparison as "no more sensitive overall"
+when it only actually holds for the token/chat_id half. Still, this
+output can end up in shell scrollback or captured logs like any other
+command's - avoid pasting it somewhere the storage path or chat_id
+shouldn't be seen, the same caution that already applies to any
+`d2 tg.*` command's own output.
 C<masked_token>'s own short-token behavior (a token under 8 characters
 is shown as-is, unmasked) is pre-existing D2TG::Config design already
 relied on by C<cli/status.pl> and C<cli/poller.pl> - unchanged by this

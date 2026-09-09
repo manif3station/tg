@@ -1209,7 +1209,10 @@ anything else this skill reports.
 
 `chat_id` and the resolved storage paths are printed in full, not
 masked - a deliberate choice, not an oversight (a Codex review raised
-this as an information-disclosure question): `cli/poller.pl`'s own
-startup line already prints a full `chat_id` alongside a masked token
-(TGT-045), so this command's output carries no more exposure than that
-existing, already-shipped line does on every single poller run.
+this as an information-disclosure question): printing an unmasked
+`chat_id` matches `cli/poller.pl`'s own existing startup-line precedent
+(TGT-045). The resolved storage/attachments paths are additional
+operational information this command adds beyond that precedent, not
+something already exposed elsewhere - a second Codex review pass caught
+that an earlier draft overstated this as "no more exposure overall,"
+which only actually holds for the token/chat_id half of the output.

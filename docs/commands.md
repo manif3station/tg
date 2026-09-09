@@ -440,10 +440,11 @@ at all** (never loads `D2TG::Telegram`) - safe to run at any time,
 including with a completely unconfigured or misconfigured token, as the
 first sanity check before trusting anything else this skill reports.
 `chat_id` and the resolved paths are printed in full (only the token is
-masked) - deliberate, matching `cli/poller.pl`'s own startup line, which
-already prints a full `chat_id` alongside a masked token (TGT-045); this
-command's output is no more sensitive than what that startup line
-already shows on every run, though the same care about where command
+masked) - deliberate: printing an unmasked `chat_id` matches
+`cli/poller.pl`'s own existing startup-line precedent (TGT-045), while
+the resolved storage/attachments paths are additional operational
+information this command adds beyond what that precedent covers, not
+something already exposed elsewhere. The same care about where command
 output ends up (shell scrollback, captured logs) applies as with any
 other `d2 tg.*` command.
 
