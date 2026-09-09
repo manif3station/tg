@@ -1216,3 +1216,22 @@ Revision history for the tg skill
         genuine concurrency, second-granular timing) were confirmed
         real but accepted as documented limitations, matching this
         project's own established practice for this class of tradeoff.
+
+0.87  2026-09-09
+      - FEATURE (TGT-115, user-supplied feature-gap analysis): new `d2
+        tg.whoami [--db <alias> | -d <alias>]` reports the installed
+        version, the masked token, the configured `chat_id`, and the
+        resolved storage/attachments location - no HTTP request at all
+        (never loads `D2TG::Telegram`), safe to run at any time
+        including with a completely unconfigured token. Answers "which
+        project's bot/log is this poller instance actually configured
+        for" when several projects on one host each run their own
+        installed copy of this skill.
+      - A Codex review strengthened the "no network call" guarantee's
+        own test to tripwire on any of `LWP::UserAgent`/`HTTP::Tiny`/
+        `HTTP::Request`/`Net::HTTP`/a `system()` or `curl`/`wget`
+        shell-out, not just `D2TG::Telegram` specifically, and added
+        stderr capture (the raw token was only checked absent from
+        stdout before) plus a `--db`/`-d` wiring test. `chat_id` and
+        the resolved paths are printed unmasked, deliberately, matching
+        `cli/poller.pl`'s own existing startup-line precedent.

@@ -421,6 +421,32 @@ a valid upload, and a FIFO could block the read indefinitely) before any
 network call is attempted - a missing/non-regular file or a bad chat_id
 refuses with a clear message rather than an opaque Telegram API error.
 
+## `d2 tg.whoami [--db <alias> | -d <alias>]`
+
+TGT-115 (user-supplied feature-gap analysis): with several projects on
+one host each running their own installed copy of this skill under
+different Developer Dashboard path aliases, there was no cheap way to
+confirm which project's bot token/chat id/storage location a given
+shell's env vars actually resolve to - short of reading
+`D2TG_TOKEN`/`D2TG_CHAT_ID`/`D2TG_DB` by hand, or risking a real `d2
+tg.poller` startup or `d2 tg.reply` send just to find out.
+
+Prints the installed `VERSION`, the masked token
+(`D2TG::Config::masked_token` - never the raw token), the configured
+`chat_id` (or `(not set)`), and the resolved storage/attachments
+location (`D2TG::Config::state_db_path`/`attachments_dir`) - the same
+resolution every other `d2 tg.*` command uses. Makes **no HTTP request
+at all** (never loads `D2TG::Telegram`) - safe to run at any time,
+including with a completely unconfigured or misconfigured token, as the
+first sanity check before trusting anything else this skill reports.
+`chat_id` and the resolved paths are printed in full (only the token is
+masked) - deliberate, matching `cli/poller.pl`'s own startup line, which
+already prints a full `chat_id` alongside a masked token (TGT-045); this
+command's output is no more sensitive than what that startup line
+already shows on every run, though the same care about where command
+output ends up (shell scrollback, captured logs) applies as with any
+other `d2 tg.*` command.
+
 ## `d2 tg.status [--db <alias> | -d <alias>]`
 
 TGT-111 (user-supplied feature-gap analysis): reports the installed

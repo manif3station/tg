@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.86).** `d2 tg.reply` now refuses to
+**Status: early implementation (v0.87).** New `d2 tg.whoami` (TGT-115,
+user-supplied feature-gap analysis) reports which token/chat/storage a
+given shell's env vars actually resolve to - the masked token, the
+configured chat_id, and the resolved storage/attachments location - no
+HTTP request at all, safe to run at any time including with a
+completely unconfigured token. Useful when several projects on one host
+each run their own installed copy of this skill and it's not obvious
+which one a given terminal is actually pointed at. `d2 tg.reply` now refuses to
 send the exact same text to the same chat (and bot) twice within a
 short window (TGT-114, default 10s) - an accidentally re-run reply
 command, or a retry after a confirmed prior success whose voice half

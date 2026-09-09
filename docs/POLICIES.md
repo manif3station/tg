@@ -1187,3 +1187,29 @@ the same `ALTER TABLE`-with-duplicate-tolerance pattern
 `messages.read_at` already uses - a bare `CREATE TABLE IF NOT EXISTS` is
 a no-op against a database that already has `sent_replies` from an
 earlier install of TGT-105 alone, without this column.
+
+## A read-only sanity check answers "which project is this poller for" safely
+
+User-supplied feature-gap analysis (TGT-115): with several projects on
+one host each running their own installed copy of this skill under
+different Developer Dashboard path aliases, there was no cheap way to
+confirm which project's bot token/chat id/storage location a given
+shell's env vars actually resolve to - short of reading env vars by
+hand, or risking a real poller startup or reply send just to find out.
+
+`d2 tg.whoami` prints the masked token, the configured `chat_id`, and
+the resolved storage/attachments location. It makes **no HTTP request
+at all** - `cli/whoami.pl` never loads `D2TG::Telegram` (a Codex review
+strengthened this project's own test to also tripwire on any of the
+other raw HTTP-client modules this project uses elsewhere, or a
+`system()`/shell-out, not just `D2TG::Telegram` specifically), so it is
+always safe to run, even with a completely unconfigured or
+misconfigured token - the intended first sanity check before trusting
+anything else this skill reports.
+
+`chat_id` and the resolved storage paths are printed in full, not
+masked - a deliberate choice, not an oversight (a Codex review raised
+this as an information-disclosure question): `cli/poller.pl`'s own
+startup line already prints a full `chat_id` alongside a masked token
+(TGT-045), so this command's output carries no more exposure than that
+existing, already-shipped line does on every single poller run.

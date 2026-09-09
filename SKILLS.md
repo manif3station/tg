@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.86).** This file is a procedure to
+**Status: early implementation (v0.87).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -54,7 +54,11 @@ access control already is. `d2 tg.reply` now also refuses to send the
 exact same text to the same chat twice within a short window (TGT-114)
 - an accidentally re-run reply command, or a retry after a confirmed
 prior success whose voice half then failed, no longer delivers the same
-message a second time.
+message a second time. `d2 tg.whoami` (TGT-115) prints the masked
+token, chat_id, and resolved storage location for a quick sanity check
+- no network call, safe to run at any time, useful with multiple
+projects on one host each running their own installed copy of this
+skill.
 
 ## 2. Prep before install
 
