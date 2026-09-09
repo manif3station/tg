@@ -136,12 +136,20 @@ reachable from inside L<D2TG::Reply/send_reply>).
 
 Calls C<synthesize($text, runner => $runner)> exactly as before. With no
 C<out>, returns that C<.ogg> path unchanged (a real, already-existing
-file - the sensible default). With C<out> given, moves the synthesized
-file there (via L<File::Copy/move>, which falls back to copy+unlink
-across filesystems) and returns C<$path> instead. A synthesis failure
-still dies exactly as C<synthesize> already does - fail-loud, no file
-ever left at C<$path> on failure, matching this skill's TTS convention
-(never a silent empty/missing output).
+file - the sensible default). With C<out> given, an existing directory
+there is refused outright (a Codex review finding: C<File::Copy::move>
+would otherwise silently drop the file inside it instead of failing,
+so the returned path would name the directory, not the file actually
+written). Otherwise the synthesized file is moved into a same-directory
+staging name first, then a single C<rename()> atomically replaces
+C<$path> with it - only once the file is fully and successfully in
+place. A failure at either step (synthesis, the move, or the rename)
+dies loudly and never touches C<$path> itself at all - a second Codex
+review round caught that an earlier version's cleanup logic could
+delete a I<pre-existing, unrelated> file already sitting at C<$path>
+after a failed write, which had nothing to do with the failure. Fully
+matches this skill's fail-loud TTS convention: no file is ever left
+empty, partially written, or lost as a side effect of a failed attempt.
 
 =head2 _run(@cmd)
 

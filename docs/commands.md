@@ -477,13 +477,18 @@ do exactly that, and the command would then print the directory's own
 path rather than the file it actually wrote).
 
 Synthesis failure (`gtts-cli`/`ffmpeg` unavailable, or any other failure
-inside `D2TG::TTS::synthesize`) is reported loudly - non-zero exit, and
-no empty or partially-written file is ever left at the requested
-`--out` path (it stays exactly as it was before the failed attempt -
-absent if it didn't already exist) - matching this skill's existing
-fail-loud TTS convention (see `docs/POLICIES.md`'s "Outbound TTS failure is fatal"
-section). Does not change `D2TG::TTS::synthesize` or `D2TG::Reply`'s own
-internal use of it at all - purely a thin wrapper via the new
+inside `D2TG::TTS::synthesize`, or a failure to write to the requested
+`--out` path itself) is reported loudly - non-zero exit, and the
+`--out` path stays exactly as it was before the failed attempt: absent
+if it didn't already exist, and - a second Codex review round caught a
+real bug here - **completely untouched if a different, pre-existing
+file already lived there**, since an earlier version's cleanup logic
+would have deleted it even though it had nothing to do with the failed
+write. This is done via a same-directory staging file plus a single
+atomic rename, matching this skill's existing fail-loud TTS convention
+(see `docs/POLICIES.md`'s "Outbound TTS failure is fatal" section).
+Does not change `D2TG::TTS::synthesize` or `D2TG::Reply`'s own internal
+use of it at all - purely a thin wrapper via the new
 `D2TG::TTS::synthesize_to_file`.
 
 ## `d2 tg.whoami [--db <alias> | -d <alias>]`
