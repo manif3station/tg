@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.96).** `d2 tg.status`, `d2
+**Status: early implementation (v0.97).** `d2 tg.send`'s outbound photo/
+document uploads now escape and sanitize the local filename before
+inserting it into the multipart request Telegram receives (TGT-125,
+found via a scheduled bug-hunt) - a literal double-quote previously
+corrupted the request, and a filename containing a literal CR/LF could
+have injected an extra header line into it. `d2 tg.status`, `d2
 tg.whoami`, and `d2 tg.send` now recognize `--db`/`-d` anywhere in
 their arguments (TGT-124, found via a scheduled improvement hunt),
 matching every other `d2 tg.*` command - `d2 tg.send <chat_id> <file>

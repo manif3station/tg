@@ -1366,3 +1366,21 @@ Revision history for the tg skill
         value itself was genuinely resolved - strengthened with both
         flag spellings and an unregistered-alias case whose error names
         the exact bogus value end-to-end.
+
+0.97  2026-09-09
+      - D2TG::Telegram::_send_file (TGT-125, found via a scheduled
+        hourly bug-hunt): the local file's basename is now escaped
+        before insertion into the multipart Content-Disposition
+        header's filename="..." attribute (backing d2 tg.send's
+        outbound photo/document uploads). A literal double-quote
+        previously prematurely closed the quoted attribute, corrupting
+        the header and producing a malformed multipart request sent to
+        Telegram's Bot API. Backslashes are escaped first, then quotes,
+        matching RFC 2388/6266's own quoted-string convention.
+      - A Codex review found the quote/backslash escaping alone was
+        insufficient: a filename can legally contain a literal CR/LF on
+        Unix, which would inject an additional raw header line into the
+        multipart request regardless of the quoting fix. Now strips C0
+        control characters and DEL entirely first - the file still
+        sends correctly with a sanitized displayed filename, rather
+        than refusing the whole send.

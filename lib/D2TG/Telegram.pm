@@ -391,6 +391,35 @@ CRLF/boundary-containing value injecting extra multipart fields) and an
 extra C<reply_to_message_id> field is added to the body before the
 C<voice> field.
 
+=head2 send_photo($chat_id, $file_path, caption => $text, reply_to_message_id => $id)
+
+=head2 send_document($chat_id, $file_path, caption => $text, reply_to_message_id => $id)
+
+TGT-103: push a local file to C<$chat_id> as a Telegram photo or
+document, via the shared L</_send_file> helper (same raw hand-built
+multipart approach as L</send_voice>). C<caption>/C<reply_to_message_id>
+are optional.
+
+=head2 _send_file($method, $field_name, $chat_id, $file_path, %opts)
+
+Internal helper backing L</send_photo>/L</send_document>. TGT-125
+(found via a scheduled bug-hunt): the local file's basename is escaped
+and sanitized before being inserted into the multipart
+C<Content-Disposition> header's C<filename="...">> attribute - a
+literal double-quote in it previously prematurely closed that quoted
+attribute, corrupting the header line into a malformed multipart
+request; a literal CR/LF (legal in a Unix filename) could have injected
+an additional raw header line into the request entirely, the same
+class of hand-built-multipart injection risk L</send_voice>'s own
+C<reply_to_message_id> validation above already guards against for a
+different field. C0 control characters and DEL (C<0x00>-C<0x1F>,
+C<0x7F>) are stripped first, then backslashes and quotes are escaped
+(C<\\> and C<\">, matching RFC 2388/6266's own quoted-string
+convention) - the file still uploads correctly either way, only the
+displayed filename is sanitized. C<send_voice>'s own equivalent
+filename (always a C<D2TG::TTS::synthesize>-generated C<File::Temp>
+name, never user-controlled) is deliberately not touched by this fix.
+
 =head2 _with_hard_timeout($seconds, $method, \&coderef)
 
 Internal helper (TGT-044): runs C<&coderef> under C<alarm($seconds)>, so
