@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.89).** `D2TG::Poller::run_once`'s
+**Status: early implementation (v0.90).** `cli/poller.pl`'s `--help`
+usage text and its own POD SYNOPSIS - two independently hand-maintained
+copies of the same flag list - now have a test enforcing they stay
+consistent (TGT-119, found via a scheduled improvement hunt); it caught
+a real drift immediately (`-h` was missing from the SYNOPSIS), now
+fixed. `D2TG::Poller::run_once`'s
 fallback media branch (a photo/document/voice message whose applicable
 callback - `download_media` for photo/document, `transcribe_voice` for
 voice - was not given) now records the message in the store too,

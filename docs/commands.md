@@ -35,6 +35,13 @@ through into a real poll loop, which, per this skill's own "last one
 wins" lock (TGT-084), could `SIGKILL` a live, legitimate poller by
 typo. Every previously-recognized flag below is unchanged.
 
+The `--help` usage text above and this script's own POD `SYNOPSIS` are
+two independently hand-maintained copies of the same flag list, with a
+test (`t/88-poller-help-pod-parity.t`) now enforcing they name the same
+flags (TGT-119, found via a scheduled improvement hunt reviewing
+TGT-107) - it caught a real drift immediately (`-h` was missing from
+the `SYNOPSIS`), now fixed.
+
 Immediately after acquiring its own lock, warns on STDERR if it detects
 another live process whose command line looks like a poller instance
 (TGT-113, a live-experienced incident: a poller crashed mid-restart and

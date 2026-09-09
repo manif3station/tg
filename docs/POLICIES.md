@@ -1256,3 +1256,17 @@ general-purpose API contract, confirmed by extending
 `t/09-media-recognition.t`'s existing no-callback test cases to assert
 on the store, not just stdout. Now fixed: this branch records the
 message the same way every other branch does.
+
+## The --help usage text and its own POD SYNOPSIS are kept consistent by a test (TGT-119)
+
+Found via a scheduled improvement hunt reviewing TGT-107: `cli/poller.pl`
+prints its `--help` usage text via a series of `print` statements, and
+separately documents the same flag list in its own POD `SYNOPSIS` -
+nothing enforced the two stayed consistent with each other, so a flag
+added, renamed, or removed in one and forgotten in the other would
+silently drift with no test failure. `t/88-poller-help-pod-parity.t`
+extracts every flag name from both and asserts they name the same set -
+it caught a real drift immediately (`-h` was documented in `--help`'s
+own text but missing from the `SYNOPSIS`), now fixed. The test itself
+is the ongoing enforcement mechanism: any future edit to one without the
+other now fails the suite.

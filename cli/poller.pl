@@ -342,6 +342,14 @@ C<SIGKILL>s whichever process already holds it, so a single typo used to
 be a real way to take a live, legitimate poller offline by silently
 starting a second one.
 
+This script's C<--help> usage text (the C<print> statements above) and
+this very C<SYNOPSIS> are two independently hand-maintained copies of
+the same flag list (TGT-119, found via a scheduled improvement hunt
+reviewing TGT-107) - C<t/88-poller-help-pod-parity.t> asserts they name
+the same set of flags, and caught a real drift the first time it ran
+(C<-h> documented here but missing from the C<SYNOPSIS>), now fixed.
+That test is the ongoing enforcement mechanism against future drift.
+
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback env var) names a Developer Dashboard path alias (see C<d2
 paths>) whose directory this run's SQLite state file and downloaded

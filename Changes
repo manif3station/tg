@@ -1270,3 +1270,17 @@ Revision history for the tg skill
         only checked that a store record existed, not that its
         sender/summary actually matched what was printed - strengthened
         to assert both explicitly.
+
+0.90  2026-09-09
+      - cli/poller.pl (TGT-119, found via a scheduled improvement hunt
+        reviewing TGT-107): --help's own usage text and its POD SYNOPSIS
+        were two independently hand-maintained copies of the same flag
+        list, with no test enforcing they stay consistent. A new test
+        (t/88) extracts flag names from both and asserts parity as sets
+        - it caught a real drift immediately: -h was documented in
+        --help's own text but missing from the SYNOPSIS. Fixed, and the
+        test itself is now the enforcement mechanism preventing future
+        drift.
+      - A Codex review found the flag-extraction regex would truncate a
+        future hyphenated/digit-bearing flag name (e.g. --foo-bar or
+        --foo2 read as --foo) - broadened.
