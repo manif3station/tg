@@ -38,11 +38,13 @@ different PID, and nothing noticed it was still competing for the same
 bot token's `getUpdates` queue. This is a report, not a kill - a cmdline
 pattern match alone isn't strong enough evidence for this skill to act
 on unprompted. A failed inbound photo/document download is now queued
-for retry (TGT-104) instead of just printed and forgotten - `d2
-tg.retry-download` lists and retries it later using the same Telegram
-`file_id`, which stays valid for a limited window after the message
-arrives; a retry against a permanently-gone `file_id` gets a
-distinguishable `RETRY EXPIRED` message rather than the same generic
+for retry (TGT-104, an attempt to persist, not a guarantee - a
+database-write failure at queue time is itself non-fatal and simply
+leaves that one download unqueued) instead of just printed and
+forgotten - `d2 tg.retry-download` lists and retries it later using the
+same Telegram `file_id` to request a fresh download; a retry Telegram
+itself reports as permanently gone (not merely a transient hiccup) gets
+a distinguishable `RETRY EXPIRED` message rather than the same generic
 failure text an ordinary, still-retryable failure gets.
 
 ## 2. Prep before install

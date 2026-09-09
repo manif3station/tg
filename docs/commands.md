@@ -412,31 +412,40 @@ the same way `d2 tg.poller`'s does.
 ## `d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]`
 
 TGT-104 (user-supplied feature-gap analysis): `d2 tg.poller` now
-persists every failed inbound photo/document download (chat_id,
-message_id, file_id, sender, media kind, caption, the original error)
-to `D2TG::Store`'s `failed_downloads` queue instead of only printing a
-`MEDIA DOWNLOAD ERROR` line and forgetting it - Telegram's Bot API keeps
-a message's `file_id` valid for a limited window after it arrives, so a
-transient failure (a network hiccup mid-transfer) is genuinely
-recoverable if retried before that window closes. The queue is keyed
-uniquely by `(chat_id, message_id)`, so Telegram's own at-least-once
-delivery redelivering the same failed update refreshes the existing row
-rather than duplicating it (a Codex review finding).
+attempts to persist each failed inbound photo/document download
+(chat_id, message_id, file_id, sender, media kind, caption, the
+original error) to `D2TG::Store`'s `failed_downloads` queue instead of
+only printing a `MEDIA DOWNLOAD ERROR` line and forgetting it - useful
+because a transient failure (a network hiccup mid-transfer, a momentary
+server error) is genuinely recoverable on retry. A queue-write failure
+itself is non-fatal, matching the download failure it's recording (a
+Codex review finding), and simply leaves that one download unqueued.
+The queue is keyed uniquely by `(chat_id, message_id)`, so Telegram's
+own at-least-once delivery redelivering the same failed update
+refreshes the existing row rather than duplicating it (another Codex
+finding).
 
 With no positional argument, lists every currently-queued entry - id,
 chat_id, message_id, file_id, the original error, when it was queued -
 or `No failed downloads queued.` when empty. With a numeric `id`,
-retries exactly that entry via `D2TG::Download::retry_failed_download`;
-with `--all`, retries every currently-queued entry in turn (one failure
-doesn't stop the rest). A successful retry prints `RETRY OK`, restores
-the message into `D2TG::Store`'s own history via `record_message` (so
-`d2 tg.history`/`d2 tg.unread` show it - a Codex review caught an
-earlier draft only deleted the queue row and left nothing to show), and
-removes the queue entry; a failed retry is reported on STDERR and the
-entry stays queued untouched. If the failure looks like Telegram's own
-shape for a permanently-gone `file_id` (`D2TG::Config::is_expired_file_error`
-- "file is no longer available"/"wrong file_id"), the line says `RETRY
-EXPIRED` - deliberately NOT for "file is temporarily unavailable" (a
+retries exactly that entry via `D2TG::Download::retry_failed_download`,
+which requests a fresh download using the saved `file_id` (a Codex
+review, backed by a web search of Telegram's own Bot API docs, corrected
+an earlier draft's assumption that `file_id`s expire on a short fixed
+clock - it's the one-hour-valid `file_path` a `getFile` call resolves a
+`file_id` to that's short-lived, and every retry already calls `getFile`
+fresh); with `--all`, retries every currently-queued entry in turn (one
+failure doesn't stop the rest). A successful retry prints `RETRY OK`,
+restores the message into `D2TG::Store`'s own history via
+`record_message` (so `d2 tg.history`/`d2 tg.unread` show it - a Codex
+review caught an earlier draft only deleted the queue row and left
+nothing to show), and removes the queue entry; a failed retry is
+reported on STDERR and the entry stays queued untouched. If Telegram's
+own response to the retry looks like its shape for a permanently-gone
+`file_id` (`D2TG::Config::is_expired_file_error` - "file is no longer
+available"/"wrong file_id"), the line says `RETRY EXPIRED` - a
+classification of that response text, not proof a time-based expiry
+occurred - deliberately NOT for "file is temporarily unavailable" (a
 Codex review caught an earlier draft treating that transient-sounding
 wording as permanent too).
 

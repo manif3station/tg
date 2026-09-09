@@ -1042,34 +1042,44 @@ on its own against the anchored pattern.
 
 User-supplied feature-gap analysis (TGT-104): the old `~/skills/tg`
 blueprint kept a small on-disk queue recording which message and
-Telegram's own internal file handle failed to download - this mattered
-because Telegram's Bot API file handles expire a limited time after the
-message arrives, after which the file is permanently unrecoverable. The
-new `d2 tg.*` skill reported a download failure once (`MEDIA DOWNLOAD
+Telegram's own internal file handle failed to download. The new
+`d2 tg.*` skill reported a download failure once (`MEDIA DOWNLOAD
 ERROR ...`) and moved on - no queue, no retry, exactly the loss mode the
 old queue existed to close (motivated by a real prior incident: a
-receipt sent for safekeeping was lost when its download failed and the
-`file_id` later expired before anyone noticed).
+receipt sent for safekeeping was lost when its download failed and was
+never retried).
 
-`D2TG::Poller` now persists every such failure - chat_id, message_id,
-file_id, sender, media kind, caption, the original error - to
-`D2TG::Store`'s `failed_downloads` queue, keyed uniquely by `(chat_id,
-message_id)` so Telegram's own at-least-once delivery redelivering the
-same failed update refreshes the existing row instead of duplicating it
-(a Codex review finding). The queue write itself is wrapped in its own
-`eval` - a locked/full SQLite database must not turn an already-non-fatal
+`D2TG::Poller` now attempts to persist each such failure (a database
+write failure at this point is itself non-fatal, matching the download
+failure it's recording - see below) - chat_id, message_id, file_id,
+sender, media kind, caption, the original error - to `D2TG::Store`'s
+`failed_downloads` queue, keyed uniquely by `(chat_id, message_id)` so
+Telegram's own at-least-once delivery redelivering the same failed
+update refreshes the existing row instead of duplicating it (a Codex
+review finding). The queue write itself is wrapped in its own `eval` -
+a locked/full SQLite database must not turn an already-non-fatal
 download error into a poll-cycle failure (another Codex finding).
 
 `d2 tg.retry-download` lists the queue and retries a given id (or
-`--all`) via `D2TG::Download::retry_failed_download`. A successful retry
-restores the message into `D2TG::Store`'s own history via
+`--all`) via `D2TG::Download::retry_failed_download`, which requests a
+fresh download using the saved `file_id` (a Codex review, backed by a
+web search of Telegram's own Bot API docs, corrected an earlier draft
+of this project's own reasoning: a `file_id` itself isn't documented as
+expiring on a short fixed clock - it's the one-hour-valid `file_path` a
+`getFile` call resolves it to that's short-lived, and a fresh `getFile`
+call, which every retry already makes, gets a fresh one; retrying is
+still genuinely useful for the transient failures - network hiccups,
+momentary server errors - this queue actually targets). A successful
+retry restores the message into `D2TG::Store`'s own history via
 `record_message` - the same thing a first-time success already does -
 before removing the queue row (a Codex review caught an earlier design
 only deleted the row, leaving nothing for `d2 tg.history`/`d2 tg.unread`
 to ever show for a recovered file). A failed retry leaves the row
-untouched. If the failure looks like Telegram's own shape for a
-permanently-gone `file_id` ("file is no longer available"/"wrong
-file_id"), the message says `RETRY EXPIRED` - deliberately NOT for "file
-is temporarily unavailable" (a Codex review caught an earlier draft
-treating that genuinely transient wording as permanent too, which would
-have told an operator to give up on something that might still work).
+untouched. If Telegram's own response to the retry says the file is
+permanently gone ("file is no longer available"/"wrong file_id"), the
+message says `RETRY EXPIRED` - a classification of that specific
+response text, not proof a time-based expiry occurred - deliberately
+NOT for "file is temporarily unavailable" (a Codex review caught an
+earlier draft treating that genuinely transient wording as permanent
+too, which would have told an operator to give up on something that
+might still work).

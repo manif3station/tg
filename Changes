@@ -1149,4 +1149,12 @@ Revision history for the tg skill
         temporarily unavailable" wrongly classified as permanent, an
         unwrapped queue-write that could crash the poller on a database
         error, retry success not restoring history, non-deterministic
-        same-second ordering) - all fixed.
+        same-second ordering) - all fixed. A third, documentation-stage
+        Codex review (backed by a web search of Telegram's own Bot API
+        docs) then corrected a factual claim repeated across this
+        ticket's docs: a `file_id` isn't documented as expiring on a
+        short fixed clock - it's the one-hour-valid `file_path` a
+        `getFile` call resolves it to that's short-lived, and every
+        retry already calls `getFile` fresh. Docs reworded accordingly;
+        no code change (the retry mechanism itself was always correct -
+        it never assumed a `file_id` expiry window in the first place).

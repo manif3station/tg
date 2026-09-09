@@ -1,21 +1,29 @@
 # tg
 
 **Status: early implementation (v0.84).** A failed inbound photo/
-document download is now persisted to a retry queue instead of just
-printed and forgotten (TGT-104, user-supplied feature-gap analysis) -
-`d2 tg.retry-download` lists it and retries by id or `--all` using the
-saved Telegram `file_id`, which stays valid for a limited window after
-the message arrives; a successful retry restores the message into `d2
-tg.history`/`d2 tg.unread` the same way a first-time success does, not
-just deleting the queue row. A retry against a permanently-gone
-`file_id` (Telegram's own "file is no longer available"/"wrong
-file_id" shapes) gets a distinguishable `RETRY EXPIRED` message - a
-Codex review caught an earlier draft also treating "file is temporarily
-unavailable" as permanent, when that wording describes a real
-transient condition that can still succeed later. The same review
-caught the queue itself needed a `(chat_id, message_id)` uniqueness
-constraint, since Telegram's at-least-once delivery could otherwise
-insert a duplicate row for the same failed media on redelivery.
+document download is now queued for retry instead of just printed and
+forgotten (TGT-104, user-supplied feature-gap analysis) - `d2
+tg.retry-download` lists it and retries by id or `--all` using the
+saved Telegram `file_id` to request a fresh download; a successful
+retry restores the message into `d2 tg.history`/`d2 tg.unread` the same
+way a first-time success does, not just deleting the queue row. A
+retry Telegram itself reports as permanently gone - "file is no longer
+available"/"wrong file_id", not merely a transient hiccup - gets a
+distinguishable `RETRY EXPIRED` message; a Codex review caught an
+earlier draft also treating "file is temporarily unavailable" as
+permanent, when that wording describes a real transient condition that
+can still succeed later, and (per a web search of Telegram's own Bot
+API docs during that review) that a `file_id` itself doesn't expire on
+a short fixed clock the way an earlier draft of this project's own docs
+claimed - it's the one-hour-valid `file_path` a `getFile` call resolves
+it to that's short-lived, and a fresh `getFile` call (which every retry
+already makes) gets a fresh one. The same review caught the queue
+itself needed a `(chat_id, message_id)` uniqueness constraint, since
+Telegram's at-least-once delivery could otherwise insert a duplicate row
+for the same failed media on redelivery, and that queuing a failure is
+only ever attempted (a database-write failure there is itself
+non-fatal, matching the download failure it's recording), not
+guaranteed.
 `d2 tg.poller` now warns on
 stderr if it detects another live process whose command line looks like
 a poller instance, right after acquiring its own lock (TGT-113, a

@@ -70,9 +70,8 @@ sub _ensure_schema {
 
     # TGT-104: a failed inbound photo/document download used to be
     # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
-    # to retry it later, even though Telegram's own file_id stays valid
-    # for a limited window after the message arrives. This table
-    # persists what's needed to retry (which message, which Telegram
+    # to retry it later. This table persists what's needed to retry
+    # (which message, which Telegram
     # file_id, why it failed) AND what's needed to fully restore the
     # message into history on a successful retry (sender, media_kind,
     # caption_note) - a Codex review caught that a retry success

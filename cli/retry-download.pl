@@ -117,13 +117,14 @@ retry-download - list and retry queued failed media downloads, dispatched as C<d
 =head1 DESCRIPTION
 
 TGT-104 (user-supplied feature-gap analysis): a transient inbound photo/
-document download failure used to be reported once (a C<MEDIA DOWNLOAD
-ERROR> line from C<cli/poller.pl>) and forgotten - no way to retry it
-later, even though Telegram's Bot API keeps a message's C<file_id> valid
-for a limited window after it arrives. C<cli/poller.pl> now persists
-every such failure (chat_id, message_id, file_id, sender, media kind,
-caption, the original error) to L<D2TG::Store>'s C<failed_downloads>
-queue, keyed uniquely by C<(chat_id, message_id)> so Telegram's own
+document download failure (a network hiccup mid-transfer, a momentary
+server error) used to be reported once (a C<MEDIA DOWNLOAD ERROR> line
+from C<cli/poller.pl>) and forgotten - no way to retry it later.
+C<cli/poller.pl> now attempts to persist each such failure (chat_id,
+message_id, file_id, sender, media kind, caption, the original error) to
+L<D2TG::Store>'s C<failed_downloads> queue - a database-write failure
+there is itself non-fatal, matching the download failure it's recording
+- keyed uniquely by C<(chat_id, message_id)> so Telegram's own
 at-least-once delivery redelivering the same failed update refreshes the
 existing row instead of duplicating it; this command reads and acts on
 that queue.

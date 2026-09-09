@@ -133,14 +133,13 @@ sub run_once {
 
                     # TGT-104 (user-supplied feature-gap analysis): a
                     # transient download failure (a network hiccup mid-
-                    # transfer) used to be reported once and forgotten -
-                    # no way to retry it later, even though Telegram's
-                    # own file_id stays valid for a limited window after
-                    # the message arrives. Persist enough to retry AND
-                    # to fully restore the message into history on a
-                    # successful retry later (sender/media_kind/
-                    # caption_note, the same pieces record_message's own
-                    # success-path summary is built from above).
+                    # transfer, a momentary server error) used to be
+                    # reported once and forgotten - no way to retry it
+                    # later. Persist enough to retry AND to fully
+                    # restore the message into history on a successful
+                    # retry later (sender/media_kind/caption_note, the
+                    # same pieces record_message's own success-path
+                    # summary is built from above).
                     #
                     # Wrapped in eval (Codex review finding): this queue
                     # write is itself non-fatal, exactly like the
@@ -433,10 +432,11 @@ A C<download_media> failure, when C<$store> is given, is also queued via
 L<D2TG::Store/record_failed_download> (TGT-104, user-supplied
 feature-gap analysis) - chat_id, message_id, file_id, sender, media
 kind, caption, and the original error - so C<d2 tg.retry-download> can
-retry it later using the same C<file_id>, which Telegram keeps valid for
-a limited window after the message arrives. That queue write is itself
-wrapped in its own C<eval> and reported on STDERR if it fails (a Codex
-review finding: a locked/full SQLite database must not turn an
+retry it later using the same C<file_id> to request a fresh download,
+which is genuinely useful for the transient failures (a network hiccup,
+a momentary server error) this queue targets. That queue write is
+itself wrapped in its own C<eval> and reported on STDERR if it fails (a
+Codex review finding: a locked/full SQLite database must not turn an
 already-non-fatal download error into a poll-cycle failure).
 
 If the message carries a caption (TGT-092, a live production incident:
