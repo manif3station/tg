@@ -23,6 +23,19 @@ use D2TG::Lock;
 # the watched stream in real time. STDERR is unbuffered by default.
 $| = 1;
 
+# TGT-117 (live-experienced incident): a message containing non-Latin-1
+# script (a Cantonese voice-note transcript) triggered "Wide character
+# in print at .../D2TG/Poller.pm line 83" - D2TG::Poller prints message
+# text straight to whichever filehandle is currently selected as
+# STDOUT/STDERR without opening either with a UTF-8 layer itself, since
+# that's this entrypoint's job, not the library's. Non-fatal (the
+# message still printed and was still processed correctly) but noisy,
+# and repeats for every non-ASCII message. Applied before anything else
+# runs so every print/warn path below (including --help's own usage
+# text) is covered.
+binmode STDOUT, ':encoding(UTF-8)';
+binmode STDERR, ':encoding(UTF-8)';
+
 # TGT-107 (live-experienced incident): --help - or any other flag this
 # script doesn't recognize - used to be silently accepted and ignored,
 # letting the process fall all the way through to a real poll loop.
