@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.02).** SKILLS.md's `cli/*.pl` file
+**Status: early implementation (v1.03).** `D2TG::Transcribe::kill_current`
+now signals the whole process group, not just the direct pid (TGT-131,
+found via an ad-hoc bug-hunt) - a clean poller shutdown mid-
+transcription now reaches any child the whisper process itself spawned,
+matching the process-group protection `_run`'s own timeout path already had (TGT-128).
+SKILLS.md's `cli/*.pl` file
 list is current again (TGT-130, found via an ad-hoc bug-hunt) -
 `cli/tts.pl` had been missing since it shipped after TGT-123's own fix
 to this same list; a new regression test now guards against this

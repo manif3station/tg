@@ -718,6 +718,18 @@ still sitting in the WAL file. WAL is appropriate for this skill's
 single-host, local-filesystem usage; it would not be appropriate for a
 database file shared over a network filesystem between hosts.
 
+A last consistency gap in the same family (TGT-131, found via a further
+ad-hoc bug-hunt immediately after TGT-128) was a follow-up rather than a
+new failure class: `D2TG::Transcribe::kill_current` - called directly
+from `cli/poller.pl`'s own `SIGTERM`/`SIGINT` shutdown handlers - still
+signalled only the tracked direct pid, even after TGT-128 put `_run`'s
+own child in a process group specifically so a timeout-triggered kill
+could reach any child `whisper` itself spawned. A clean poller shutdown
+mid-transcription could therefore leave such a child running, even
+though the very same process being killed was already protected on its
+timeout path. `kill_current` now signals the whole process group plus
+the direct pid, matching `_run`'s own pattern exactly.
+
 ## The startup line confirms which credentials actually loaded, without exposing them
 
 Live request (TGT-045, raised while diagnosing TGT-044's incident): the

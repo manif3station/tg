@@ -1455,3 +1455,15 @@ Revision history for the tg skill
         test (t/98-skills-md-cli-list-current.t) now checks this list
         against the real cli/*.pl file list on every run, so a future
         drift fails the suite instead of accumulating silently again.
+
+1.03  2026-09-09
+      - D2TG::Transcribe::kill_current (TGT-131, found via an ad-hoc
+        bug-hunt immediately after TGT-128): only signalled the direct
+        tracked pid, inconsistent with _run's own timeout-path process-
+        group protection TGT-128 had just established for the exact
+        same running process. cli/poller.pl's SIGTERM/SIGINT shutdown
+        handlers call kill_current directly, so a clean poller shutdown
+        mid-transcription could still leave a whisper-spawned child
+        process running even though a timeout-triggered kill already
+        reached it. kill_current now signals the whole process group
+        plus the direct pid, matching _run's own pattern exactly.

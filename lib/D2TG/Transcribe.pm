@@ -177,6 +177,13 @@ sub _run {
 
 sub kill_current {
     return unless defined $CURRENT_PID;
+
+    # TGT-131: signal the whole process group, matching _run's own
+    # timeout-path kill (TGT-128) - a shutdown-triggered kill must reach
+    # a child the tracked whisper process itself spawned exactly like a
+    # timeout-triggered one already does, not leave it running just
+    # because this is a separate call site into the same process.
+    kill( 'TERM', -$CURRENT_PID );
     kill( 'TERM', $CURRENT_PID );
     return;
 }
@@ -312,6 +319,13 @@ signal handler that fires during C<_run>'s poll loop since it is set via
 C<local>). A no-op when nothing is running. C<cli/poller.pl> calls this
 from its own shutdown signal handlers so an in-flight transcription is
 killed immediately instead of being waited out.
+
+TGT-131 (a consistency follow-up to TGT-128): signals the whole process
+group (C<-$CURRENT_PID>) as well as the direct pid, matching C<_run>'s
+own timeout-path process-group protection - without this, a clean
+poller shutdown could still leave a child C<whisper> itself spawned
+running, even though the same process's own timeout path already
+reached it.
 
 =head1 KNOWN LIMITATION
 
