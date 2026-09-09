@@ -20,12 +20,37 @@ sub send_reply {
 
     my $text_result = $telegram->send_message( $chat_id, $text, undef, %opts );
 
+    # TGT-105: record the text send BEFORE synthesis/send_voice can
+    # fail - a row with no matching voice_message_id yet IS the
+    # after-the-fact text-only audit trail this ticket exists to
+    # provide, for exactly the case TGT-083's own tradeoff describes:
+    # a synthesis/send_voice failure here is reported loudly (the die
+    # below), but if that's missed, this row is what a later checker
+    # catches it with. Uses the LAST chunk's message_id when a long
+    # reply auto-split into multiple messages (TGT-013's own
+    # split_text_utf16) - the single-chunk case (by far the common one)
+    # is unaffected. Only attempted when a store is actually given -
+    # $telegram is only contractually required to respond to
+    # send_message/send_voice (existing callers/tests use bare fakes
+    # returning any shape they like when they don't care about this
+    # feature), so this must never assume $text_result's own shape
+    # unless a caller has opted in by passing store.
+    my $text_message_id;
+    if ( $args{store} ) {
+        $text_message_id = eval { $text_result->[-1]{message_id} };
+        $args{store}->record_sent_text( $chat_id, $text_message_id )
+          if defined $text_message_id;
+    }
+
     my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
 
     my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
     my $send_voice_error = $@;
     unlink $voice_path if -e $voice_path;
     die $send_voice_error if $send_voice_error;
+
+    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id} )
+      if $args{store} && defined $text_message_id;
 
     $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
       if $args{store} && defined $args{reply_to_message_id};
@@ -40,6 +65,7 @@ sub resend_voice {
     my $chat_id  = $args{chat_id};
     my $text     = $args{text};
     my $synth    = $args{synthesize} || \&D2TG::TTS::synthesize;
+    my $text_message_id = $args{text_message_id};
 
     my %opts = defined $args{reply_to_message_id}
       ? ( reply_to_message_id => $args{reply_to_message_id} )
@@ -61,6 +87,11 @@ sub resend_voice {
     # actually succeeded.
     $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
       if $args{store} && defined $args{reply_to_message_id};
+
+    # TGT-105: this is exactly what clears a send_reply-recorded
+    # text-only flag once the missing voice half is actually recovered.
+    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id} )
+      if $args{store} && defined $text_message_id;
 
     return { voice => $voice_result };
 }

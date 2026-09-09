@@ -87,6 +87,15 @@ my $store = D2TG::Store->new(
 );
 
 if ($voice_only) {
+
+    # TGT-105: find the most recent still-flagged text-only send for
+    # this chat, if any, so a successful recovery here clears that
+    # audit-trail flag - the operator running --voice-only doesn't know
+    # (and isn't asked for) that earlier send's own message_id.
+    my ($latest_text_only) =
+      sort { $b->{text_message_id} <=> $a->{text_message_id} }
+      grep { $_->{chat_id} == $chat_id } @{ $store->text_only_replies };
+
     eval {
         D2TG::Reply::resend_voice(
             telegram             => $telegram,
@@ -94,6 +103,7 @@ if ($voice_only) {
             text                 => $text,
             reply_to_message_id  => $reply_to_message_id,
             store                => $store,
+            text_message_id      => $latest_text_only ? $latest_text_only->{text_message_id} : undef,
         );
     };
     if ($@) {

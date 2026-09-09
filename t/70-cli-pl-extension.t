@@ -6,7 +6,7 @@ use File::Spec;
 
 my $cli_dir = File::Spec->catdir( $Bin, '..', 'cli' );
 
-my @commands = qw(approve help history poller reply retry-download send status unread);
+my @commands = qw(approve help history poller reply retry-download send status text-only-replies unread);
 
 for my $name (@commands) {
     my $pl_path  = File::Spec->catfile( $cli_dir, "$name.pl" );

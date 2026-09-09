@@ -101,6 +101,25 @@ sub _ensure_schema {
          )'
     );
 
+    # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
+    # send text first, then synthesize+send voice - a synthesis/
+    # send_voice failure after that point can leave a reply text-only,
+    # always reported loudly (non-zero exit) AT SEND TIME. If that loud
+    # failure is missed, nothing previously let a later check catch the
+    # resulting text-only reply. voice_message_id starts NULL when the
+    # text send is recorded and is filled in only once the voice send
+    # also succeeds - a row with a still-NULL voice_message_id IS the
+    # text-only flag, not a separate boolean to keep in sync.
+    $self->{dbh}->do(
+        'CREATE TABLE IF NOT EXISTS sent_replies (
+             chat_id         INTEGER NOT NULL,
+             text_message_id INTEGER NOT NULL,
+             voice_message_id INTEGER,
+             created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             PRIMARY KEY (chat_id, text_message_id)
+         )'
+    );
+
     # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
     # only by chat_id (a single-column PRIMARY KEY), which silently let
     # an approval leak across bots for a Telegram group shared by more
@@ -400,6 +419,42 @@ sub remove_failed_download {
     $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
 
     return;
+}
+
+sub record_sent_text {
+    my ( $self, $chat_id, $text_message_id ) = @_;
+
+    # INSERT OR IGNORE: a redundant re-record of the same (chat_id,
+    # text_message_id) - e.g. a retried send_reply call after a prior
+    # partial failure - must never clobber a voice_message_id already
+    # recorded for it back to NULL.
+    $self->{dbh}->do(
+        'INSERT OR IGNORE INTO sent_replies (chat_id, text_message_id) VALUES (?, ?)',
+        undef, $chat_id, $text_message_id,
+    );
+
+    return;
+}
+
+sub record_sent_voice {
+    my ( $self, $chat_id, $text_message_id, $voice_message_id ) = @_;
+
+    $self->{dbh}->do(
+        'UPDATE sent_replies SET voice_message_id = ? WHERE chat_id = ? AND text_message_id = ?',
+        undef, $voice_message_id, $chat_id, $text_message_id,
+    );
+
+    return;
+}
+
+sub text_only_replies {
+    my ($self) = @_;
+
+    return $self->{dbh}->selectall_arrayref(
+        'SELECT chat_id, text_message_id, created_at FROM sent_replies
+         WHERE voice_message_id IS NULL ORDER BY chat_id, text_message_id',
+        { Slice => {} }
+    );
 }
 
 sub disconnect {
