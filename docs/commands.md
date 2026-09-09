@@ -569,7 +569,11 @@ side is omitted. Prints `No messages found.` and exits 0 when nothing
 matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
 does. `--since`/`--until` with no value following it (or immediately
 followed by the other flag) exits 2 with a clear message instead of
-silently running unscoped or matching nothing (TGT-070).
+silently running unscoped or matching nothing (TGT-070). Any other
+unrecognized flag or leftover positional argument also exits 2 with a
+`Usage:` message (TGT-122, found via a scheduled bug-hunt) - previously
+silently ignored, printing `No messages found.` and exiting 0 as if the
+(mistyped) invocation had succeeded.
 
 ## Registering as a Tira monitor job
 

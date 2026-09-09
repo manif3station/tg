@@ -1284,3 +1284,16 @@ Revision history for the tg skill
       - A Codex review found the flag-extraction regex would truncate a
         future hyphenated/digit-bearing flag name (e.g. --foo-bar or
         --foo2 read as --foo) - broadened.
+
+0.91  2026-09-09
+      - cli/history.pl (TGT-122, found via a scheduled hourly bug-hunt):
+        after parsing --since/--until, an unrecognized flag or leftover
+        positional argument used to be silently ignored - printing "No
+        messages found." and exiting 0 as if the (mistyped) invocation
+        had succeeded, unlike cli/send.pl's own @extra check or
+        cli/poller.pl's unrecognized-argument refusal (TGT-107). Now
+        refuses with a Usage message and exit 2.
+      - A Codex review raised whether the new check could regress
+        --db/-d (consumed earlier still) - live-verified as a false
+        alarm, but added explicit --db/-d regression test cases and
+        tightened the refusal assertions to the actual exit code (2).

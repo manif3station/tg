@@ -121,4 +121,11 @@ validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072),
 shared with C<--db>/C<-d>'s own validation and C<D2TG::Config::bot_groups>'s
 C<--chat_id> validation.
 
+Any other unrecognized flag or leftover positional argument also exits
+2 with a C<Usage:> message (TGT-122, found via a scheduled hourly
+bug-hunt) - previously silently ignored, printing C<No messages
+found.> and exiting 0 as if the (mistyped) invocation had succeeded,
+unlike C<cli/send.pl>'s own C<@extra> check or C<cli/poller.pl>'s
+unrecognized-argument refusal (TGT-107).
+
 =cut

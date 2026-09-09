@@ -1270,3 +1270,18 @@ it caught a real drift immediately (`-h` was documented in `--help`'s
 own text but missing from the `SYNOPSIS`), now fixed. The test itself
 is the ongoing enforcement mechanism: any future edit to one without the
 other now fails the suite.
+
+## d2 tg.history refuses on an unrecognized flag or leftover argument (TGT-122)
+
+Found via a scheduled hourly bug-hunt: `cli/history.pl` parsed
+`--since`/`--until` into a local accumulator but never checked
+afterward that nothing unrecognized remained in `@ARGV` - unlike
+`cli/send.pl` (checks `@extra`, refuses) or `cli/poller.pl` (refuses on
+any unrecognized flag, TGT-107). Live-reproduced before the fix: both a
+typo'd flag (`--totally-bogus-flag`) and garbage positional arguments
+printed `No messages found.` and exited 0, exactly as if a well-formed,
+correctly-scoped query had simply matched nothing - silently masking
+operator error instead of surfacing it. Now exits 2 with a `Usage:`
+message. `--db`/`-d` is unaffected: it is consumed by
+`D2TG::Config::extract_db_flag` earlier still, before the
+`--since`/`--until` loop (and this new check) ever run.

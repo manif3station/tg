@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.90).** `cli/poller.pl`'s `--help`
+**Status: early implementation (v0.91).** `d2 tg.history` now refuses
+with a Usage message and exit 2 if any unrecognized flag or leftover
+positional argument remains after `--since`/`--until` parsing (TGT-122,
+found via a scheduled bug-hunt) - previously silently ignored, printing
+"No messages found." and exiting 0 as if the invocation had succeeded.
+`cli/poller.pl`'s `--help`
 usage text and its own POD SYNOPSIS - two independently hand-maintained
 copies of the same flag list - now have a test enforcing they stay
 consistent (TGT-119, found via a scheduled improvement hunt); it caught
