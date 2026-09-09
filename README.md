@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v1.10).** Voice-note transcription's hard
+**Status: early implementation (v1.11).** `D2TG::Config::write_heartbeat`
+no longer leaks its staging temp file when `rename()` fails (TGT-139) -
+previously a failed heartbeat write left `$path.tmp.$$` behind, and every
+subsequent failed attempt added another orphaned file to the state
+directory. Voice-note transcription's hard
 timeout now scales with the same duration signal that already picks the
 Whisper model (TGT-140, external review finding confirmed live by
 Michael) - previously it stayed a flat 300s constant even after

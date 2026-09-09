@@ -1,5 +1,14 @@
 Revision history for the tg skill
 
+1.11  2026-09-09
+      - D2TG::Config (TGT-139, self-review while completing TGT-138's
+        pending-push gate): write_heartbeat's rename-failure path now
+        unlinks its own staging temp file before dying - previously a
+        failed rename() left $path.tmp.$$ behind, and every failed write
+        attempt would add another orphaned file to the state directory.
+        New optional renamer coderef for test injection, mirroring
+        D2TG::TTS::synthesize_to_file's own pattern.
+
 1.10  2026-09-09
       - D2TG::Transcribe (TGT-140, external review finding confirmed live
         by Michael): the hard whisper timeout now scales with the same

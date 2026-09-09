@@ -168,7 +168,7 @@ sub heartbeat_path {
 }
 
 sub write_heartbeat {
-    my ($path) = @_;
+    my ( $path, %args ) = @_;
 
     # Codex review finding (TGT-116): opening the live path with '>'
     # truncates it before the new timestamp is written, so a concurrent
@@ -178,6 +178,7 @@ sub write_heartbeat {
     # directory, then rename() over the real path - rename is atomic on
     # the same filesystem, so a reader never observes a partial write.
     my $tmp_path = "$path.tmp.$$";
+    my $renamer  = $args{renamer} || sub { return rename( $_[0], $_[1] ); };
 
     open my $fh, '>', $tmp_path
       or die "D2TG::Config::write_heartbeat: cannot write $tmp_path: $!\n";
@@ -186,8 +187,16 @@ sub write_heartbeat {
     close $fh
       or die "D2TG::Config::write_heartbeat: cannot close $tmp_path: $!\n";
 
-    rename( $tmp_path, $path )
-      or die "D2TG::Config::write_heartbeat: cannot rename $tmp_path to $path: $!\n";
+    unless ( $renamer->( $tmp_path, $path ) ) {
+        # TGT-139: a failed rename() must not leave the staging file
+        # behind - every failed write attempt would otherwise add
+        # another orphaned $path.tmp.$$ file to the state directory.
+        # unlink is best-effort; $! is captured first since unlink
+        # itself can clobber it before the die message reads it.
+        my $rename_error = $!;
+        unlink $tmp_path;
+        die "D2TG::Config::write_heartbeat: cannot rename $tmp_path to $path: $rename_error\n";
+    }
 
     return;
 }
@@ -691,7 +700,7 @@ C<default_root/state/poller.heartbeat> (or C<$ENV{DEVELOPER_DASHBOARD_SKILL_ROOT
 in place of C<default_root> when set), the same two-branch shape
 L</lock_path> itself uses for C<telegram.pid>/C<poller.pid>.
 
-=head2 write_heartbeat($path)
+=head2 write_heartbeat($path, renamer => \&coderef)
 
 Writes the current epoch time to C<$path>, atomically: writes to a temp
 file (C<$path.tmp.$$>) in the same directory, then C<rename>s it over
@@ -707,6 +716,16 @@ single voice transcription's retry ladder alone (L<D2TG::Transcribe>'s
 medium->small->base tiers, 300s each) can take up to ~900s, so writing
 only once per full cycle could report a healthy, actively-transcribing
 poller as stale.
+
+If C<rename> itself fails (TGT-139), the staging temp file is unlinked
+(best-effort) before dying - previously a failed rename left C<$tmp_path>
+behind, and every failed write attempt (e.g. a persistently read-only
+state directory) would add another orphaned file to it. C<renamer> is an
+optional coderef (mirroring L<D2TG::TTS/synthesize_to_file>'s own
+C<renamer> injection point) taking C<($tmp_path, $path)> and returning
+true on success; it defaults to a plain C<rename> call and exists so
+callers (tests) can inject a fake failure instead of needing a real
+unwritable filesystem.
 
 =head2 heartbeat_age($path)
 
