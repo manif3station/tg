@@ -5,6 +5,15 @@ use warnings;
 use File::Temp qw(tempfile);
 use File::Spec;
 use File::Copy qw(copy);
+use POSIX qw(_exit);
+
+use constant DEFAULT_HARD_TIMEOUT => 60;
+
+# TGT-127: mutable copy of the constant above, so a test can force a fast
+# timeout via `local $D2TG::TTS::HARD_TIMEOUT = 1` without waiting out the
+# real production bound - mirrors the injectable-coderef pattern used
+# elsewhere in this module (runner/renamer) for the same reason.
+our $HARD_TIMEOUT = DEFAULT_HARD_TIMEOUT;
 
 sub synthesize {
     my ( $text, %args ) = @_;
@@ -19,12 +28,22 @@ sub synthesize {
     my ( $ogg_fh, $ogg_path ) = tempfile( SUFFIX => '.ogg', UNLINK => 0 );
     close $ogg_fh;
 
-    if ( $runner->( 'gtts-cli', $text, '--output', $mp3_path ) != 0 ) {
+    my $gtts_rc = eval { $runner->( 'gtts-cli', $text, '--output', $mp3_path ) };
+    if ( my $err = $@ ) {
+        unlink $mp3_path, $ogg_path;
+        die $err;
+    }
+    if ( $gtts_rc != 0 ) {
         unlink $mp3_path, $ogg_path;
         die "D2TG::TTS::synthesize: gtts-cli failed for text synthesis\n";
     }
 
-    if ( $runner->( 'ffmpeg', '-y', '-i', $mp3_path, '-c:a', 'libopus', $ogg_path ) != 0 ) {
+    my $ffmpeg_rc = eval { $runner->( 'ffmpeg', '-y', '-i', $mp3_path, '-c:a', 'libopus', $ogg_path ) };
+    if ( my $err = $@ ) {
+        unlink $mp3_path, $ogg_path;
+        die $err;
+    }
+    if ( $ffmpeg_rc != 0 ) {
         unlink $mp3_path, $ogg_path;
         die "D2TG::TTS::synthesize: ffmpeg conversion to ogg/opus failed\n";
     }
@@ -105,16 +124,60 @@ sub synthesize_to_file {
 sub _run {
     my (@cmd) = @_;
 
-    open my $saved_stdout, '>&', \*STDOUT or die "D2TG::TTS::_run: cannot save STDOUT: $!\n";
-    open my $saved_stderr, '>&', \*STDERR or die "D2TG::TTS::_run: cannot save STDERR: $!\n";
+    my $pid = fork();
+    die "D2TG::TTS::_run: fork failed: $!\n" unless defined $pid;
 
-    open STDOUT, '>', File::Spec->devnull or die "D2TG::TTS::_run: cannot redirect STDOUT: $!\n";
-    open STDERR, '>', File::Spec->devnull or die "D2TG::TTS::_run: cannot redirect STDERR: $!\n";
+    if ( $pid == 0 ) {
+        # TGT-127: its own process group, so a timeout can kill the whole
+        # tree (gtts-cli/ffmpeg may themselves spawn children) with one
+        # signal to -$pid, not just this immediate child.
+        setpgrp( 0, 0 );
+        open STDOUT, '>', File::Spec->devnull or _exit(126);
+        open STDERR, '>', File::Spec->devnull or _exit(126);
+        exec(@cmd) or _exit(127);
+    }
 
-    my $rc = system(@cmd);
+    # A Codex review finding: without this, there is a race between the
+    # child's own setpgrp(0,0) above and the parent's alarm/kill below - if
+    # the timeout fires before the child has actually called setpgrp, the
+    # process group named -$pid does not exist yet, and kill() silently
+    # does nothing, leaving the still-in-our-own-group child running.
+    # Perl's setpgrp is a thin wrapper over setpgid(2), which either process
+    # is allowed to call on the child - calling it here too, redundantly,
+    # means the group is guaranteed set by the time either process proceeds
+    # further, regardless of which one wins the race. eval-guarded because
+    # it can legitimately fail (e.g. the child already exited).
+    eval { setpgrp( $pid, $pid ) };
 
-    open STDOUT, '>&', $saved_stdout or die "D2TG::TTS::_run: cannot restore STDOUT: $!\n";
-    open STDERR, '>&', $saved_stderr or die "D2TG::TTS::_run: cannot restore STDERR: $!\n";
+    my $rc;
+    my $timed_out = 0;
+    eval {
+        local $SIG{ALRM} = sub {
+            $timed_out = 1;
+            die "D2TG::TTS::_run: command timed out after ${HARD_TIMEOUT}s\n";
+        };
+        alarm($HARD_TIMEOUT);
+        waitpid( $pid, 0 );
+        alarm(0);
+        $rc = $?;
+    };
+    my $error = $@;
+    alarm(0);
+
+    if ($timed_out) {
+        # A further Codex review finding: the group kill above only
+        # reaches the child if its own/our own setpgrp actually took
+        # effect - belt-and-braces, also kill the known immediate pid
+        # directly (a signal delivered straight to a pid can't be missed
+        # by a process-group mismatch the way -$pid targeting can), so
+        # the following waitpid is never left blocking on a still-alive
+        # process that the group kill happened to miss.
+        kill( 'KILL', -$pid );
+        kill( 'KILL', $pid );
+        waitpid( $pid, 0 );
+        die $error;
+    }
+    die $error if $error;
 
     return $rc;
 }
@@ -151,8 +214,11 @@ exits non-zero, or if C<$text> is empty.
 
 C<runner> is an optional coderef taking a command's argument list and
 returning its exit status (0 for success); it defaults to C<_run>
-(list-form C<system(@cmd)>, no shell), and exists so callers (tests) can
-inject a fake runner instead of invoking real subprocesses.
+(fork/exec, no shell, under a hard timeout - see L</_run>), and exists
+so callers (tests) can inject a fake runner instead of invoking real
+subprocesses. A thrown error from C<runner> (e.g. C<_run>'s own timeout
+death) is treated the same as a non-zero exit status: temp files are
+cleaned up and the error re-thrown.
 
 =head2 synthesize_to_file($text, out => $path, runner => \&coderef, renamer => \&coderef)
 
@@ -203,10 +269,32 @@ any local file this skill writes regardless of this function.
 
 =head2 _run(@cmd)
 
-Runs C<@cmd> via C<system>, with C<STDOUT>/C<STDERR> temporarily
-redirected to C<File::Spec-E<gt>devnull> for the duration of the call
-and restored immediately afterward (TGT-033, mirroring TGT-030's fix
-for L<D2TG::Transcribe>) - C<gtts-cli>/C<ffmpeg>'s own console output
-never reaches the caller's real stdout/stderr.
+Runs C<@cmd> in its own forked child (own process group, C<STDOUT>/
+C<STDERR> redirected to C<File::Spec-E<gt>devnull> - TGT-033, mirroring
+TGT-030's fix for L<D2TG::Transcribe>), waiting under a SIGALRM hard
+timeout (TGT-127, same failure class as TGT-035/TGT-044/TGT-126: a
+bare C<system(@cmd)> here had no timeout at all, and C<gtts-cli> makes
+a real network call to Google's TTS endpoint that could hang
+indefinitely). C<$D2TG::TTS::HARD_TIMEOUT> (default
+C<DEFAULT_HARD_TIMEOUT>, 60s - generous enough for the max ~5000-char
+text this skill ever sends, TGT-035) bounds the wait; on timeout, the
+whole child process group is killed (C<kill('KILL', -$pid)>, not just
+the immediate child - C<gtts-cli>/C<ffmpeg> could themselves spawn
+children) and reaped before C<_run> dies with a clear timeout message.
+Both the child (C<setpgrp(0, 0)>) and the parent
+(C<eval { setpgrp($pid, $pid) }>) set the child's process group
+immediately after C<fork> - deliberately redundant, closing a real race
+a Codex review caught: without the parent's own call too, a timeout
+firing before the child's C<setpgrp> call would target a process group
+that does not exist yet, and C<kill> would silently do nothing.
+Accepted, documented limitation: a grandchild that deliberately detaches
+into its own new process group/session would not be reached by this
+kill - not expected of C<gtts-cli>/C<ffmpeg>'s own normal operation, but
+not an absolute guarantee either.
+
+C<$HARD_TIMEOUT> is a mutable package variable, not a plain constant,
+specifically so a test can force a fast timeout via
+C<local $D2TG::TTS::HARD_TIMEOUT = 1> without waiting out the real
+production bound.
 
 =cut

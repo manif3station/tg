@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.98).** `D2TG::Download::download_file`'s
+**Status: early implementation (v0.99).** `D2TG::TTS::_run`'s gtts-cli/
+ffmpeg calls (used by every outbound voice reply) are now protected by a
+SIGALRM hard timeout too (TGT-127, found via an ad-hoc bug-hunt
+immediately after TGT-126) - a hung external command now dies with a
+clear timeout message and has its whole process group killed, instead of
+wedging the reply path forever with no bound at all (a bare `system()`
+call had even less protection than the LWP-based paths already fixed).
+`D2TG::Download::download_file`'s
 HTTP GET (fetches inbound photo/document/voice bytes) is now protected
 by the same SIGALRM-based hard timeout `D2TG::Telegram`'s Bot API calls
 already use (TGT-126, found via an ad-hoc bug-hunt - the same failure

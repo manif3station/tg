@@ -1400,3 +1400,21 @@ Revision history for the tg skill
         helper (matching D2TG::Telegram::_with_hard_timeout's own
         SIGALRM pattern) so a hung download dies with a clear timeout
         message instead of hanging the poll cycle forever.
+
+0.99  2026-09-09
+      - D2TG::TTS::_run (TGT-127, found via an ad-hoc bug-hunt
+        immediately after TGT-126): the gtts-cli/ffmpeg external
+        commands were invoked via a bare system(@cmd) with no timeout
+        at all - unlike every other outbound call in this codebase
+        (D2TG::Telegram, D2TG::Download), which now has a SIGALRM-
+        based hard timeout. gtts-cli specifically makes a real network
+        call to Google's TTS endpoint, and every outbound reply
+        (D2TG::Reply::send_reply, resend_voice) runs synthesis
+        synchronously, so a single hung gtts-cli/ffmpeg call could
+        wedge the entire reply path indefinitely. _run now forks and
+        execs the command itself (in its own process group), waits
+        under a SIGALRM hard timeout, and kills the whole process
+        group if it hangs, dying with a clear timeout message instead
+        of blocking forever. synthesize()'s two call sites also now
+        clean up their temp files on a thrown die, not just a non-zero
+        exit status.

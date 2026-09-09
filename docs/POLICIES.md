@@ -653,6 +653,29 @@ now sets an explicit `LWP::UserAgent` timeout and wraps its `get()` call
 in a private `_with_hard_timeout` helper, matching
 `D2TG::Telegram::_with_hard_timeout`'s exact SIGALRM pattern.
 
+A fifth gap in the same family (TGT-127, found via a follow-up ad-hoc
+bug-hunt immediately after TGT-126) targeted a different call shape
+entirely: `D2TG::TTS::_run` invoked `gtts-cli`/`ffmpeg` via a bare
+`system(@cmd)` with no timeout whatsoever - not even LWP's unreliable
+180s fallback, since there was no LWP involved at all. `gtts-cli` makes
+a real network call to Google's TTS endpoint, and every outbound reply
+(`D2TG::Reply::send_reply`, `resend_voice`) runs synthesis synchronously,
+so a single hung `gtts-cli`/`ffmpeg` call could wedge the entire reply
+path indefinitely. `_run` now forks and execs the command itself, in
+its own process group (`setpgrp`), waits under a SIGALRM hard timeout,
+and kills the whole process group (`kill('KILL', -$pid)`) if it hangs -
+closing the gap over the same class of children the LWP-based fixes
+above never had to consider (a hung Bot API call has no subprocess tree
+at all). This is not an absolute guarantee: a grandchild that
+deliberately detaches into its own new process group/session (rare for
+gtts-cli/ffmpeg's own normal operation) would not be reached by this
+kill - an accepted, documented limitation rather than a claim of total
+coverage. The parent and child both call `setpgrp` on the child
+immediately after `fork` (whichever runs first wins harmlessly) to close
+a real race a Codex review caught: without it, a timeout firing before
+the child's own `setpgrp` call would target a process group that does
+not exist yet, silently killing nothing.
+
 ## The startup line confirms which credentials actually loaded, without exposing them
 
 Live request (TGT-045, raised while diagnosing TGT-044's incident): the
