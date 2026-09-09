@@ -147,7 +147,14 @@ Self-refreshes on a new install (TGT-036): after each poll cycle, it
 compares its own on-disk `VERSION` against the one it started with. If
 `dashboard skills install tg` has installed a newer version in the
 meantime, it prints a notice and re-execs itself in place (same PID) -
-no manual restart needed to pick up a new release.
+no manual restart needed to pick up a new release. The notice now
+appends the new version's own first `Changes` bullet line (TGT-112,
+user-supplied live-experienced feedback) - e.g. `... restarting... -
+cli/poller.pl now refuses on any unrecognized flag` - so an operator
+watching the log doesn't have to go look up `Changes` separately to
+find out what actually changed. Reads `Changes` at restart time via
+`D2TG::Config::changes_summary`; omitted entirely if that version has
+no `Changes` entry or the file can't be read.
 
 Events printed:
 

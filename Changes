@@ -1308,3 +1308,16 @@ Revision history for the tg skill
         already fixed once for the inbound get_updates shape. No
         production code changed; identical test count/assertions
         confirmed before and after.
+
+0.93  2026-09-09
+      - cli/poller.pl (TGT-112, user-supplied live-experienced
+        feedback): the version-bump restart notice now names what
+        actually changed, not just the version numbers - it appends the
+        new version's own first Changes bullet line, read from the
+        installed Changes file at restart time. New
+        D2TG::Config::changes_summary function extracts it.
+      - A Codex review found the entry-boundary regex too broad (any
+        unindented line ended the entry, not just a real version
+        header) - tightened to anchor on the actual version-header
+        shape, with a regression test covering an unindented aside line
+        inside a still-valid entry.

@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v0.92).** Test-only refactor (TGT-121,
+**Status: early implementation (v0.93).** `d2 tg.poller`'s version-bump
+restart notice now names what actually changed, not just the version
+numbers (TGT-112, user-supplied live-experienced feedback) - it appends
+the new version's own first `Changes` bullet line, read from the
+installed `Changes` file at restart time. Test-only refactor (TGT-121,
 found via a scheduled improvement hunt): a shared
 `t/lib/Fake/ReplyTelegram.pm` test double now replaces 6
 independently-reinvented copies of the same outbound test fake across 5
