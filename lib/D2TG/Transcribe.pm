@@ -8,6 +8,7 @@ use File::Basename qw(fileparse);
 use File::Path qw(remove_tree);
 use POSIX qw(WNOHANG);
 use Time::HiRes qw(time sleep);
+use D2TG::Subprocess;
 
 our $TIMEOUT     = 300;
 our $CURRENT_PID = undef;
@@ -150,30 +151,17 @@ sub transcribe {
 sub _run {
     my (@cmd) = @_;
 
-    my $pid = $FORKER->();
-    die "D2TG::Transcribe::_run: fork failed: $!\n" unless defined $pid;
-
-    if ( $pid == 0 ) {
-        # TGT-128: its own process group, so a timeout can terminate the
-        # whole tree (whisper commonly shells out to ffmpeg/ffprobe-family
-        # tooling for audio decoding - this same module's own
-        # _probe_duration already depends on ffprobe) with one signal to
-        # -$pid, not just this immediate child.
-        setpgrp( 0, 0 );
-        open( STDOUT, '>', File::Spec->devnull ) or POSIX::_exit(127);
-        open( STDERR, '>', File::Spec->devnull ) or POSIX::_exit(127);
-        exec(@cmd) or POSIX::_exit(127);
-    }
-
-    # A Codex review finding on the sibling D2TG::TTS::_run fix (TGT-127):
-    # without the parent ALSO calling setpgrp on the child immediately
-    # after fork, there is a race - a timeout firing before the child's
-    # own setpgrp(0,0) above would target a process group that does not
-    # exist yet. Calling it here too, redundantly (whichever process wins
-    # the race sets it first, harmlessly), closes that race regardless of
-    # scheduling order. eval-guarded since it can legitimately fail (e.g.
-    # the child already exited).
-    eval { setpgrp( $pid, $pid ) };
+    # TGT-144: fork+setpgrp-race-closing+devnull-redirect+exec was
+    # identical, duplicated code shared with D2TG::TTS::_run - extracted
+    # into D2TG::Subprocess (TGT-128's own process-group protection, so
+    # a timeout can terminate the whole tree - whisper commonly shells
+    # out to ffmpeg/ffprobe-family tooling - with one signal, not just
+    # this immediate child). $FORKER is still threaded through so
+    # existing tests injecting a fake fork-failure keep working
+    # unchanged. Only the preamble moved; everything below (this
+    # module's own waitpid poll loop and TERM/KILL escalation) is
+    # unchanged.
+    my $pid = D2TG::Subprocess::fork_in_own_process_group( cmd => [@cmd], forker => $FORKER );
 
     local $CURRENT_PID = $pid;
     my $deadline = time() + $TIMEOUT;

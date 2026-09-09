@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.16).** Message reactions (emoji
+**Status: early implementation (v1.17).** Internal refactor (TGT-144,
+found via a scheduled improvement hunt): the duplicated subprocess-
+launch preambles `D2TG::TTS::_run` and `D2TG::Transcribe::_run` had
+each independently accumulated are now one shared, tested
+implementation (`D2TG::Subprocess`) - no user-facing behavior change,
+all pre-existing tests pass unchanged. One narrow, never-observed
+internal detail was reconciled rather than literally preserved per
+caller: `D2TG::Transcribe::_run` previously exited 127 for both a
+devnull-redirect failure and an exec failure, while `D2TG::TTS::_run`
+distinguished them (126 vs 127) - the shared helper now uses TTS's
+richer distinction for both callers, since neither module's own exit
+code is ever inspected beyond "did it fail" by anything in this
+project. Message reactions (emoji
 likes) are now detected and printed (TGT-143, answering a live question
 from Michael) - `NEW TG REACTION [chat_id] sender: <emoji> on message
 <id>` for an add, `REACTION REMOVED ...` for a removal, diffed by

@@ -5,7 +5,7 @@ use warnings;
 use File::Temp qw(tempfile);
 use File::Spec;
 use File::Copy qw(copy);
-use POSIX qw(_exit);
+use D2TG::Subprocess;
 
 use constant DEFAULT_HARD_TIMEOUT => 60;
 
@@ -124,30 +124,14 @@ sub synthesize_to_file {
 sub _run {
     my (@cmd) = @_;
 
-    my $pid = fork();
-    die "D2TG::TTS::_run: fork failed: $!\n" unless defined $pid;
-
-    if ( $pid == 0 ) {
-        # TGT-127: its own process group, so a timeout can kill the whole
-        # tree (gtts-cli/ffmpeg may themselves spawn children) with one
-        # signal to -$pid, not just this immediate child.
-        setpgrp( 0, 0 );
-        open STDOUT, '>', File::Spec->devnull or _exit(126);
-        open STDERR, '>', File::Spec->devnull or _exit(126);
-        exec(@cmd) or _exit(127);
-    }
-
-    # A Codex review finding: without this, there is a race between the
-    # child's own setpgrp(0,0) above and the parent's alarm/kill below - if
-    # the timeout fires before the child has actually called setpgrp, the
-    # process group named -$pid does not exist yet, and kill() silently
-    # does nothing, leaving the still-in-our-own-group child running.
-    # Perl's setpgrp is a thin wrapper over setpgid(2), which either process
-    # is allowed to call on the child - calling it here too, redundantly,
-    # means the group is guaranteed set by the time either process proceeds
-    # further, regardless of which one wins the race. eval-guarded because
-    # it can legitimately fail (e.g. the child already exited).
-    eval { setpgrp( $pid, $pid ) };
+    # TGT-144: fork+setpgrp-race-closing+devnull-redirect+exec was
+    # identical, duplicated code shared with D2TG::Transcribe::_run -
+    # extracted into D2TG::Subprocess (TGT-127's own process-group
+    # protection, so a timeout can kill the whole tree - gtts-cli/ffmpeg
+    # may themselves spawn children - with one signal, not just this
+    # immediate child). Only the preamble moved; everything below
+    # (this module's own alarm-based wait/timeout logic) is unchanged.
+    my $pid = D2TG::Subprocess::fork_in_own_process_group( cmd => [@cmd] );
 
     my $rc;
     my $timed_out = 0;

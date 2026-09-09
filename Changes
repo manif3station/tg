@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.17  2026-09-09
+      - Refactor (TGT-144, found via scheduled improvement hunt JOB-004):
+        the fork+setpgrp-race-closing+devnull-redirect+exec preamble
+        D2TG::TTS::_run and D2TG::Transcribe::_run had each
+        independently accumulated across separate Codex review rounds
+        (TGT-127/TGT-128) is now one shared, tested implementation
+        (D2TG::Subprocess::fork_in_own_process_group). Pure refactor -
+        both modules' own distinct wait/timeout/kill-escalation logic
+        (TTS's alarm+SIGALRM, Transcribe's waitpid poll loop) is
+        unchanged, and every pre-existing test in both suites passes
+        completely unchanged (91 tests, zero modifications). Codex
+        caught a real, narrow behavior-preservation gap during
+        extraction (TTS's own setup-failure vs exec-failure exit codes,
+        126 vs 127, would have collapsed to one) - fixed by
+        deliberately reconciling both callers onto TTS's richer
+        distinction, since neither module's exit code is ever
+        inspected beyond "did it fail"; 2 new tests added.
+
 1.16  2026-09-09
       - D2TG::Telegram/D2TG::Poller (TGT-143, live Telegram question
         from Michael: "the user can give a like or mark a message with
