@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.15).** A forwarded message now names
+**Status: early implementation (v1.16).** Message reactions (emoji
+likes) are now detected and printed (TGT-143, answering a live question
+from Michael) - `NEW TG REACTION [chat_id] sender: <emoji> on message
+<id>` for an add, `REACTION REMOVED ...` for a removal, diffed by
+emoji so a same-update swap (one emoji replaced by another) reports
+both correctly. Detection only, no reply action taken on a reaction. A forwarded message now names
 its original sender alongside the forwarder (TGT-142, answering a live
 question from Michael) - reads Telegram's own `forward_origin` field,
 already reaching the poller untouched but never read before, covering

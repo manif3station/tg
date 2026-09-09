@@ -45,6 +45,50 @@ sub run_once {
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
     for my $update (@$updates) {
+
+        # TGT-143 (live Telegram question, msg #176, Michael: "the user
+        # can give a like or mark a message with emoji, is that
+        # something can be implement to pick this up"): detection/
+        # printing only, per the ticket's own scope - no reply action
+        # taken on a reaction, matching the existing pattern for every
+        # other inbound event this poller only ever reports.
+        if ( my $reaction = $update->{message_reaction} ) {
+            my $chat_id    = $reaction->{chat}{id};
+            my $message_id = $reaction->{message_id};
+            my $sender     = _sanitize_for_stdout(
+                _display_name( $chat_id, $reaction->{user}{username} ) );
+
+            # A Codex review finding: MessageReactionUpdated reports
+            # the FULL current/previous reaction sets, not a single
+            # before/after pair - a user can have multiple reactions on
+            # one message, and a change can add one emoji while
+            # removing another in the same update. Diff old vs new
+            # rather than assuming any non-empty new_reaction means
+            # "the" reaction was added.
+            #
+            # A second Codex finding: ReactionType is a tagged union -
+            # type=emoji carries an emoji character, but type=custom_emoji
+            # (a distinct custom_emoji_id) and type=paid carry no emoji
+            # field at all. Keying/diffing on emoji alone collapsed every
+            # non-standard reaction to the same 'unknown' bucket, silently
+            # hiding a real change between two different custom emojis
+            # (both mapping to 'unknown' -> 'unknown' looks like no
+            # change at all). Key on type+id instead, printed label
+            # falls back to a description when there's no emoji glyph.
+            my %old_by_key = map { _reaction_key($_) => _reaction_label($_) } @{ $reaction->{old_reaction} // [] };
+            my %new_by_key = map { _reaction_key($_) => _reaction_label($_) } @{ $reaction->{new_reaction} // [] };
+
+            for my $key ( sort grep { !$old_by_key{$_} } keys %new_by_key ) {
+                print "NEW TG REACTION [$chat_id] $sender: "
+                  . _sanitize_for_stdout( $new_by_key{$key} ) . " on message $message_id\n";
+            }
+            for my $key ( sort grep { !$new_by_key{$_} } keys %old_by_key ) {
+                print "REACTION REMOVED [$chat_id] $sender: "
+                  . _sanitize_for_stdout( $old_by_key{$key} ) . " on message $message_id\n";
+            }
+            next;
+        }
+
         my $message = $update->{message} or next;
         my $text       = $message->{text};
         my $media_kind = _media_kind($message);
@@ -344,6 +388,26 @@ sub _print_attachment_template {
     return;
 }
 
+sub _reaction_key {
+    my ($reaction) = @_;
+
+    my $type = $reaction->{type} // '';
+    return "emoji:@{[ $reaction->{emoji} // '' ]}"               if $type eq 'emoji';
+    return "custom_emoji:@{[ $reaction->{custom_emoji_id} // '' ]}" if $type eq 'custom_emoji';
+    return 'paid'                                                 if $type eq 'paid';
+    return "unknown:$type";
+}
+
+sub _reaction_label {
+    my ($reaction) = @_;
+
+    my $type = $reaction->{type} // '';
+    return $reaction->{emoji}                if $type eq 'emoji' && defined $reaction->{emoji};
+    return 'a custom emoji'                  if $type eq 'custom_emoji';
+    return 'a paid reaction'                 if $type eq 'paid';
+    return 'an unrecognized reaction type';
+}
+
 sub _forward_origin_name {
     my ($origin) = @_;
 
@@ -542,6 +606,34 @@ raw exception text is never printed (a Codex review finding: a DBI/
 SQLite error can embed the database file's own path) - only a short,
 fixed classification (C<database is locked>/C<busy>/C<readonly>, or
 C<an unexpected error>).
+
+An C<message_reaction> update (TGT-143, a live Telegram question -
+"the user can give a like or mark a message with emoji") - Telegram's
+own opt-in reaction-change type, requested via
+L<D2TG::Telegram/get_updates>'s own C<allowed_updates> default - is
+handled as its own branch, before any C<message> handling, and never
+recorded into C<$store> (detection/printing only, per the ticket's own
+scope; no reply action is taken on a reaction). C<MessageReactionUpdated>
+reports the I<full> current and previous reaction sets, not a single
+before/after pair, since a user can have multiple reactions on one
+message and a single update can add one reaction while removing
+another - the two sets are diffed via C<_reaction_key> (a Codex review
+finding: C<ReactionType> is a tagged union - a standard C<emoji>
+reaction carries an emoji glyph, but C<custom_emoji> carries a distinct
+C<custom_emoji_id> with no glyph at all, and C<paid> carries neither;
+keying on the emoji field alone collapsed every custom/paid reaction
+into one shared bucket, silently hiding a real swap between two
+different custom emojis). Every key present in C<new_reaction> but not
+C<old_reaction> prints C<NEW TG REACTION [chat_id] sender: <label> on
+message <id>>, every key present in C<old_reaction> but not
+C<new_reaction> prints C<REACTION REMOVED [chat_id] sender: <label> on
+message <id>> - C<_reaction_label> prints the emoji glyph itself for a
+standard reaction, or a plain description (C<a custom emoji>/C<a paid
+reaction>) when there's no glyph to show; both are sanitized via
+L</_sanitize_for_stdout> before printing, exactly like every other
+untrusted string this module prints (a Telegram username/emoji is
+attacker-controlled). Anonymous aggregate reaction counts
+(C<message_reaction_count>) are out of scope.
 
 Every printed sender name (the main content line and any reply-context
 suffix) goes through L</_display_name> (TGT-079, a live user request):

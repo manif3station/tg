@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.16  2026-09-09
+      - D2TG::Telegram/D2TG::Poller (TGT-143, live Telegram question
+        from Michael: "the user can give a like or mark a message with
+        emoji, is that something can be implement to pick this up"):
+        message reactions are now detected and printed. get_updates now
+        requests allowed_updates explicitly ([message, message_reaction]
+        by default), since reactions are opt-in per the Bot API and
+        Telegram's own docs warn that specifying allowed_updates at all
+        restricts delivery to only the listed types - every type this
+        project already relied on is preserved alongside the new one.
+        A reaction add prints "NEW TG REACTION [chat_id] sender: <emoji>
+        on message <id>", a removal prints "REACTION REMOVED [chat_id]
+        sender: <emoji> on message <id>" - diffed by emoji set (Codex
+        review caught that a naive "any non-empty new_reaction = add"
+        check would mishandle a same-update swap, e.g. one emoji
+        replaced by another). Detection/printing only, no reply action.
+        Codex also caught missing sanitization on the sender/emoji
+        before printing - both fixed.
+
 1.15  2026-09-09
       - D2TG::Poller (TGT-142, live Telegram question answered by
         Michael: "use the origin name instead of user id"): a

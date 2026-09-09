@@ -112,6 +112,25 @@ sub get_updates {
     my $params = { timeout => $args{timeout} // ( DEFAULT_HARD_TIMEOUT - DEFAULT_LONG_POLL_MARGIN ) };
     $params->{offset} = $args{offset} if defined $args{offset};
 
+    # TGT-143 (live Telegram question, msg #176): reactions
+    # (message_reaction updates) are opt-in per the Bot API - never
+    # delivered unless explicitly listed in allowed_updates. Telegram's
+    # own docs warn that once allowed_updates is specified at all, only
+    # the listed types are delivered - so every update type this
+    # poller already relies on must be listed explicitly here too, not
+    # just the new reaction type, or this would silently break existing
+    # inbound message handling. A Codex review raised whether narrowing
+    # from Telegram's own default (every type except chat_member, when
+    # allowed_updates is omitted entirely) to just these two could
+    # silently drop something - confirmed via a full grep of this
+    # project's own code that edited_message/callback_query/
+    # channel_post are never read anywhere, so nothing currently
+    # observable narrows; deliberately scoped to the ticket's own
+    # explicit solution text ("message, at minimum") rather than
+    # expanding beyond what was asked.
+    $params->{allowed_updates} = $args{allowed_updates}
+      // [qw(message message_reaction)];
+
     my $updates = $self->_call( 'getUpdates', $params );
 
     my $next_offset = $args{offset};
@@ -341,11 +360,21 @@ pass to C<d2 tg.reply>.
 
 Returns the bot's own user info.
 
-=head2 get_updates(offset => $offset, timeout => $timeout)
+=head2 get_updates(offset => $offset, timeout => $timeout, allowed_updates => \@types)
 
 Long-polls C<getUpdates>. Returns a two-element list: the array of update
 hashes, and the offset to pass on the next call (one past the highest
 C<update_id> seen, or the offset that was passed in if no updates arrived).
+
+C<allowed_updates> defaults to C<[qw(message message_reaction)]> (TGT-143,
+a live Telegram question) - message reactions are opt-in per the Bot
+API, never delivered unless explicitly requested. Telegram's own docs
+warn that specifying C<allowed_updates> at all restricts delivery to
+I<only> the listed types, so this default deliberately preserves every
+update type this project currently relies on (C<message>) alongside the
+new one, rather than adding C<message_reaction> in isolation and
+silently narrowing everything else. A caller may pass its own
+C<allowed_updates> to override this default entirely.
 
 C<timeout> defaults to C<DEFAULT_HARD_TIMEOUT - DEFAULT_LONG_POLL_MARGIN>
 (50 - 20 = 30, TGT-067) rather than a bare literal - this keeps the
