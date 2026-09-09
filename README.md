@@ -1,6 +1,8 @@
 # tg
 
-**Status: early implementation (v1.06).** `d2 tg.attachment`'s refusal
+**Status: early implementation (v1.07).** SKILLS.md's onboarding
+overview now names `d2 tg.attachment` explicitly (TGT-135) - previously
+only the later step-by-step walkthrough mentioned it. `d2 tg.attachment`'s refusal
 for a missing stored file now names `prune_vault`'s own byte-cap
 eviction as the likely cause (TGT-134, self-review after TGT-133) -
 fetching an attachment is only reliable while it's still within the

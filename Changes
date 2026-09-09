@@ -1520,3 +1520,13 @@ Revision history for the tg skill
         explicitly in docs/commands.md and docs/POLICIES.md: fetching
         an attachment is only reliable for one still within the
         vault's currently-retained set, not a permanent guarantee.
+
+1.07  2026-09-09
+      - SKILLS.md (TGT-135, self-review while completing TGT-134's
+        pending-push gate): section 1 ("What this skill is"), the
+        onboarding overview a new reader sees first, now names
+        d2 tg.attachment and the never-expose-a-real-path guarantee
+        explicitly - previously only section 6's later step-by-step
+        walkthrough mentioned it, so a reader skimming just the
+        overview had an incomplete picture of how downloaded media
+        actually works.

@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v1.06).** This file is a procedure to
+**Status: early implementation (v1.07).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -13,10 +13,14 @@ board ("D2 TG Skill"), not markdown files in `tickets/`.
 running, it long-polls a Telegram bot, gates every sender through an
 allow-list, and prints new messages (text, voice - transcribed, photo/
 document - downloaded) to stdout with a ready-to-run reply command
-alongside each one. Registered as a Tira monitor job, that stream
-reaches the project's `tira.policy.bridge`, so the agent watching that
-board sees new Telegram messages as board notifications and can reply
-via `d2 tg.reply <chat_id> "..."` - a real text message plus a spoken
+alongside each one. A downloaded photo/document's actual bytes are
+never printed directly - each one is announced with its own
+`d2 tg.attachment <chat_id> <message_id>` command (TGT-133/TGT-134) to
+fetch them, the real on-disk path never exposed anywhere. Registered as
+a Tira monitor job, that stream reaches the project's
+`tira.policy.bridge`, so the agent watching that board sees new
+Telegram messages as board notifications and can reply via
+`d2 tg.reply <chat_id> "..."` - a real text message plus a spoken
 voice note, always both. The text is sent first, then the voice note is
 synthesized and sent (TGT-083); a synthesis/send failure after that point
 is still reported loudly (non-zero exit) but can no longer un-send the
