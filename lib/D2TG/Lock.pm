@@ -192,6 +192,37 @@ sub find_other_pollers {
     return @found;
 }
 
+sub classify_other_poller_token {
+    my ( $pid, %args ) = @_;
+
+    my $own_token = $args{own_token};
+    my $proc_dir  = $args{proc_dir} // '/proc';
+
+    # TGT-141: find_other_pollers' own warning already hedged with "If
+    # genuinely another live poller sharing this bot token" without
+    # ever checking the token - on a host running several sibling
+    # projects from this skill (each with its own distinct D2TG_TOKEN),
+    # that made the warning fire routinely for the single most common,
+    # entirely benign case. This never guesses: any input it can't read
+    # or compare confidently is 'unknown', never 'same' or 'different'.
+    return 'unknown' unless defined $own_token;
+
+    open my $fh, '<', "$proc_dir/$pid/environ" or return 'unknown';
+    local $/;
+    my $environ = <$fh>;
+    close $fh;
+
+    return 'unknown' unless defined $environ;
+
+    for my $pair ( split /\0/, $environ ) {
+        if ( $pair =~ /^D2TG_TOKEN=(.*)\z/s ) {
+            return $1 eq $own_token ? 'same' : 'different';
+        }
+    }
+
+    return 'unknown';
+}
+
 sub _read_pid {
     my ($path) = @_;
 
@@ -343,5 +374,36 @@ before the caller acts on it. C<cli/poller.pl> therefore only warns on
 STDERR naming the PID(s) found; it deliberately never acts on this
 result by killing anything itself, since a cmdline pattern match alone
 is not strong enough evidence to justify an unprompted kill.
+
+=head2 classify_other_poller_token($pid, own_token => $token, proc_dir => $dir)
+
+TGT-141, an external review finding live-reproduced by a sibling
+project (zen-framework) and confirmed by Michael: L</find_other_pollers>
+flags any poller-shaped process regardless of which bot token it's
+actually running with - on a host running several projects from this
+skill (each with its own distinct token, no real C<getUpdates>
+collision between them), that made C<cli/poller.pl>'s own warning fire
+routinely for the single most common, entirely benign case.
+
+Reads C<$pid>'s own C<D2TG_TOKEN> from C<$proc_dir/$pid/environ>
+(default C<$proc_dir> is C</proc>, NUL-separated C<KEY=VALUE> pairs per
+the kernel's own format, matching the same style TGT-118's own env
+inspection already used elsewhere in this project) and compares it
+against C<own_token>. Returns C<same> (a real conflict, worth
+investigating), C<different> (almost certainly a sibling project's own
+poller, safe to ignore), or C<unknown> - and only ever C<unknown>, never
+guessed either way, when C<own_token> itself is undefined, C<environ>
+can't be opened (permission-restricted, the process already exited), or
+no C<D2TG_TOKEN> key appears in it at all.
+
+C<cli/poller.pl> calls this for each PID L</find_other_pollers> finds
+and splits its own warning by the result: C<same> keeps the urgent
+C<WARNING> framing, C<different> gets a reassuring C<NOTE> naming the
+sibling-project explanation, and C<unknown> gets its own distinct,
+cautious wording (a Codex review finding: grouping C<unknown> with
+C<different> would overclaim certainty an unreadable C<environ> can't
+actually support - it could still genuinely be a same-token conflict).
+This changes only the evidence behind the wording; L</find_other_pollers>'s
+own never-kill, report-only design is unchanged.
 
 =cut

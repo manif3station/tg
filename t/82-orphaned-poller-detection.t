@@ -168,6 +168,13 @@ sub _fake_proc {
     close $fh;
     chmod 0755, $fake_poller;
 
+    # TGT-141: the fake child must inherit the SAME D2TG_TOKEN the real
+    # poller.pl below will run with, so this genuinely tests the
+    # same-token "real conflict, worth investigating" case - set before
+    # forking, since fork+exec inherits %ENV from this point onward.
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN} = 'test-token';
+
     my $child_pid = fork();
     die "fork failed: $!" unless defined $child_pid;
     if ( $child_pid == 0 ) {
@@ -259,6 +266,75 @@ sub _fake_proc {
     close $_ for grep { defined } ( $in, $child_out, $child_err );
 
     unlike( $err, qr/WARNING.*orphaned/, 'no false-positive orphaned-instance warning for a healthy single instance' );
+}
+
+{
+    # TGT-141 core scenario, live-reproduced: a sibling project's own
+    # legitimate poller (different D2TG_TOKEN, no real getUpdates
+    # collision) must get the reassuring NOTE wording, never the
+    # urgent WARNING framing.
+    my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
+
+    my $fake_poller_dir = tempdir( CLEANUP => 1 );
+    my $fake_poller     = File::Spec->catfile( $fake_poller_dir, 'poller.pl' );
+    open my $fh, '>', $fake_poller or die $!;
+    print {$fh} "#!/usr/bin/env perl\nsleep 30;\n";
+    close $fh;
+    chmod 0755, $fake_poller;
+
+    # The sibling's own token, deliberately different from the one the
+    # real poller.pl below will run with.
+    local %ENV = %ENV;
+    $ENV{D2TG_TOKEN} = 'sibling-project-different-token';
+
+    my $child_pid = fork();
+    die "fork failed: $!" unless defined $child_pid;
+    if ( $child_pid == 0 ) {
+        exec( $^X, $fake_poller );
+        exit 1;
+    }
+
+    my $tries = 0;
+    my $child_cmdline = '';
+    while ( $tries++ < 200 ) {
+        if ( open my $cfh, '<', "/proc/$child_pid/cmdline" ) {
+            local $/;
+            $child_cmdline = <$cfh> // '';
+            close $cfh;
+        }
+        last if $child_cmdline =~ /\Q$fake_poller\E/;
+        select( undef, undef, undef, 0.01 );
+    }
+    unless ( $child_cmdline =~ /\Q$fake_poller\E/ ) {
+        kill 'KILL', $child_pid;
+        waitpid( $child_pid, 0 );
+        BAIL_OUT("fake sibling poller child (PID $child_pid) never exec()'d into $fake_poller");
+    }
+
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    $ENV{D2TG_TOKEN}   = 'our-own-token';
+    $ENV{D2TG_CHAT_ID} = '12345';
+
+    require IPC::Open3;
+    require Symbol;
+    my ( $child_out, $child_err ) = ( Symbol::gensym(), Symbol::gensym() );
+    my $poller_pid = IPC::Open3::open3( my $in, $child_out, $child_err, $poller_cli );
+
+    my $first_line   = <$child_out>;
+    my $warning_line = <$child_err>;
+
+    unlike( $warning_line, qr/^WARNING/,
+        'a sibling project\'s own poller (different token) never gets the urgent WARNING framing' );
+    like( $warning_line, qr/^NOTE.*\Q$child_pid\E.*sibling project/,
+        'it gets the reassuring NOTE wording instead, naming the sibling-project explanation' );
+
+    kill 'KILL', $poller_pid;
+    waitpid( $poller_pid, 0 );
+    close $_ for grep { defined } ( $in, $child_out, $child_err );
+
+    kill 'KILL', $child_pid;
+    waitpid( $child_pid, 0 );
 }
 
 done_testing();

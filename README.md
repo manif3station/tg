@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.13).** `d2 tg.retry-download`'s own
+**Status: early implementation (v1.14).** The orphaned-poller warning
+now cross-checks a flagged process's own bot token before sounding
+urgent (TGT-141, an external review finding live-reproduced by a
+sibling project) - a same-token match still gets the urgent framing, a
+different or unreadable token gets a reassuring note naming a sibling
+project's own poller as the likely explanation instead, closing a
+routine false alarm on any host running several projects from this
+skill. `d2 tg.retry-download`'s own
 `RETRY OK` success line no longer prints a retried download's real local
 filesystem path (TGT-146, a TGT-133 regression found via a scheduled bug
 hunt) - names the `d2 tg.attachment` fetch command instead, matching

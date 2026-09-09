@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v1.13).** This file is a procedure to
+**Status: early implementation (v1.14).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -41,7 +41,12 @@ crashed mid-restart, left an orphaned second instance running under a
 different PID, and nothing noticed it was still competing for the same
 bot token's `getUpdates` queue. This is a report, not a kill - a cmdline
 pattern match alone isn't strong enough evidence for this skill to act
-on unprompted. A failed inbound photo/document download is now queued
+on unprompted. Since TGT-141, that flagged process's own bot token is
+cross-checked first - a same-token match still sounds urgent, a
+different or unreadable token gets a calmer note naming a sibling
+project's own poller as the likely explanation, since a host running
+several projects with this skill will otherwise see this warning
+routinely for an entirely benign reason. A failed inbound photo/document download is now queued
 for retry (TGT-104, an attempt to persist, not a guarantee - a
 database-write failure at queue time is itself non-fatal and simply
 leaves that one download unqueued) instead of just printed and

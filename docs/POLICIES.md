@@ -1190,6 +1190,36 @@ kernel's own NUL separators) - false-positiving on `not-a-poller.pl`,
 unrelated argv elements. Fixed by matching each NUL-split argv element
 on its own against the anchored pattern.
 
+## The orphaned-poller warning cross-checks the bot token before sounding urgent (TGT-141)
+
+External review finding, live-reproduced by a sibling project (zen-
+framework) and confirmed by Michael, 2026-09-09: `find_other_pollers`'s
+own warning above fired identically for every poller-shaped process it
+found, regardless of *why* it was flagged. On a host running several
+projects from this skill - already true here (Zenandi, Developer
+Dashboard, Budgeting, Tira Development at minimum) - each project's own
+poller has a distinct `D2TG_TOKEN`, so there is never a real `getUpdates`
+collision between them; the warning's own wording already hedged with
+"if genuinely another live poller sharing this bot token", but never
+actually checked the token, so it fired routinely and alarmingly for the
+single most common, entirely benign case.
+
+`D2TG::Lock::classify_other_poller_token($pid, own_token => ..., proc_dir
+=> ...)` reads the flagged PID's own `D2TG_TOKEN` from
+`/proc/<pid>/environ` and compares it against the running instance's
+own: `same` (a real collision, worth investigating), `different`
+(almost certainly a sibling project's own poller, safe to ignore), or
+`unknown` (environ unreadable, no `D2TG_TOKEN` in it, or the caller's
+own token itself undefined) - it never guesses `same` or `different`
+from incomplete information. `cli/poller.pl` splits its own warning on
+this: a same-token PID still gets the urgent `WARNING: possible
+orphaned poller instance(s) sharing this bot token ...` framing; every
+other-token or unknown-token PID gets a `NOTE: other poller-shaped
+process(es) detected ...` line naming the sibling-project explanation
+instead. The never-kill, report-only design itself (TGT-113, above) is
+completely unchanged - only the evidence behind which wording a given
+PID gets.
+
 ## A failed media download is queued for retry, not lost after one report
 
 User-supplied feature-gap analysis (TGT-104): the old `~/skills/tg`

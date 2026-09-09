@@ -150,11 +150,62 @@ if ($@) {
 # STDERR and continues rather than acting unilaterally on a guess.
 my @other_pollers = D2TG::Lock::find_other_pollers( own_pid => $$ );
 if (@other_pollers) {
-    print STDERR "WARNING: possible orphaned poller instance(s) detected "
-      . "(PID(s): " . join( ', ', @other_pollers ) . ") - still running and "
-      . "not tracked by this instance's own lock file. If genuinely another "
-      . "live poller sharing this bot token, it may be competing for the "
-      . "same getUpdates long-poll slot; investigate and stop it manually.\n";
+
+    # TGT-141 (external review finding, live-reproduced by zen-framework,
+    # confirmed by Michael): the warning above always fired identically
+    # regardless of WHY a poller-shaped process was flagged - on a host
+    # running several sibling projects from this skill (each with its
+    # own distinct bot token, no real getUpdates collision), that made
+    # this warning fire routinely for the single most common, entirely
+    # benign case. Cross-check each flagged PID's own D2TG_TOKEN against
+    # ours where readable, and only use the urgent framing for a
+    # confirmed same-token match - this does not change the never-kill,
+    # report-only design, only the evidence behind the wording.
+    my $own_token = D2TG::Config::token();
+    my ( @same_token, @different_token, @unknown_token );
+    for my $pid (@other_pollers) {
+        my $class = D2TG::Lock::classify_other_poller_token( $pid, own_token => $own_token );
+        if ( $class eq 'same' ) {
+            push @same_token, $pid;
+        }
+        elsif ( $class eq 'different' ) {
+            push @different_token, $pid;
+        }
+        else {
+            push @unknown_token, $pid;
+        }
+    }
+
+    if (@same_token) {
+        print STDERR "WARNING: possible orphaned poller instance(s) sharing this bot token "
+          . "detected (PID(s): " . join( ', ', @same_token ) . ") - still running and not "
+          . "tracked by this instance's own lock file. It may be competing for the same "
+          . "getUpdates long-poll slot; investigate and stop it manually.\n";
+    }
+    if (@different_token) {
+        print STDERR "NOTE: other poller-shaped process(es) detected (PID(s): "
+          . join( ', ', @different_token ) . ") with a different bot token - "
+          . "almost certainly a sibling project's own poller on this host, not a real "
+          . "conflict. If this machine runs multiple projects with this skill, that is "
+          . "the most likely explanation; no action needed unless you know otherwise.\n";
+    }
+    if (@unknown_token) {
+
+        # A Codex review finding: 'unknown' (unreadable environ, no
+        # D2TG_TOKEN in it) is NOT the same claim as 'different' - it
+        # could still genuinely be a same-token conflict this instance
+        # simply couldn't verify, so it must never be told apart with
+        # the same reassuring certainty. Keeps the original warning's
+        # own cautious hedge ("if genuinely sharing this bot token")
+        # rather than overclaiming either way.
+        print STDERR "WARNING: possible orphaned poller instance(s) detected (PID(s): "
+          . join( ', ', @unknown_token ) . ") - still running and not tracked by this "
+          . "instance's own lock file; this instance's bot token could not be "
+          . "cross-checked against them (environ unreadable). If this machine runs "
+          . "multiple projects with this skill, a different project's own poller is "
+          . "the most likely explanation - but if genuinely sharing this bot token, it "
+          . "may be competing for the same getUpdates long-poll slot; investigate.\n";
+    }
 }
 
 # TGT-116: a heartbeat, separate from the lock file - written after each

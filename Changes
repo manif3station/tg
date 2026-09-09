@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+1.14  2026-09-09
+      - D2TG::Lock (TGT-141, external review finding live-reproduced by
+        a sibling project, confirmed by Michael): the orphaned-poller
+        warning now cross-checks a flagged PID's own D2TG_TOKEN (via
+        /proc/<pid>/environ) before deciding how urgent to sound - a
+        same-token match keeps the urgent WARNING framing, a different
+        or unreadable token gets a reassuring NOTE naming the
+        sibling-project explanation instead. Previously every
+        poller-shaped process on the host was warned about identically,
+        firing routinely for the single most common, entirely benign
+        case (each sibling project's own distinct bot token, no real
+        getUpdates collision). Never-kill, report-only design unchanged.
+
 1.13  2026-09-09
       - SECURITY (TGT-146, found via scheduled hourly bug hunt JOB-003,
         a TGT-133 regression): cli/retry-download.pl's own RETRY OK
