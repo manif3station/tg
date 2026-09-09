@@ -4,7 +4,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempfile);
 use File::Spec;
-use File::Copy qw(move);
+use File::Copy qw(copy);
 
 sub synthesize {
     my ( $text, %args ) = @_;
@@ -58,15 +58,38 @@ sub synthesize_to_file {
     # failure at either step never touches $args{out} at all; only the
     # final, separate rename actually replaces it, atomically, and only
     # once the file is fully and successfully in place.
-    my ( $out_vol, $out_dir, undef ) = File::Spec->splitpath( $args{out} );
-    my $staging_path = File::Spec->catpath( $out_vol, $out_dir, ".d2tg-tts-$$-" . time() . '.ogg' );
+    # Codex review finding (third round): a predictable staging name
+    # ("$$-" . time()) can collide between concurrent/re-entrant calls,
+    # or be pre-empted by an unrelated file of the same name - reserve
+    # the staging path exclusively via File::Temp instead of hand-
+    # rolling uniqueness, and write into that already-reserved file
+    # (via copy, not move) so there is never a window where the name is
+    # reserved but not actually owned by this call.
+    my ( undef, $out_dir, undef ) = File::Spec->splitpath( $args{out} );
+    $out_dir = '.' unless length $out_dir;
+    my ( $staging_fh, $staging_path ) =
+      eval { tempfile( 'd2tg-tts-XXXXXXXX', DIR => $out_dir, SUFFIX => '.ogg', UNLINK => 0 ) };
+    if ($@) {
+        my $err = $@;
+        unlink $ogg_path;
+        die "D2TG::TTS::synthesize_to_file: cannot write to $args{out}: $err";
+    }
+    close $staging_fh;
 
-    my $moved   = move( $ogg_path, $staging_path );
-    my $renamed = $moved && rename( $staging_path, $args{out} );
+    # $renamer exists purely for test injection (mirroring $runner
+    # above) - the final rename() succeeding is otherwise very hard to
+    # force to fail deterministically without real, exotic filesystem
+    # conditions (it's the one step guaranteed to be same-filesystem by
+    # construction).
+    my $renamer = $args{renamer} || sub { return rename( $_[0], $_[1] ); };
+
+    my $copied  = copy( $ogg_path, $staging_path );
+    unlink $ogg_path;
+    my $renamed = $copied && $renamer->( $staging_path, $args{out} );
 
     unless ($renamed) {
         my $err = $!;
-        unlink $ogg_path, $staging_path;
+        unlink $staging_path;
         die "D2TG::TTS::synthesize_to_file: cannot write to $args{out}: $err\n";
     }
 
@@ -125,7 +148,7 @@ returning its exit status (0 for success); it defaults to C<_run>
 (list-form C<system(@cmd)>, no shell), and exists so callers (tests) can
 inject a fake runner instead of invoking real subprocesses.
 
-=head2 synthesize_to_file($text, out => $path, runner => \&coderef)
+=head2 synthesize_to_file($text, out => $path, runner => \&coderef, renamer => \&coderef)
 
 TGT-106 (user-supplied feature-gap analysis): C<synthesize> itself is
 unchanged - this wraps it with the "write the result somewhere specific,
@@ -150,6 +173,18 @@ delete a I<pre-existing, unrelated> file already sitting at C<$path>
 after a failed write, which had nothing to do with the failure. Fully
 matches this skill's fail-loud TTS convention: no file is ever left
 empty, partially written, or lost as a side effect of a failed attempt.
+
+The staging file's own name is reserved exclusively via
+L<File::Temp/tempfile> (a third Codex review round: a hand-rolled
+"$$-time()" name could collide between concurrent/re-entrant calls),
+in the same directory as C<$path> - a same-filesystem rename is what
+makes the final replace atomic and safe from a partial cross-filesystem
+copy. C<renamer> is an optional coderef (mirroring C<runner>'s own
+injection point) taking the staging and destination paths and returning
+true on success; it exists purely so tests can force the otherwise
+very-hard-to-trigger "everything succeeded up to the final same-
+directory rename, and then that one step itself failed" case
+deterministically.
 
 =head2 _run(@cmd)
 

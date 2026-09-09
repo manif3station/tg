@@ -82,6 +82,34 @@ require D2TG::TTS;
 }
 
 {
+    # The final rename() itself failing, after everything else (the
+    # synthesis and the same-directory staging copy) already succeeded
+    # - otherwise very hard to force deterministically (it's the one
+    # step guaranteed same-filesystem by construction) - via the
+    # injected renamer coderef. A pre-existing --out file must survive
+    # this too, same guarantee as every other failure mode.
+    my $runner   = sub { return 0; };
+    my $renamer  = sub { $! = 13; return 0; };    # simulate EACCES
+    my $out_dir  = tempdir( CLEANUP => 1 );
+    my $out_path = File::Spec->catfile( $out_dir, 'existing.ogg' );
+    open my $fh, '>', $out_path or die $!;
+    print {$fh} 'pre-existing content';
+    close $fh;
+
+    eval { D2TG::TTS::synthesize_to_file( 'hello', out => $out_path, runner => $runner, renamer => $renamer ) };
+    like( $@, qr/cannot write to/, 'a renamer failure (the final step) still dies loudly' );
+    open my $check_fh, '<', $out_path or die $!;
+    local $/;
+    is( <$check_fh>, 'pre-existing content', 'the pre-existing file survives a renamer failure completely untouched' );
+    close $check_fh;
+
+    opendir my $dh, $out_dir or die $!;
+    my @leftover = grep { !/^\.\.?$/ && $_ ne 'existing.ogg' } readdir $dh;
+    closedir $dh;
+    is_deeply( \@leftover, [], 'no staging file is left behind in the output directory after a renamer failure' );
+}
+
+{
     # The move() itself (not the synthesis step) failing - e.g. the
     # requested --out path's parent directory doesn't exist - must
     # still die loudly and never leave a partial file at $out.
