@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.05).** `D2TG::Poller::run_once`'s 4
+**Status: early implementation (v1.06).** `d2 tg.attachment`'s refusal
+for a missing stored file now names `prune_vault`'s own byte-cap
+eviction as the likely cause (TGT-134, self-review after TGT-133) -
+fetching an attachment is only reliable while it's still within the
+vault's retained set, not a permanent guarantee, now documented
+explicitly. `D2TG::Poller::run_once`'s 4
 `record_message` calls are now eval-wrapped (TGT-132, found via an
 ad-hoc bug-hunt) - a store write failure mid-batch (SQLite contention
 outlasting TGT-129's own busy_timeout) no longer aborts the rest of

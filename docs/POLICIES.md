@@ -1435,9 +1435,46 @@ already answered.
 
 Fixed the same way `record_failed_download` already was: a new private
 `_record_message_safe` helper wraps the call in `eval`, logging a
-non-fatal `record_message failed (message was already printed/handled):
-<error>` line to STDERR instead of letting the exception propagate. The
-message itself was already fully handled (printed to stdout, offered a
-`REPLY WITH` template) - only the store's own record of it failed, which
-degrades `d2 tg.history`/`d2 tg.unread`'s completeness for that one
-message, not the poller's own correctness or the batch's delivery.
+non-fatal `record_message failed (<reason>) - message was already
+printed/handled, only its own store record is affected` line to STDERR
+instead of letting the exception propagate. The message itself was
+already fully handled (printed to stdout, offered a `REPLY WITH`
+template) - only the store's own record of it failed, which degrades
+`d2 tg.history`/`d2 tg.unread`'s completeness for that one message, not
+the poller's own correctness or the batch's delivery. `<reason>` is a
+short, fixed classification (`database is locked`/`busy`/`readonly`, or
+`an unexpected error`) - never the raw exception text itself (a Codex
+review finding: a DBI/SQLite error can embed the database file's own
+path, which this project just spent TGT-133 closing off as an
+information-disclosure surface elsewhere).
+
+## An attachment's fetch is not permanently guaranteed (TGT-134)
+
+Found via self-review immediately after TGT-133 shipped: `local_path`
+(the column TGT-133 added) never expires from `D2TG::Store`'s own
+database, but the file it names can be evicted at any later time by
+`D2TG::Download::prune_vault`'s own byte-cap eviction, which
+`cli/poller.pl` runs after every single poll cycle. An old attachment
+nobody ever re-fetches (a dedup hit refreshes its mtime, TGT-054,
+protecting anything actually re-used) will eventually age out of the
+vault once it fills past its 100MB default cap.
+
+`cli/attachment.pl` already failed safely before this fix - a missing
+file produced a generic "cannot open the stored attachment" message,
+never a crash - but the message gave no hint that pruning was the
+likely, expected cause rather than a real problem. It now checks
+whether the path exists but isn't a regular file first (its own
+message - a directory was never legitimately recorded, but `open`
+alone would silently succeed and print nothing), then attempts to
+`open` it and classifies the real failure from `open`'s own errno: an
+`ENOENT` names pruning specifically, anything else (e.g. a genuine
+permissions problem) falls back to the generic `$!`-based message. A
+Codex review caught that a plain `-e` pre-check (the first version of
+this fix) would have misreported an unrelated permissions failure - an
+unsearchable parent directory, for instance - as "pruned", since that
+also makes `-e` false without the file actually being gone; checking
+`open`'s own errno avoids that misclassification entirely. Fetching an
+attachment is therefore only reliable for one still within the vault's
+currently-retained set, not a permanent guarantee - documented
+explicitly in `docs/commands.md`'s own
+`d2 tg.attachment` section and `cli/attachment.pl`'s own POD.

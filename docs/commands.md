@@ -605,10 +605,19 @@ path). `D2TG::Poller`'s `NEW TG MEDIA` line, and the summary text
 this exact command (`GET ATTACHMENT WITH: d2 tg.attachment <chat_id>
 <message_id>`) instead of ever showing the path. Refuses (exit 1,
 clear STDERR message) if no attachment is recorded for that
-`(chat_id, message_id)` pair, or if the stored file can no longer be
-opened; refuses (exit 2, Usage) if `chat_id`/`message_id` are missing
-or not numeric. `--db`/`-d` (TGT-051) resolves the same way
-`d2 tg.poller`'s does. Redirect stdout to save the file:
+`(chat_id, message_id)` pair, if the stored file can no longer be
+opened, or if the recorded path is no longer a regular file; refuses
+(exit 2, Usage) if `chat_id`/`message_id` are missing or not numeric.
+`--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s does.
+
+**Fetching is not permanently guaranteed** (TGT-134): a stored
+`local_path` never expires from the database, but the file itself can
+be evicted at any later time by `D2TG::Download::prune_vault`'s own
+byte-cap eviction (run after every poll cycle) if this attachment is
+old and was never re-fetched (a dedup hit refreshes its mtime, TGT-054,
+protecting anything actually re-used). A missing file's refusal names
+pruning as the likely cause specifically, rather than a generic
+"cannot open" message. Redirect stdout to save the file:
 `d2 tg.attachment 398296603 130 > photo.jpg`.
 
 ## `d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]`

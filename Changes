@@ -1505,3 +1505,18 @@ Revision history for the tg skill
         information-disclosure surface this project just spent TGT-133
         closing off elsewhere - now classified into a short, fixed
         reason instead of ever echoing the exception itself.
+
+1.06  2026-09-09
+      - cli/attachment.pl (TGT-134, self-review immediately after
+        TGT-133 shipped): d2 tg.attachment's refusal for a missing
+        stored file now names D2TG::Download::prune_vault's own
+        byte-cap eviction as the likely cause, rather than the same
+        generic "cannot open" message every other open failure got.
+        local_path (TGT-133) never expires from the database, but the
+        file it names can - an old, never-re-fetched attachment
+        eventually ages out once the vault fills past its 100MB
+        default cap. Also now rejects a recorded path that exists but
+        isn't a regular file with its own distinct message. Documented
+        explicitly in docs/commands.md and docs/POLICIES.md: fetching
+        an attachment is only reliable for one still within the
+        vault's currently-retained set, not a permanent guarantee.
