@@ -231,11 +231,14 @@ sub _send_file {
     # place, those would inject additional raw header lines into this
     # multipart request regardless of the quote/backslash escaping
     # below, since CR/LF is what actually terminates a header line
-    # here. Strip C0 control characters (0x00-0x1F) entirely first -
+    # here. Strip C0 control characters (0x00-0x1F) plus DEL (0x7F,
+    # per a Codex review's own strict quoted-string hygiene suggestion -
+    # DEL itself cannot inject a header, just extra hardening) entirely
+    # first -
     # the file is still sent correctly, just with a sanitized displayed
     # filename, rather than refusing the whole send over a cosmetic
     # detail Telegram never surfaces to the recipient anyway.
-    ( my $safe_filename = $filename ) =~ s/[\x00-\x1F]//g;
+    ( my $safe_filename = $filename ) =~ s/[\x00-\x1F\x7F]//g;
     ( my $escaped_filename = $safe_filename ) =~ s/([\\"])/\\$1/g;
 
     my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
