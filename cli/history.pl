@@ -53,8 +53,10 @@ my ( $since, $until );
 # TGT-122 (found via a scheduled hourly bug-hunt): an unrecognized flag
 # or leftover positional argument used to be silently ignored here -
 # unlike cli/send.pl's own @extra check or cli/poller.pl's unrecognized-
-# argument refusal (TGT-107) - printing "No messages found." and
-# exiting 0 as if the (mistyped) invocation had succeeded.
+# argument refusal (TGT-107) - exiting 0 as if the (mistyped)
+# invocation had succeeded (reproduced as printing "No messages
+# found." when nothing happened to match, but a query that happened
+# to match real history would have printed it instead).
 if (@ARGV) {
     print STDERR "Usage: d2 tg.history [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]\n";
     exit 2;
@@ -123,9 +125,11 @@ C<--chat_id> validation.
 
 Any other unrecognized flag or leftover positional argument also exits
 2 with a C<Usage:> message (TGT-122, found via a scheduled hourly
-bug-hunt) - previously silently ignored, printing C<No messages
-found.> and exiting 0 as if the (mistyped) invocation had succeeded,
-unlike C<cli/send.pl>'s own C<@extra> check or C<cli/poller.pl>'s
+bug-hunt) - previously silently ignored, exiting 0 as if the
+(mistyped) invocation had succeeded (reproduced as printing C<No
+messages found.> when nothing happened to match, but a query that
+happened to match real history would have printed it instead), unlike
+C<cli/send.pl>'s own C<@extra> check or C<cli/poller.pl>'s
 unrecognized-argument refusal (TGT-107).
 
 =cut

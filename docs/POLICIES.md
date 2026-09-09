@@ -1279,8 +1279,10 @@ afterward that nothing unrecognized remained in `@ARGV` - unlike
 `cli/send.pl` (checks `@extra`, refuses) or `cli/poller.pl` (refuses on
 any unrecognized flag, TGT-107). Live-reproduced before the fix: both a
 typo'd flag (`--totally-bogus-flag`) and garbage positional arguments
-printed `No messages found.` and exited 0, exactly as if a well-formed,
-correctly-scoped query had simply matched nothing - silently masking
+were silently ignored and exited 0 as if the invocation had succeeded
+- reproduced as `No messages found.` (nothing happened to match), but
+a query that happened to match real history would have printed it
+instead, unrelated to the actual bad invocation - silently masking
 operator error instead of surfacing it. Now exits 2 with a `Usage:`
 message. `--db`/`-d` is unaffected: it is consumed by
 `D2TG::Config::extract_db_flag` earlier still, before the

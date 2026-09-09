@@ -572,8 +572,10 @@ followed by the other flag) exits 2 with a clear message instead of
 silently running unscoped or matching nothing (TGT-070). Any other
 unrecognized flag or leftover positional argument also exits 2 with a
 `Usage:` message (TGT-122, found via a scheduled bug-hunt) - previously
-silently ignored, printing `No messages found.` and exiting 0 as if the
-(mistyped) invocation had succeeded.
+silently ignored, exiting 0 as if the (mistyped) invocation had
+succeeded - reproduced as `No messages found.` when nothing happened
+to match, but a query that happened to match real history would print
+it, unrelated to the actual (bad) invocation.
 
 ## Registering as a Tira monitor job
 
