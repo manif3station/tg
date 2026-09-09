@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+1.15  2026-09-09
+      - D2TG::Poller (TGT-142, live Telegram question answered by
+        Michael: "use the origin name instead of user id"): a
+        forwarded message now names its original sender alongside the
+        forwarder ("<original> (forwarded by <forwarder>)") instead of
+        just the forwarder - reads Telegram's own forward_origin field
+        (already reaching the poller untouched, simply never read
+        before). All 4 MessageOrigin types handled (user, hidden_user,
+        chat, channel); the reply-context suffix gets the same fix.
+        Codex review caught 2 real issues: a truthy check that would
+        have treated a literal "0" display name as absent (fixed to a
+        defined check), and missing sanitization coverage for a
+        hostile origin name (fixed, new tests added).
+
 1.14  2026-09-09
       - D2TG::Lock (TGT-141, external review finding live-reproduced by
         a sibling project, confirmed by Michael): the orphaned-poller

@@ -54,6 +54,19 @@ sub run_once {
         my $chat_id = $message->{chat}{id};
         my $sender  = _display_name( $chat_id, $message->{from}{username} );
 
+        # TGT-142 (live Telegram question, msg #170, answered by
+        # Michael msg #173: "use the origin name instead of user id"):
+        # when B forwards A's message, $message->{from} names B (the
+        # forwarder), never A (the original author). Telegram's Bot
+        # API's forward_origin field, already reaching this untouched
+        # (D2TG::Telegram::get_updates strips nothing), names A when
+        # present - not an unavoidable platform limitation, just a
+        # previously-unread field.
+        my $origin_name = _forward_origin_name( $message->{forward_origin} );
+        if ( defined $origin_name ) {
+            $sender = _sanitize_for_stdout($origin_name) . " (forwarded by $sender)";
+        }
+
         my $ts = _timestamp_prefix($message);
 
         if ( $store && !$store->is_allowed( $chat_id, $bot_token ) ) {
@@ -242,7 +255,16 @@ sub _reply_context_suffix {
     my $original = $message->{reply_to_message};
     return '' unless $original;
 
-    my $original_sender    = _display_name( $chat_id, $original->{from}{username} );
+    my $original_sender = _display_name( $chat_id, $original->{from}{username} );
+
+    # TGT-142: the replied-to message can itself be a forward - same
+    # gap, same fix, so a reply-context line never attributes a
+    # forwarded message to its forwarder either.
+    my $origin_name = _forward_origin_name( $original->{forward_origin} );
+    if ( defined $origin_name ) {
+        $original_sender = _sanitize_for_stdout($origin_name) . " (forwarded by $original_sender)";
+    }
+
     my $original_message_id = $original->{message_id};
     my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
 
@@ -320,6 +342,42 @@ sub _print_attachment_template {
     # agent fetches the raw bytes via this command instead.
     print "GET ATTACHMENT WITH: d2 tg.attachment $chat_id $message_id\n";
     return;
+}
+
+sub _forward_origin_name {
+    my ($origin) = @_;
+
+    return undef unless $origin;
+
+    my $type = $origin->{type} // '';
+
+    if ( $type eq 'user' ) {
+        my $u = $origin->{sender_user} // {};
+
+        # TGT-142, Michael's own instruction: use the origin's NAME,
+        # never the numeric user id - username first (matching
+        # _display_name's own convention), first_name as fallback.
+        return $u->{username} // $u->{first_name} // 'unknown';
+    }
+    elsif ( $type eq 'hidden_user' ) {
+
+        # MessageOriginHiddenUser: the original sender's privacy
+        # settings withhold their real identity from bots entirely -
+        # Telegram supplies only a display name string, no id. Print
+        # exactly what Telegram gives, never claim more certainty than
+        # the API itself has.
+        return $origin->{sender_user_name} // 'unknown (privacy-restricted)';
+    }
+    elsif ( $type eq 'chat' ) {
+        my $c = $origin->{sender_chat} // {};
+        return $c->{title} // $c->{username} // 'a chat';
+    }
+    elsif ( $type eq 'channel' ) {
+        my $c = $origin->{chat} // {};
+        return $c->{title} // $c->{username} // 'a channel';
+    }
+
+    return undef;
 }
 
 sub _media_kind {
@@ -491,6 +549,23 @@ a message from the L<D2TG::Config/chat_id> chat shows
 L<D2TG::Config/owner_name> (C<D2TG_OWNER>) instead of the sender's raw
 Telegram username, when that env var is set - purely a display
 preference, with no effect on access control.
+
+If the message carries Telegram's own C<forward_origin> field (TGT-142,
+a live question answered by Michael: "use the origin name instead of
+user id") - i.e. it was forwarded - the sender name additionally names
+the I<original> author via a private C<_forward_origin_name> helper,
+not just the immediate forwarder C<_display_name> already resolves:
+C<"E<lt>original nameE<gt> (forwarded by E<lt>forwarderE<gt>)">.
+C<MessageOriginUser> resolves to the original sender's username (their
+first name as a fallback, never their bare numeric id); C<MessageOriginHiddenUser>
+prints exactly the name string Telegram itself supplies (its own privacy
+model withholds anything more from a bot - never claimed more certain
+than that); C<MessageOriginChat>/C<MessageOriginChannel> name the
+originating chat/channel rather than a person. An ordinary,
+non-forwarded message is completely unaffected. The same handling
+applies to L</_reply_context_suffix>'s own C<$original_sender> - a reply
+to a forwarded message names its original author too, not just its
+forwarder.
 
 C<transcribe_voice>, if given, is called as
 C<< $transcribe_voice->($telegram, $file_id) >> for a voice message and

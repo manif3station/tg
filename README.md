@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.14).** The orphaned-poller warning
+**Status: early implementation (v1.15).** A forwarded message now names
+its original sender alongside the forwarder (TGT-142, answering a live
+question from Michael) - reads Telegram's own `forward_origin` field,
+already reaching the poller untouched but never read before, covering
+all 4 origin types (a real user, a privacy-restricted user, a chat, or
+a channel). The orphaned-poller warning
 now cross-checks a flagged process's own bot token before sounding
 urgent (TGT-141, an external review finding live-reproduced by a
 sibling project) - a same-token match still gets the urgent framing, a
