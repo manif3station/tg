@@ -16,21 +16,27 @@ use D2TG::Reply;
 # no outbound-media primitive at all until this command. Thin CLI
 # wrapper around D2TG::Telegram::send_photo/send_document.
 
-my $db_alias;
 my $bot_token;
 my $caption;
 my $reply_to_message_id;
 
+# TGT-124 (found via a scheduled improvement-hunt): --db/-d is
+# extracted first, scanning the ENTIRE argument list (matching every
+# other cli/*.pl script's own use of extract_db_flag) - unlike the
+# --bot/--caption/--reply-to-message-id loop below, which is only ever
+# recognized before the two positional arguments (chat_id, file_path),
+# --db/-d must not have that same position restriction, since a caller
+# reasonably expects flag order to be interchangeable.
+my ( $db_alias, @after_db );
+eval { ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_db;
+
 while (@ARGV) {
-    if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
-        shift @ARGV;
-        $db_alias = eval { D2TG::Config::shift_flag_value( \@ARGV, '--db/-d' ) };
-        if ($@) {
-            print STDERR $@;
-            exit 1;
-        }
-    }
-    elsif ( $ARGV[0] eq '--bot' ) {
+    if ( $ARGV[0] eq '--bot' ) {
         if ( @ARGV >= 2 ) {
             ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag(@ARGV);
         }

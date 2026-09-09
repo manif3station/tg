@@ -32,20 +32,13 @@ use D2TG::Lock;
 # STALE.
 use constant STALE_THRESHOLD_SECONDS => 1200;
 
-my $db_alias;
-while (@ARGV) {
-    if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
-        shift @ARGV;
-        $db_alias = eval { D2TG::Config::shift_flag_value( \@ARGV, '--db/-d' ) };
-        if ($@) {
-            print STDERR $@;
-            exit 1;
-        }
-    }
-    else {
-        last;
-    }
+my ( $db_alias, @rest );
+eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
 }
+@ARGV = @rest;
 
 if (@ARGV) {
     print STDERR "Usage: d2 tg.status [--db <alias> | -d <alias>]\n";
