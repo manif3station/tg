@@ -1467,3 +1467,20 @@ Revision history for the tg skill
         process running even though a timeout-triggered kill already
         reached it. kill_current now signals the whole process group
         plus the direct pid, matching _run's own pattern exactly.
+
+1.04  2026-09-09
+      - Never expose a downloaded attachment's real local filesystem
+        path anywhere agent-facing (TGT-133, live request via
+        Telegram): D2TG::Poller's NEW TG MEDIA line used to print the
+        real path directly, and D2TG::Store persisted that same path
+        into the message summary text shown verbatim by
+        d2 tg.history/d2 tg.unread. Matches this project's own Tira
+        board convention (tira.attachment.get writes raw content to
+        stdout, never a path). New d2 tg.attachment <chat_id>
+        <message_id> command writes a stored attachment's raw bytes to
+        stdout; the poller now prints "GET ATTACHMENT WITH: d2
+        tg.attachment <chat_id> <message_id>" instead of a path, one
+        instruction per attachment. D2TG::Store gained a separate
+        local_path column (never surfaced by any display path) and a
+        narrow get_attachment_path accessor; D2TG::Download's retry
+        path was updated to match the same convention.

@@ -27,7 +27,7 @@ sub capture_std {
         [
             {
                 update_id => 300,
-                message   => { chat => { id => 999 }, from => { username => 'ada' }, document => { file_id => 'doc1' } },
+                message   => { message_id => 100, chat => { id => 999 }, from => { username => 'ada' }, document => { file_id => 'doc1' } },
             },
         ],
     );
@@ -41,8 +41,13 @@ sub capture_std {
 
     is_deeply( \@calls, ['doc1'], 'download_media was called with the document file_id' );
     like( $out, qr/999/,          'stdout names the chat id' );
-    like( $out, qr{/tmp/doc1\.bin}, 'stdout carries the downloaded local path' );
+    unlike( $out, qr{/tmp/doc1\.bin}, 'stdout never carries the real downloaded local path (TGT-133)' );
+    like( $out, qr{GET ATTACHMENT WITH: d2 tg\.attachment 999 100}, 'stdout instead advises the attachment-fetch command (TGT-133)' );
     is( $err, '', 'nothing is printed to stderr on success' );
+
+    my $stored = $store->get_message( 999, 100 );
+    unlike( $stored->{summary}, qr{/tmp}, 'the stored summary never carries the real local path either (TGT-133)' );
+    is( $store->get_attachment_path( 999, 100 ), '/tmp/doc1.bin', 'the real local path is retrievable only via get_attachment_path' );
 }
 
 {

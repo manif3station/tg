@@ -253,7 +253,8 @@ is( scalar @{ $store->failed_downloads }, 1, 'removing an already-removed id is 
     my $restored = $store->get_message( 999, 55 );
     ok( $restored, 'the message is restored into D2TG::Store history on a successful retry' );
     is( $restored->{sender}, 'ada', 'restored message carries the original sender' );
-    like( $restored->{summary}, qr/^document \Q$local_path\E \(my receipt\)$/, 'restored message summary matches the original success-path shape' );
+    is( $restored->{summary}, 'document (my receipt)', 'restored message summary matches the original success-path shape, never carrying the real local path (TGT-133)' );
+    is( $store->get_attachment_path( 999, 55 ), $local_path, 'the real local path is retrievable only via get_attachment_path' );
 }
 
 {

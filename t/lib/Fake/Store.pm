@@ -24,14 +24,25 @@ sub add_pending {
 }
 
 sub record_message {
-    my ( $self, $chat_id, $message_id, $sender, $summary ) = @_;
-    $self->{messages}{$chat_id}{$message_id} = { sender => $sender, summary => $summary };
+    my ( $self, $chat_id, $message_id, $sender, $summary, %args ) = @_;
+    my $existing = $self->{messages}{$chat_id}{$message_id};
+    $self->{messages}{$chat_id}{$message_id} = {
+        sender     => $sender,
+        summary    => $summary,
+        local_path => $args{local_path} // ( $existing ? $existing->{local_path} : undef ),
+    };
     return;
 }
 
 sub get_message {
     my ( $self, $chat_id, $message_id ) = @_;
     return $self->{messages}{$chat_id}{$message_id};
+}
+
+sub get_attachment_path {
+    my ( $self, $chat_id, $message_id ) = @_;
+    my $row = $self->{messages}{$chat_id}{$message_id};
+    return $row ? $row->{local_path} : undef;
 }
 
 sub record_failed_download {

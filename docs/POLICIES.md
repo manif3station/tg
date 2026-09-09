@@ -1376,3 +1376,36 @@ operator error instead of surfacing it. Now exits 2 with a `Usage:`
 message. `--db`/`-d` is unaffected: it is consumed by
 `D2TG::Config::extract_db_flag` earlier still, before the
 `--since`/`--until` loop (and this new check) ever run.
+
+## A downloaded attachment's real filesystem path is never exposed (TGT-133)
+
+Live request via Telegram: the watching agent should never see, or need
+to know, where a downloaded attachment actually lives on disk - it
+should be told a command to run that hands back the file's own bytes,
+the same way this project's own Tira board already works
+(`tira.attachment.get --sha SHA --extension EXT` writes raw content to
+stdout; nobody reading its output ever sees or needs the real path).
+
+Before this fix, `D2TG::Poller::run_once`'s `NEW TG MEDIA` line printed
+the real local path directly, and `D2TG::Store::record_message`
+persisted that same path into the message's stored summary - so it
+resurfaced verbatim through `d2 tg.history`/`d2 tg.unread` too, not just
+the live poller stream. Both leak points are closed the same way: a new
+`local_path` column on `D2TG::Store`'s `messages` table holds the real
+path, reachable only through the narrow `get_attachment_path` accessor
+- `summary` (what every display path actually prints) never contains it.
+`D2TG::Poller` and `D2TG::Download::retry_failed_download` both now call
+`record_message` with `local_path` passed as a separate argument, never
+folded into the summary text they build.
+
+The new `d2 tg.attachment <chat_id> <message_id>` command is the only
+way to actually retrieve the bytes - it looks up `get_attachment_path`
+and writes the file's raw content to stdout, printing no path itself
+either (a lookup failure or unreadable file refuses with a message
+naming the chat/message id, never the path it tried and failed to open).
+Every `NEW TG MEDIA` announcement for a downloaded photo/document is
+immediately followed by a `GET ATTACHMENT WITH: d2 tg.attachment
+<chat_id> <message_id>` line naming that exact command - since Telegram
+delivers one attachment per message, a poll cycle reporting several
+media messages produces one such instruction per message, never a
+combined or ambiguous one.

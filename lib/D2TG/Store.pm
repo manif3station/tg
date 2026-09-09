@@ -78,6 +78,17 @@ sub _ensure_schema {
     }
     die $@ if $@ && $@ !~ /duplicate column name/;
 
+    # TGT-133: the real on-disk path of a downloaded attachment lives
+    # only here, never in `summary` (which is what cli/history.pl and
+    # cli/unread.pl print verbatim) - kept separate so the path can
+    # never leak through display output, only through
+    # get_attachment_path's own deliberate, narrow accessor.
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN local_path TEXT') };
+    }
+    die $@ if $@ && $@ !~ /duplicate column name/;
+
     # TGT-104: a failed inbound photo/document download used to be
     # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
     # to retry it later. This table persists what's needed to retry
@@ -316,12 +327,12 @@ sub pending_chat_ids {
 }
 
 sub record_message {
-    my ( $self, $chat_id, $message_id, $sender, $summary ) = @_;
+    my ( $self, $chat_id, $message_id, $sender, $summary, %args ) = @_;
 
     $self->{dbh}->do(
-        'INSERT INTO messages (chat_id, message_id, sender, summary) VALUES (?, ?, ?, ?)
-         ON CONFLICT(chat_id, message_id) DO UPDATE SET sender = excluded.sender, summary = excluded.summary',
-        undef, $chat_id, $message_id, $sender, $summary,
+        'INSERT INTO messages (chat_id, message_id, sender, summary, local_path) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(chat_id, message_id) DO UPDATE SET sender = excluded.sender, summary = excluded.summary, local_path = COALESCE(excluded.local_path, messages.local_path)',
+        undef, $chat_id, $message_id, $sender, $summary, $args{local_path},
     );
 
     return;
@@ -336,6 +347,17 @@ sub get_message {
     );
 
     return $row;
+}
+
+sub get_attachment_path {
+    my ( $self, $chat_id, $message_id ) = @_;
+
+    my $row = $self->{dbh}->selectrow_hashref(
+        'SELECT local_path FROM messages WHERE chat_id = ? AND message_id = ?',
+        undef, $chat_id, $message_id,
+    );
+
+    return $row ? $row->{local_path} : undef;
 }
 
 sub mark_read {
@@ -676,19 +698,37 @@ Persists C<$offset>, overwriting any previously saved value for that
 C<$bot_key> (see C<get_offset> above; omitting it is unchanged from
 before TGT-049).
 
-=head2 record_message($chat_id, $message_id, $sender, $summary)
+=head2 record_message($chat_id, $message_id, $sender, $summary, local_path => $optional_path)
 
 Records a short summary of a processed message (TGT-038) against its own
 C<chat_id>+C<message_id> - the message's own text for a text message, its
-transcript for voice, or C<"<kind> <local_path>"> for an already-
-downloaded photo/document. Idempotent: recording the same C<chat_id>+
-C<message_id> again overwrites the previous C<sender>/C<summary>.
+transcript for voice, or C<"<kind>"> (optionally C<"- caption: ...">) for
+an already-downloaded photo/document. C<summary> must never itself
+contain a real local filesystem path (TGT-133) - C<local_path> is stored
+in a separate column instead, reachable only via L</get_attachment_path>,
+so nothing that displays C<summary> (this module's own callers,
+C<cli/history.pl>, C<cli/unread.pl>) can ever leak it. Idempotent:
+recording the same C<chat_id>+C<message_id> again overwrites the
+previous C<sender>/C<summary>; omitting C<local_path> on a re-record
+preserves whichever one (if any) was already stored, rather than wiping
+it - only an explicitly-given C<local_path> ever replaces the existing
+one.
 
 =head2 get_message($chat_id, $message_id)
 
 Returns C<{ sender => ..., summary => ... }> for a previously recorded
 message, or C<undef> if nothing was ever recorded for that
-C<chat_id>+C<message_id>.
+C<chat_id>+C<message_id>. Deliberately never includes C<local_path> -
+see L</get_attachment_path>.
+
+=head2 get_attachment_path($chat_id, $message_id)
+
+TGT-133: the only accessor that ever returns a downloaded attachment's
+real local filesystem path - C<undef> if nothing was ever recorded, or
+if it was recorded without one (a text/voice message, or a photo/
+document recorded before this feature existed). Backs
+C<cli/attachment.pl> exclusively; no other code path in this skill
+should call it.
 
 =head2 mark_read($chat_id, $message_id)
 

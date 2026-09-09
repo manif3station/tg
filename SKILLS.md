@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v1.03).** This file is a procedure to
+**Status: early implementation (v1.04).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -190,9 +190,11 @@ names what to do and exactly what confirms it worked.
 6. **Optional: exercise voice and media.** Ask the user to send a voice
    note and a photo. Expect `NEW TG VOICE [...]: <transcript> (msg
    #<message_id>)` (needs local `whisper`, step 2.5) and `NEW TG MEDIA
-   [...]: photo <local_path> (msg #<message_id>)` respectively, each
-   followed by its own `REPLY WITH` line (with `--reply-to-message-id`
-   filled in).
+   [...]: photo (msg #<message_id>)` respectively, each followed by its
+   own `GET ATTACHMENT WITH: d2 tg.attachment <chat_id> <message_id>`
+   line (TGT-133, run that to fetch the photo's actual bytes - the real
+   local path is never printed) and its own `REPLY WITH` line (with
+   `--reply-to-message-id` filled in).
 7. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-5 have
    both been confirmed by the user. **Onboarding is successful once
    this whole loop - real message in, real reply out, user confirms
@@ -256,15 +258,15 @@ resilient to an install renaming its own entrypoint file mid-run
 captured at launch.
 
 Every `cli/*` entrypoint file carries a `.pl` extension internally
-(`cli/approve.pl`, `cli/help.pl`, `cli/history.pl`, `cli/poller.pl`,
-`cli/reply.pl`, `cli/retry-download.pl`, `cli/send.pl`, `cli/status.pl`,
-`cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
+(`cli/approve.pl`, `cli/attachment.pl`, `cli/help.pl`, `cli/history.pl`,
+`cli/poller.pl`, `cli/reply.pl`, `cli/retry-download.pl`, `cli/send.pl`,
+`cli/status.pl`, `cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
 `cli/whoami.pl` - TGT-093; TGT-123 kept this list current after 5 later
-entrypoints were added, and TGT-130 added the one that had shipped in
-between and been missed; a new regression test,
-`t/98-skills-md-cli-list-current.t`, now checks this list against the
-real `cli/*.pl` file list so a future drift fails the suite instead of
-silently accumulating a third time).
+entrypoints were added, TGT-130 added the one that had shipped in
+between and been missed, and TGT-133 added `attachment.pl`;
+`t/98-skills-md-cli-list-current.t` checks this list against the real
+`cli/*.pl` file list so a future drift fails the suite instead of
+silently accumulating again).
 This is purely a source-tree
 naming convention and does not change how you run the skill: `d2
 tg.<command>` (e.g. `d2 tg.poller`) dispatches exactly as documented

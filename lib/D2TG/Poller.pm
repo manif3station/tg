@@ -124,9 +124,10 @@ sub run_once {
 
                 if ($ok) {
                     my $local_path = $result_or_error;
-                    print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind $local_path$caption_note$msg_note$reply_ctx\n";
+                    print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
+                    _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
-                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind $local_path$caption_note" )
+                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path )
                       if $store && defined $message_id;
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
@@ -274,6 +275,19 @@ sub _print_reply_template {
       : '';
     my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
     print qq{REPLY WITH: d2 tg.reply $chat_id "..."$bot_flag$reply_flag\n};
+    return;
+}
+
+sub _print_attachment_template {
+    my ( $chat_id, $message_id ) = @_;
+
+    # TGT-133: never print the real local filesystem path here (or
+    # persist it into D2TG::Store's own summary text, which
+    # cli/history.pl/cli/unread.pl display verbatim) - the same
+    # never-expose-the-real-path convention this project's own Tira
+    # board already follows for tira.attachment.get. The watching
+    # agent fetches the raw bytes via this command instead.
+    print "GET ATTACHMENT WITH: d2 tg.attachment $chat_id $message_id\n";
     return;
 }
 
@@ -457,11 +471,16 @@ wrapping L<D2TG::Download>). For a photo, C<$file_id> is taken from the
 I<last> entry of Telegram's C<photo> array (Telegram lists C<PhotoSize>
 entries smallest-first, so the last is the largest); for a document, it
 is C<< $message->{document}{file_id} >> directly. Success prints
-C<NEW TG MEDIA [chat_id] sender: <type> <local_path>> to STDOUT; failure
+C<NEW TG MEDIA [chat_id] sender: <type>> to STDOUT followed by a
+C<GET ATTACHMENT WITH: d2 tg.attachment <chat_id> <message_id>> line
+(TGT-133, via L</_print_attachment_template> - the real local path
+returned by C<download_media> is never printed anywhere, only passed to
+C<$store-E<gt>record_message>'s own C<local_path> argument); failure
 prints C<MEDIA DOWNLOAD ERROR [chat_id] sender: <message>> to STDERR and
 the loop continues, matching C<transcribe_voice>'s non-fatal handling.
 Without C<download_media>, photo/document messages fall back to the
-plain C<NEW TG MEDIA> line.
+plain C<NEW TG MEDIA> line (no attachment to fetch, so no
+C<GET ATTACHMENT WITH> line either).
 
 A C<download_media> failure, when C<$store> is given, is also queued via
 L<D2TG::Store/record_failed_download> (TGT-104, user-supplied

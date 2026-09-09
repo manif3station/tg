@@ -114,8 +114,11 @@ sub retry_failed_download {
     # message history the way a first-time success already gets via
     # D2TG::Poller's own record_message call - restore it the same way.
     if ( defined $row->{media_kind} ) {
-        my $summary = "$row->{media_kind} $local_path" . ( $row->{caption_note} // '' );
-        $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary );
+        # TGT-133: the summary text (shown verbatim by cli/history.pl and
+        # cli/unread.pl) must never contain the real local path - only
+        # local_path (a separate, narrow-accessor-only column) does.
+        my $summary = "$row->{media_kind}" . ( $row->{caption_note} // '' );
+        $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path );
     }
 
     $store->remove_failed_download( $row->{id} );
@@ -242,8 +245,10 @@ failure, mirroring L<D2TG::Poller>'s own C<_run_non_fatal> return shape.
 
 On success, restores the message into C<$store>'s own history via
 C<record_message> when C<$row> carries a C<media_kind> (the same
-summary shape a first-time download success already builds), then
-removes the row via C<remove_failed_download> - in that order, so a
+summary shape a first-time download success already builds - never the
+real C<$local_path>, passed instead as C<record_message>'s own
+C<local_path> argument, TGT-133), then removes the row via
+C<remove_failed_download> - in that order, so a
 crash between the two would at worst leave a harmless, already-restored
 row still in the queue rather than a message nowhere at all. On failure,
 the row is left untouched - never removed - so the caller (typically

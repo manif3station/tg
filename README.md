@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.03).** `D2TG::Transcribe::kill_current`
+**Status: early implementation (v1.04).** A downloaded attachment's real
+local filesystem path is never exposed anywhere agent-facing any more
+(TGT-133, live Telegram request) - matching this project's own Tira
+board convention (`tira.attachment.get` writes raw content to stdout,
+never a path). New `d2 tg.attachment <chat_id> <message_id>` command
+writes a stored attachment's raw bytes to stdout (reads the whole file into memory first, then prints it once - fine at Telegram's own 20MB getFile cap, not true chunked streaming); the poller and
+`d2 tg.history`/`d2 tg.unread` now advise that command instead of ever
+printing the real path, one instruction per attachment.
+`D2TG::Transcribe::kill_current`
 now signals the whole process group, not just the direct pid (TGT-131,
 found via an ad-hoc bug-hunt) - a clean poller shutdown mid-
 transcription now reaches any child the whisper process itself spawned,
