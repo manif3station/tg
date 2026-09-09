@@ -219,9 +219,10 @@ sub _send_file {
     # path - a literal double-quote in its basename would otherwise
     # prematurely close that attribute, corrupting the header line
     # (Telegram then sees a malformed multipart request). Escape
-    # backslashes first, then quotes, matching RFC 2388/6266's own
-    # quoted-string escaping convention (backslash-escape both
-    # characters). send_voice's own equivalent filename (below, a
+    # backslashes first, then quotes, matching the standard MIME
+    # quoted-string escaping convention (RFC 7578, the current
+    # multipart/form-data spec - backslash-escape both characters).
+    # send_voice's own equivalent filename (below, a
     # separate code path) is deliberately not touched here - it always
     # comes from D2TG::TTS::synthesize's own File::Temp-generated name,
     # never user-controlled, so it's out of this ticket's scope.
@@ -414,8 +415,8 @@ class of hand-built-multipart injection risk L</send_voice>'s own
 C<reply_to_message_id> validation above already guards against for a
 different field. C0 control characters and DEL (C<0x00>-C<0x1F>,
 C<0x7F>) are stripped first, then backslashes and quotes are escaped
-(C<\\> and C<\">, matching RFC 2388/6266's own quoted-string
-convention) - the file still uploads correctly either way, only the
+(C<\\> and C<\">, matching the standard MIME quoted-string escaping
+convention, RFC 7578) - the file still uploads correctly either way, only the
 displayed filename is sanitized. C<send_voice>'s own equivalent
 filename (always a C<D2TG::TTS::synthesize>-generated C<File::Temp>
 name, never user-controlled) is deliberately not touched by this fix.

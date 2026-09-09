@@ -1376,7 +1376,8 @@ Revision history for the tg skill
         previously prematurely closed the quoted attribute, corrupting
         the header and producing a malformed multipart request sent to
         Telegram's Bot API. Backslashes are escaped first, then quotes,
-        matching RFC 2388/6266's own quoted-string convention.
+        matching the standard MIME quoted-string escaping convention
+        (RFC 7578, the current multipart/form-data spec).
       - A Codex review found the quote/backslash escaping alone was
         insufficient: a filename can legally contain a literal CR/LF on
         Unix, which would inject an additional raw header line into the
