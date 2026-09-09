@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v0.87).** New `d2 tg.whoami` (TGT-115,
+**Status: early implementation (v0.88).** `d2 tg.poller` now opens its
+`STDOUT`/`STDERR` with an explicit UTF-8 encoding layer (TGT-117, a
+live-experienced incident: a real inbound Cantonese voice-note
+transcript triggered a repeated "Wide character in print" warning) -
+never a functional failure (the message still printed and was still
+processed correctly), just log noise on every non-Latin-1 message,
+eliminated now for every print/warn path in the poller. New `d2 tg.whoami` (TGT-115,
 user-supplied feature-gap analysis) reports which token/chat/storage a
 given shell's env vars actually resolve to - the masked token, the
 configured chat_id, and the resolved storage/attachments location - no

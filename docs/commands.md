@@ -15,6 +15,15 @@ credentials, only two static files that ship with the skill.
 
 ## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...] [--help]`
 
+Before anything else runs, `STDOUT`/`STDERR` are opened with an explicit
+`:encoding(UTF-8)` layer (TGT-117, a live-experienced incident: a real
+inbound Cantonese voice-note transcript triggered a repeated "Wide
+character in print" warning at `D2TG::Poller.pm` line 83). Never fatal -
+the message was still processed and delivered correctly either way -
+but this eliminates the noise for every non-Latin-1 message going
+forward, on both streams (so `--help`'s own usage text, and every
+`POLL ERROR`/`MEDIA DOWNLOAD ERROR` line on stderr, are also covered).
+
 `--help`/`-h` (TGT-107, a live-experienced incident) prints a short
 usage summary and exits 0 - checked before anything else, including
 before `--db`/`-d` is parsed. Any OTHER unrecognized argument refuses

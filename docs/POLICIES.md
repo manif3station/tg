@@ -1216,3 +1216,21 @@ operational information this command adds beyond that precedent, not
 something already exposed elsewhere - a second Codex review pass caught
 that an earlier draft overstated this as "no more exposure overall,"
 which only actually holds for the token/chat_id half of the output.
+
+## Poller stdout/stderr always carry an explicit UTF-8 layer (TGT-117)
+
+Live-experienced incident: a real inbound Cantonese voice-note
+transcript triggered a repeated `Wide character in print at
+.../D2TG/Poller.pm line 83` warning - `D2TG::Poller` prints message
+text to whatever filehandle is currently selected as `STDOUT` without
+opening it with a UTF-8 layer itself; that's this project's own
+entrypoint's job, not the library's. Never fatal (the message was still
+processed and delivered correctly regardless), just noise on every
+non-Latin-1 message, and noise that could mask a genuinely new warning
+of the same shape later. `cli/poller.pl` now opens both `STDOUT` and
+`STDERR` with `:encoding(UTF-8)` before anything else runs, so every
+print/warn path - including `--help`'s own usage text and the
+`POLL ERROR`/`MEDIA DOWNLOAD ERROR` lines already documented above - is
+covered. This is scoped to `cli/poller.pl`'s own output streams only;
+it does not change the unrelated UTF-8 *decode* fix `D2TG::Reply` already
+has for outbound reply text (TGT-073, documented above).

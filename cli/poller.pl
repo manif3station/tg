@@ -313,6 +313,17 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
 =head1 DESCRIPTION
 
+Before anything else runs, C<STDOUT> and C<STDERR> are opened with an
+explicit C<:encoding(UTF-8)> layer (TGT-117, a live-experienced
+incident: a real inbound Cantonese voice-note transcript triggered a
+repeated "Wide character in print" warning, since L<D2TG::Poller>
+prints message text to whichever filehandle is currently selected
+without opening either stream with a UTF-8 layer itself - that is this
+entrypoint's job, not the library's). The warning was never fatal (the
+message was still processed and delivered correctly either way), just
+noisy on every non-Latin-1 message; this eliminates it for every
+print/warn path below, including C<--help>'s own usage text.
+
 C<--help>/C<-h> (TGT-107, a live-experienced incident) prints a short
 usage summary and exits 0 immediately - checked before anything else,
 including before C<--db>/C<-d> is even parsed, so C<--help> never

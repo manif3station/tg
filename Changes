@@ -1235,3 +1235,22 @@ Revision history for the tg skill
         stdout before) plus a `--db`/`-d` wiring test. `chat_id` and
         the resolved paths are printed unmasked, deliberately, matching
         `cli/poller.pl`'s own existing startup-line precedent.
+
+0.88  2026-09-09
+      - cli/poller.pl (TGT-117, live-experienced incident): STDOUT and
+        STDERR are now opened with an explicit ':encoding(UTF-8)' layer
+        before anything else runs, fixing a repeated "Wide character in
+        print" warning triggered by a real inbound Cantonese voice-note
+        transcript. Never a functional failure - the message was still
+        processed and delivered correctly either way - just log noise on
+        every non-Latin-1 message, now eliminated for every print/warn
+        path in the poller (including --help's own usage text and the
+        POLL ERROR/MEDIA DOWNLOAD ERROR lines).
+      - A Codex review of the first test draft found it never actually
+        executed cli/poller.pl's own fix (it only demonstrated PerlIO
+        behavior on a manually-selected scalar filehandle and
+        regex-checked the source text), and never verified the STDERR
+        layer or that the Cantonese payload survives as correct UTF-8
+        bytes rather than mojibake. The test now extracts the exact
+        binmode lines from cli/poller.pl and runs them, verbatim, in a
+        real subprocess.
