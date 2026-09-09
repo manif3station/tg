@@ -20,6 +20,16 @@ sub new {
         { RaiseError => 1, AutoCommit => 1, sqlite_use_immediate_transaction => 1 }
     );
 
+    # TGT-129: without these, DBD::SQLite's default busy timeout is 0 -
+    # a concurrent writer (the long-running poller vs. an independently
+    # invoked d2 tg.reply/approve/retry-download etc. against the same
+    # db_path) gets an immediate "database is locked" error instead of
+    # a brief, usually-successful wait. WAL also lets readers and a
+    # writer proceed without blocking each other at all in the common
+    # case; busy_timeout covers the remaining writer-vs-writer window.
+    $dbh->do('PRAGMA busy_timeout = 5000');
+    $dbh->do('PRAGMA journal_mode = WAL');
+
     my $self = bless { dbh => $dbh }, $class;
     $self->_ensure_schema;
 
@@ -570,6 +580,26 @@ schema exists, and seeds C<admin_chat_id> into the allow-list if given.
 C<admin_chat_id> may be a single scalar (unchanged from before) or an
 arrayref of chat ids (TGT-049, for multi-group polling) - every id in
 the arrayref is seeded allowed.
+
+Every connection sets C<PRAGMA busy_timeout = 5000> and
+C<PRAGMA journal_mode = WAL> immediately after connecting (TGT-129,
+found via an ad-hoc bug-hunt): C<DBD::SQLite>'s default busy timeout is
+C<0>, so a concurrent writer - the long-running poller writes on every
+inbound message while other independently-invoked C<d2 tg.*> commands
+(C<reply>, C<approve>, C<retry-download>) also write against the same
+C<db_path> - previously got an immediate "database is locked" error
+instead of a brief, usually-successful wait. WAL lets readers and a
+writer proceed without blocking each other at all in the common case;
+C<busy_timeout> bounds the remaining writer-vs-writer contention window
+to a wait rather than an instant failure.
+
+WAL mode creates C<db_path-wal>/C<db_path-shm> sidecar files alongside
+C<db_path> while connections are active - any manual backup or copy of
+the database file must include these too (a copy of C<db_path> alone can
+miss recently-committed data still sitting in the WAL file, not yet
+checkpointed back into the main file). WAL is appropriate for this
+skill's single-host, local-filesystem usage; it is not suitable for a
+database file shared over a network filesystem between hosts.
 
 Ensuring the schema re-runs the C<messages> table's C<read_at> column
 migration (TGT-046) on every call, which is expected to fail with

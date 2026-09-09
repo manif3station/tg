@@ -691,6 +691,33 @@ called by both the child and the parent immediately after `fork`
 `TERM` and `KILL` timeout steps now signal the whole process group
 (`-$pid`) plus the direct pid as a fallback.
 
+A related but distinct gap (TGT-129, found via a further ad-hoc
+bug-hunt) targeted database concurrency rather than process hangs:
+`D2TG::Store::new` connected to SQLite with no `PRAGMA busy_timeout` and
+no WAL journal mode set. `DBD::SQLite`'s default busy timeout is 0, so
+a concurrent writer - the long-running `d2 tg.poller` process writes to
+the same database on every inbound message, while other independently-
+invoked `d2 tg.*` commands (`reply`, `approve`, `retry-download`) also
+write against the same `db_path` - got an immediate "database is
+locked" error instead of a brief, usually-successful wait. This is
+exactly the concurrency robustness pattern this project's own research
+notes on the original Python blueprint flagged as worth keeping ("SQLite
+WAL + `busy_timeout=5000`... poller + `reply.py` write concurrently")
+but which had been dropped when this project was ported to Perl.
+`D2TG::Store::new` now sets both PRAGMAs immediately after connecting:
+WAL lets readers and a writer proceed without blocking each other at
+all in the common case, and `busy_timeout` bounds the remaining
+writer-vs-writer contention window to a wait instead of an instant
+failure.
+
+A Codex doc-stage review flagged one thing worth calling out explicitly:
+WAL mode creates `db_path-wal`/`db_path-shm` sidecar files alongside the
+main database file while connections are active - a manual backup or
+copy that only takes `db_path` itself can miss recently-committed data
+still sitting in the WAL file. WAL is appropriate for this skill's
+single-host, local-filesystem usage; it would not be appropriate for a
+database file shared over a network filesystem between hosts.
+
 ## The startup line confirms which credentials actually loaded, without exposing them
 
 Live request (TGT-045, raised while diagnosing TGT-044's incident): the

@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.00).** `D2TG::Transcribe::_run`'s
+**Status: early implementation (v1.01).** `D2TG::Store` now sets SQLite's
+`PRAGMA busy_timeout`/`journal_mode = WAL` on every connection (TGT-129,
+found via an ad-hoc bug-hunt) - previously a concurrent writer (the
+poller vs. an independently-invoked `d2 tg.*` command against the same
+database) could fail immediately with a locked-database error instead
+of briefly waiting, the concurrency robustness this project's own
+research notes on the original Python blueprint had flagged as worth
+keeping. `D2TG::Transcribe::_run`'s
 whisper subprocess now has the same process-group protection (TGT-128,
 found via an ad-hoc bug-hunt immediately after TGT-127) - a timeout
 signals the whole process group, not just the immediate whisper

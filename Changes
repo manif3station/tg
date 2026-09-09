@@ -1432,3 +1432,17 @@ Revision history for the tg skill
         fork, closing a race the sibling D2TG::TTS fix's own review
         caught) and signals the whole process group - plus the direct
         pid as a fallback - on both the TERM and KILL timeout steps.
+
+1.01  2026-09-09
+      - D2TG::Store::new (TGT-129, found via an ad-hoc bug-hunt): sets
+        PRAGMA busy_timeout = 5000 and PRAGMA journal_mode = WAL on
+        every connection. DBD::SQLite's default busy timeout is 0, so a
+        concurrent writer (the long-running d2 tg.poller process writes
+        on every inbound message while other independently-invoked d2
+        tg.* commands - reply, approve, retry-download - also write
+        against the same db_path) previously got an immediate
+        "database is locked" error instead of a brief, usually-
+        successful wait - the exact SQLite concurrency robustness
+        pattern this project's own research notes on the original
+        Python blueprint had flagged as worth keeping, but which had
+        been dropped in the Perl port.
