@@ -511,9 +511,13 @@ stderr (`TRANSCRIBE ERROR [chat_id] sender: <message>`) and continues.
 Voice transcription shells out to `whisper`, which can be slow (TGT-031,
 a real production incident: it was found genuinely blocking the whole
 poll loop, and `cli/poller.pl` was unresponsive to Ctrl+C for as long as
-it ran). `D2TG::Transcribe::_run` is bounded by `$TIMEOUT` (default
-300s) - a run that exceeds it is killed and reported as a normal
-`TRANSCRIBE ERROR`, never blocks forever. `cli/poller.pl`'s `SIGTERM`/
+it ran). `D2TG::Transcribe::_run` is bounded by a timeout - for an
+automatically-selected model, scaled by the same duration signal
+`select_model` uses (TGT-140: `duration * 8`, floored at the original
+flat 300s, capped at 3600s), and the flat 300s default for an
+explicitly-passed model - a run that exceeds its budget is killed and
+reported as a normal `TRANSCRIBE ERROR`, never blocks forever.
+`cli/poller.pl`'s `SIGTERM`/
 `SIGINT` handlers also call `D2TG::Transcribe::kill_current` so an
 in-flight transcription is killed immediately at shutdown time rather
 than waited out.
@@ -557,6 +561,36 @@ advance - the duration guess just picks a sensible starting point,
 saving a doomed first attempt on an obviously-long clip. An
 explicitly-passed `model` is never automatically retried on timeout -
 explicit still means explicit, unchanged from before this follow-up.
+
+## The transcription timeout itself scales with duration too (TGT-140)
+
+External project review, confirmed live by Michael on the Telegram
+bridge, 2026-09-09: TGT-100 (above) taught `select_model` to tier the
+whisper model by probed duration, but `$TIMEOUT` stayed a flat 300
+seconds regardless - a clip picked as `medium` (the fastest/default
+tier, `<=300s` duration) could still legitimately run past 300s
+wall-clock at real per-host throughput (the same measurement TGT-100's
+own follow-up recorded: `medium` at ~5.6x real time, a 102.48-second
+clip taking 571s). The retry-on-timeout ladder above partially
+compensated by stepping down to a faster tier after a timeout, but the
+flat ceiling still killed (and logged as a failure/retry) an entirely
+healthy, still-progressing transcription purely because of per-host
+throughput - the exact failure mode `select_model`'s own tiering was
+introduced to reduce, left half-closed.
+
+`D2TG::Transcribe::_scaled_timeout($duration)` turns the same duration
+signal `select_model` already computes into a per-attempt timeout
+budget: `duration * 8` (a safety multiplier well above the worst
+measured throughput), floored at the original flat 300s (a scaled
+budget is never worse than before this fix) and capped at 3600s (never
+unbounded). `transcribe()` `local`izes `$TIMEOUT` to this scaled value
+around each attempt, but only for an *automatically-selected* model -
+an explicitly-passed `model` keeps the original flat 300s default,
+matching the same explicit-means-explicit scope the retry-on-timeout
+fallback above already uses. The kill mechanism itself (process-group
+signal, TGT-031/128) and the retry-on-timeout trigger condition are
+both unchanged - only the budget a healthy run is given before that
+mechanism fires.
 
 ## A voice note gets an immediate "processing" notice, not silence (TGT-100)
 

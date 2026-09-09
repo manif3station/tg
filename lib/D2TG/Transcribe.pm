@@ -15,6 +15,38 @@ our $FORKER      = sub { return fork() };
 
 our @MODEL_TIERS = qw(medium small base);
 
+# TGT-140: $TIMEOUT alone stayed flat even after select_model started
+# tiering the model by duration - a clip picked as the fastest tier
+# could still legitimately run past 300s at real per-host throughput
+# (measured: medium ran at ~5.6x real time, so a 102.48s clip took
+# 571s). _scaled_timeout turns the same duration signal select_model
+# already computes into a per-attempt budget instead: proportional to
+# duration with a safety multiplier well above the worst measured
+# throughput, floored at $TIMEOUT itself (a Codex review finding: a
+# hard-coded floor would silently ignore a caller-configured $TIMEOUT,
+# so the floor is always whatever $TIMEOUT currently is, not a separate
+# constant) and capped at a sane ceiling (never unbounded).
+our $TIMEOUT_MULTIPLIER = 8;
+our $TIMEOUT_CEILING    = 3600;
+
+sub _scaled_timeout {
+    my ($duration) = @_;
+
+    # A Codex QA-stage review finding: capping at the fixed
+    # $TIMEOUT_CEILING after flooring at $TIMEOUT could undercut a
+    # caller-configured $TIMEOUT larger than the default ceiling (e.g.
+    # $TIMEOUT=7200 would still be capped down to 3600) - the whole
+    # point of flooring at $TIMEOUT is that the scaled budget is never
+    # worse than it, so the ceiling itself must never go below it
+    # either.
+    my $ceiling = $TIMEOUT_CEILING > $TIMEOUT ? $TIMEOUT_CEILING : $TIMEOUT;
+
+    my $t = ( $duration // 0 ) * $TIMEOUT_MULTIPLIER;
+    $t = $TIMEOUT  if $t < $TIMEOUT;
+    $t = $ceiling  if $t > $ceiling;
+    return $t;
+}
+
 sub select_model {
     my ($duration) = @_;
 
@@ -57,7 +89,14 @@ sub transcribe {
 
     my $duration_fn     = $args{duration_fn} || \&_probe_duration;
     my $explicit_model  = $args{model};
-    my $model           = $explicit_model || select_model( $duration_fn->($audio_path) );
+
+    # Duration is probed at most once, only for the automatic path -
+    # explicit means explicit (same scope restriction as the
+    # retry-on-timeout fallback below), and it's reused for both model
+    # selection and the scaled timeout so they stay consistent with
+    # each other across retries.
+    my $duration = $explicit_model ? undef : $duration_fn->($audio_path);
+    my $model    = $explicit_model || select_model($duration);
     die "D2TG::Transcribe::transcribe: model must not be an English-only (.en) checkpoint\n"
       if $model =~ /\.en$/;
 
@@ -67,6 +106,7 @@ sub transcribe {
         my $out_dir = tempdir( CLEANUP => 0 );
 
         my $text = eval {
+            local $TIMEOUT = _scaled_timeout($duration) if defined $duration;
             if ( $runner->( 'whisper', $audio_path, '--model', $model, '--output_format', 'txt', '--output_dir', $out_dir ) != 0 ) {
                 die "D2TG::Transcribe::transcribe: whisper failed to transcribe $audio_path\n";
             }
@@ -219,6 +259,27 @@ well inside this function's own 300-second "stays on medium" boundary) -
 see L</transcribe>'s automatic retry-on-timeout for what actually
 guarantees a long/slow clip doesn't get lost.
 
+=head2 _scaled_timeout($duration_seconds)
+
+TGT-140 (external review finding, confirmed live by Michael): C<$TIMEOUT>
+alone stayed a flat 300 seconds even after L</select_model> started tiering
+the model by duration - a clip picked as the fastest/default tier could
+still legitimately run past 300s wall-clock at real per-host throughput
+(measured: C<medium> ran at ~5.6x real time, so a 102.48-second clip took
+571s). Returns a per-attempt timeout budget scaled from the same duration
+signal L</select_model> already computes: C<$duration * $TIMEOUT_MULTIPLIER>
+(package variable, default 8 - a safety margin above the worst measured
+throughput), floored at C<$TIMEOUT> itself (whatever it is currently set
+to - never a separate hard-coded constant, so a caller-configured
+C<$TIMEOUT> is always respected as the minimum, not silently
+overridden) and capped at C<$TIMEOUT_CEILING> (default 3600, so a
+bad/huge duration probe can never produce an effectively unbounded
+wait) - the effective ceiling actually used is
+C<max($TIMEOUT_CEILING, $TIMEOUT)>, so a caller-configured C<$TIMEOUT>
+larger than the default ceiling is never undercut by the cap either (a
+Codex QA-stage review finding: flooring at C<$TIMEOUT> then capping at a
+fixed ceiling could otherwise return less than C<$TIMEOUT> itself).
+
 =head2 _next_tier($model)
 
 Returns the next entry in C<@MODEL_TIERS> (C<medium>, C<small>,
@@ -243,6 +304,15 @@ previously always the fixed C<medium>), reads back its
 C<--output_format txt> transcript, and returns the trimmed text. Dies if
 C<model> ends in C<.en>, if C<whisper> exits non-zero, or if its expected
 output file is missing.
+
+When C<model> was I<not> explicitly passed, the same probed duration used
+to pick the model also scales the hard timeout C<_run> enforces for that
+attempt (TGT-140, via L</_scaled_timeout>, C<local>ized around the runner
+call) - a clip whose own tier's real throughput legitimately takes longer
+than the old flat 300s no longer gets killed purely for that. An
+explicitly-passed C<model> keeps the flat package C<$TIMEOUT> unchanged,
+matching the same explicit-means-explicit scope the retry-on-timeout
+fallback below already uses.
 
 If C<model> was I<not> explicitly passed and the run times out
 (C<_run>'s C<"...timed out..."> die), C<transcribe> automatically

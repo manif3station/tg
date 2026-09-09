@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v1.09).** `D2TG::Config::masked_token`'s
+**Status: early implementation (v1.10).** Voice-note transcription's hard
+timeout now scales with the same duration signal that already picks the
+Whisper model (TGT-140, external review finding confirmed live by
+Michael) - previously it stayed a flat 300s constant even after
+duration-tiered model selection shipped, so a clip on its own tier's real
+throughput could still be killed purely for taking longer than 300s
+wall-clock (measured: a 102.48s clip took 571s on `medium`, already past
+the old ceiling). The scaled budget is never smaller than the flat
+default and is capped at 3600s; an explicitly-passed model keeps the
+flat default unchanged. `D2TG::Config::masked_token`'s
 short-token fallback (<8 chars) no longer returns the raw value - a
 fixed, non-revealing placeholder instead (TGT-138). docs/commands.md now has a
 worked example of the NEW TG MEDIA + GET ATTACHMENT WITH flow (TGT-136)

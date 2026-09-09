@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+1.10  2026-09-09
+      - D2TG::Transcribe (TGT-140, external review finding confirmed live
+        by Michael): the hard whisper timeout now scales with the same
+        duration signal select_model already computes, instead of staying
+        a flat 300s constant - a clip on its selected tier's own real
+        throughput (measured: medium ran at ~5.6x real time, a 102.48s
+        clip took 571s) is no longer killed purely for exceeding the old
+        flat ceiling. Floored at the original 300s (never worse than
+        before) and capped at 3600s (never unbounded). Only applies to an
+        automatically-selected model; an explicitly-passed model keeps the
+        flat timeout unchanged, matching the retry-on-timeout fallback's
+        own explicit-means-explicit scope.
+
 0.01  2026-09-07
       - Initial scaffold (TGT-001): lib/, cli/, t/, tickets/, README,
         LICENSE, .env.
