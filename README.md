@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v0.84).** A failed inbound photo/
+**Status: early implementation (v0.85).** A reply that went out
+text-only (TGT-083's own send-text-then-voice ordering means a late
+voice failure can leave one behind, always reported loudly at the time
+but easy to miss if that failure scrolled past) is now flagged for
+after-the-fact discovery too (TGT-105, user-supplied feature-gap
+analysis) - `d2 tg.text-only-replies` lists any reply still missing its
+voice half, exit 1 if anything's flagged. Scoped per configured bot the
+same way access control already is (a Codex review finding, mirroring
+TGT-098's own lesson): `d2 tg.reply --voice-only`'s recovery lookup
+can't select and clear a different bot's own flag for a chat shared
+across bots. A failed inbound photo/
 document download is now queued for retry instead of just printed and
 forgotten (TGT-104, user-supplied feature-gap analysis) - `d2
 tg.retry-download` lists it and retries by id or `--all` using the

@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.84).** This file is a procedure to
+**Status: early implementation (v0.85).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -45,7 +45,12 @@ forgotten - `d2 tg.retry-download` lists and retries it later using the
 same Telegram `file_id` to request a fresh download; a retry Telegram
 itself reports as permanently gone (not merely a transient hiccup) gets
 a distinguishable `RETRY EXPIRED` message rather than the same generic
-failure text an ordinary, still-retryable failure gets.
+failure text an ordinary, still-retryable failure gets. A reply that
+went out text-only - TGT-083's own send-text-then-voice ordering means a
+late voice failure can leave one behind, always reported loudly at the
+time but easy to miss - is now flagged for later discovery too (TGT-105)
+via `d2 tg.text-only-replies`, scoped per configured bot the same way
+access control already is.
 
 ## 2. Prep before install
 

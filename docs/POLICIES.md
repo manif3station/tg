@@ -1083,3 +1083,42 @@ NOT for "file is temporarily unavailable" (a Codex review caught an
 earlier draft treating that genuinely transient wording as permanent
 too, which would have told an operator to give up on something that
 might still work).
+
+## A reply that went out text-only is flagged after the fact
+
+User-supplied feature-gap analysis (TGT-105): TGT-083 deliberately
+reordered `D2TG::Reply::send_reply` to send text first, then
+synthesize+send voice - a synthesis or `send_voice` failure after that
+point can leave a reply text-only, always reported loudly (non-zero
+exit) at the moment it happens. If that loud failure is missed (the
+agent wasn't watching, the error scrolled past), there was previously no
+way to find out later - exactly the gap the old blueprint's own checker
+was built to close.
+
+`D2TG::Store`'s new `sent_replies` table tracks this: `record_sent_text`
+is called immediately after a text send succeeds, `record_sent_voice`
+once the matching voice send also succeeds - a row whose
+`voice_message_id` is still `NULL` IS the text-only condition, not a
+separate boolean flag that could fall out of sync. `resend_voice`
+(TGT-109's own recovery path) clears the flag the same way on a
+successful recovery. `d2 tg.text-only-replies` lists every currently
+flagged reply, exit 1 if anything is flagged.
+
+Scoped by `bot_key` the same way `allow_list`/`pending` already are
+(TGT-098's own lesson, a Codex review finding for this ticket): without
+this, one bot's `--voice-only` recovery could select and clear a
+DIFFERENT bot's still-genuinely-text-only flag for a chat_id shared by
+more than one of this skill's configured bots. `record_sent_voice` also
+warns loudly on STDERR (non-fatal) rather than silently no-op'ing when
+no matching row exists (another Codex finding) - a locked/full database,
+or a bot_key mismatch, used to hide exactly the kind of persistence gap
+this feature exists to surface.
+
+Known, accepted limitation (a Codex review finding): the text send and
+its store record are two separate, non-atomic steps against two
+separate systems - a process kill or a database error in the narrow
+window between them would leave a genuinely-sent text message invisible
+to this checker if its voice half then also fails. This mirrors `d2
+tg.retry-download`'s own accepted best-effort tradeoff for its queue
+write (TGT-104) - a substantial improvement over no record at all, not
+a guarantee.

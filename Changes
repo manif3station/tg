@@ -1158,3 +1158,37 @@ Revision history for the tg skill
         retry already calls `getFile` fresh. Docs reworded accordingly;
         no code change (the retry mechanism itself was always correct -
         it never assumed a `file_id` expiry window in the first place).
+
+0.85  2026-09-09
+      - FEATURE (TGT-105, user-supplied feature-gap analysis): a reply
+        that went out text-only (TGT-083's own send-text-then-voice
+        ordering means a late voice failure can leave one behind,
+        always reported loudly at the time but easy to miss) is now
+        flagged for after-the-fact discovery. New
+        `D2TG::Store::record_sent_text`/`record_sent_voice`/
+        `text_only_replies` back a new `sent_replies` table - a row
+        whose `voice_message_id` is still NULL IS the text-only
+        condition, no separate boolean to keep in sync.
+        `D2TG::Reply::send_reply` records the text send immediately
+        after it succeeds and the voice send once that also succeeds;
+        `resend_voice` (TGT-109's own recovery path) clears the flag on
+        a successful recovery. New `d2 tg.text-only-replies` lists any
+        still-flagged reply, exit 1 if anything's flagged.
+      - Codex review caught 2 HIGH-severity gaps before shipping: (1)
+        the audit table wasn't bot-scoped, repeating the exact TGT-098
+        cross-bot isolation gap for a Telegram group shared by more
+        than one configured bot - fixed by adding `bot_key` to the
+        table's own key and threading it through every call site
+        including `cli/reply.pl --voice-only`'s recovery lookup; (2)
+        `record_sent_voice` silently no-op'd when no matching row
+        existed - fixed to warn loudly on STDERR instead. The
+        inherent non-atomicity between a successful Telegram send and
+        its store record is documented as an accepted, known
+        limitation (mirroring TGT-104's own precedent) rather than
+        solved with a larger durable-outbox design out of proportion
+        with this ticket's scope. Also self-caught during the full
+        test-suite run (not Codex): the first draft unconditionally
+        assumed `send_message`'s return was an arrayref, breaking an
+        existing test's own differently-shaped fake telegram - fixed
+        to only attempt the extraction when a store is given, and to
+        tolerate any other return shape via `eval`.
