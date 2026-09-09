@@ -26,13 +26,14 @@ $| = 1;
 # TGT-117 (live-experienced incident): a message containing non-Latin-1
 # script (a Cantonese voice-note transcript) triggered "Wide character
 # in print at .../D2TG/Poller.pm line 83" - D2TG::Poller prints message
-# text straight to whichever filehandle is currently selected as
-# STDOUT/STDERR without opening either with a UTF-8 layer itself, since
+# text via an unqualified print (Perl's currently selected default
+# output handle, ordinarily STDOUT) and errors via warn (which always
+# targets STDERR), without opening either with a UTF-8 layer itself, since
 # that's this entrypoint's job, not the library's. Non-fatal (the
 # message still printed and was still processed correctly) but noisy,
-# and repeats for every non-ASCII message. Applied before anything else
-# runs so every print/warn path below (including --help's own usage
-# text) is covered.
+# and repeats for every non-ASCII message. Applied at startup, before
+# option handling and any poller work, so every print/warn path below
+# (including --help's own usage text) is covered.
 # TGT117-UTF8-LAYER-BEGIN (t/87 extracts and runs these exact two lines
 # in a real subprocess - keep this block to just the binmode calls)
 binmode STDOUT, ':encoding(UTF-8)';
@@ -313,16 +314,18 @@ poller - tg skill entrypoint, dispatched as C<d2 tg.poller>
 
 =head1 DESCRIPTION
 
-Before anything else runs, C<STDOUT> and C<STDERR> are opened with an
-explicit C<:encoding(UTF-8)> layer (TGT-117, a live-experienced
-incident: a real inbound Cantonese voice-note transcript triggered a
-repeated "Wide character in print" warning, since L<D2TG::Poller>
-prints message text to whichever filehandle is currently selected
-without opening either stream with a UTF-8 layer itself - that is this
-entrypoint's job, not the library's). The warning was never fatal (the
-message was still processed and delivered correctly either way), just
-noisy on every non-Latin-1 message; this eliminates it for every
-print/warn path below, including C<--help>'s own usage text.
+At startup - before option handling and any poller work, though after
+Perl compiles the C<use>d modules above - C<STDOUT> and C<STDERR> are
+opened with an explicit C<:encoding(UTF-8)> layer (TGT-117, a
+live-experienced incident: a real inbound Cantonese voice-note
+transcript triggered a repeated "Wide character in print" warning,
+since L<D2TG::Poller> prints message text via an unqualified C<print>
+and errors via C<warn>, without opening either stream with a UTF-8
+layer itself - that is this entrypoint's job, not the library's). The
+warning was never fatal (the message was still processed and delivered
+correctly either way), just noisy on every non-Latin-1 message; this
+eliminates it for every print/warn path below, including C<--help>'s
+own usage text.
 
 C<--help>/C<-h> (TGT-107, a live-experienced incident) prints a short
 usage summary and exits 0 immediately - checked before anything else,

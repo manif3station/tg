@@ -352,15 +352,16 @@ one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
 time that sender is recorded pending (not on subsequent messages from
 the same still-pending sender). Replying is separate, later work.
 
-This module prints to whichever filehandle is currently selected as
-C<STDOUT>/C<STDERR> and does nothing itself to give either an encoding
-layer (TGT-117, a live-experienced incident: an unadorned C<STDOUT>
+This module prints message content via an unqualified C<print> (Perl's
+currently selected default output handle, ordinarily C<STDOUT>) and
+reports errors via C<warn> (which always targets C<STDERR>); it does
+nothing itself to give either an encoding layer (TGT-117, a live-experienced incident: an unadorned C<STDOUT>
 warns "Wide character in print" on any non-Latin-1 message text, e.g. a
 real Cantonese voice-note transcript - never fatal, the message is still
 printed and delivered correctly, just noisy). Opening those streams with
 an explicit C<:encoding(UTF-8)> layer is the calling entrypoint's
-responsibility - see C<cli/poller.pl>, which does this before anything
-else runs.
+responsibility, not this module's - see C<cli/poller.pl>, which does
+this at startup, before option handling and any poller work.
 
 =head1 FUNCTIONS
 

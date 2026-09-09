@@ -15,7 +15,8 @@ credentials, only two static files that ship with the skill.
 
 ## `d2 tg.poller [--db <alias> | -d <alias>] [--chat_id <id> --bot <token> ...] [--help]`
 
-Before anything else runs, `STDOUT`/`STDERR` are opened with an explicit
+At startup - before option handling and any poller work, though after
+Perl compiles the modules it loads - `STDOUT`/`STDERR` are opened with an explicit
 `:encoding(UTF-8)` layer (TGT-117, a live-experienced incident: a real
 inbound Cantonese voice-note transcript triggered a repeated "Wide
 character in print" warning at `D2TG::Poller.pm` line 83). Never fatal -
