@@ -31,7 +31,9 @@ $| = 1;
 # targets STDERR), without opening either with a UTF-8 layer itself, since
 # that's this entrypoint's job, not the library's. Non-fatal (the
 # message still printed and was still processed correctly) but noisy,
-# and repeats for every non-ASCII message. Applied at startup, before
+# and repeats for every message with a character outside Latin-1 (not
+# every non-ASCII one - Latin-1 itself covers many accented Latin
+# characters). Applied at startup, before
 # option handling and any poller work, so every print/warn path below
 # (including --help's own usage text) is covered.
 # TGT117-UTF8-LAYER-BEGIN (t/87 extracts and runs these exact two lines
