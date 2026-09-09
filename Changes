@@ -1,5 +1,15 @@
 Revision history for the tg skill
 
+1.13  2026-09-09
+      - SECURITY (TGT-146, found via scheduled hourly bug hunt JOB-003,
+        a TGT-133 regression): cli/retry-download.pl's own RETRY OK
+        success line printed the real local filesystem path of a
+        retried download directly to stdout - a leak onto the target
+        project's tira.policy.bridge (monitor-output), the exact class
+        of leak TGT-133 closed everywhere else (D2TG::Poller's own
+        media-download success path, cli/attachment.pl). Fixed: names
+        the d2 tg.attachment fetch command instead, never the raw path.
+
 1.12  2026-09-09
       - DOC ACCURACY (TGT-145, found via JOB-005's scheduled doc-accuracy
         hunt): README.md, docs/commands.md (x2), and docs/POLICIES.md

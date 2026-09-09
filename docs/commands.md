@@ -676,11 +676,15 @@ an earlier draft's assumption that `file_id`s expire on a short fixed
 clock - it's the one-hour-valid `file_path` a `getFile` call resolves a
 `file_id` to that's short-lived, and every retry already calls `getFile`
 fresh); with `--all`, retries every currently-queued entry in turn (one
-failure doesn't stop the rest). A successful retry prints `RETRY OK`,
-restores the message into `D2TG::Store`'s own history via
-`record_message` (so `d2 tg.history`/`d2 tg.unread` show it - a Codex
-review caught an earlier draft only deleted the queue row and left
-nothing to show), and removes the queue entry; a failed retry is
+failure doesn't stop the rest). A successful retry prints `RETRY OK`
+naming the `d2 tg.attachment` fetch command (TGT-146 - never the real
+local filesystem path itself, matching TGT-133's own never-expose-the-
+real-path convention; an earlier version of this line leaked the raw
+path to stdout, which reaches the target project's `tira.policy.bridge`
+as monitor-output), restores the message into `D2TG::Store`'s own
+history via `record_message` (so `d2 tg.history`/`d2 tg.unread` show it -
+a Codex review caught an earlier draft only deleted the queue row and
+left nothing to show), and removes the queue entry; a failed retry is
 reported on STDERR and the entry stays queued untouched. If Telegram's
 own response to the retry looks like its shape for a permanently-gone
 `file_id` (`D2TG::Config::is_expired_file_error` - "file is no longer

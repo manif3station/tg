@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.12).** `D2TG::Config::write_heartbeat`
+**Status: early implementation (v1.13).** `d2 tg.retry-download`'s own
+`RETRY OK` success line no longer prints a retried download's real local
+filesystem path (TGT-146, a TGT-133 regression found via a scheduled bug
+hunt) - names the `d2 tg.attachment` fetch command instead, matching
+every other successful-download line's own never-expose-the-real-path
+convention. `D2TG::Config::write_heartbeat`
 no longer leaks its staging temp file when `rename()` fails (TGT-139) -
 previously a failed heartbeat write left `$path.tmp.$$` behind, and every
 subsequent failed attempt added another orphaned file to the state

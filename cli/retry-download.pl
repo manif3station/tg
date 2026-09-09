@@ -99,7 +99,15 @@ for my $row (@to_retry) {
         next;
     }
 
-    print "RETRY OK [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $result_or_error\n";
+    # TGT-146: never print $result_or_error here - on success it is
+    # D2TG::Download::retry_failed_download's raw local filesystem path
+    # return value. This line reaches the target project's
+    # tira.policy.bridge as monitor-output, so a real path would leak
+    # onto a shared board - the same never-expose-the-real-path
+    # convention TGT-133 already established for D2TG::Poller's own
+    # media-download success path and cli/attachment.pl.
+    print "RETRY OK [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
+      . "GET ATTACHMENT WITH: d2 tg.attachment $row->{chat_id} $row->{message_id}\n";
 }
 
 exit $exit_code;
@@ -140,8 +148,13 @@ own history via C<record_message> (a Codex review caught that a retry
 success originally only deleted the queue row, leaving nothing for
 C<d2 tg.history>/C<d2 tg.unread> to ever show for a recovered file)
 before removing the entry from the queue. Prints C<RETRY OK> on
-success. With C<--all>, does the same for every currently-queued entry
-in turn - one failure does not stop the rest from being attempted.
+success, naming the C<d2 tg.attachment> fetch command rather than the
+real local filesystem path (TGT-146 - an earlier version of this line
+printed the raw path directly, leaking it onto the target project's
+C<tira.policy.bridge> as monitor-output; matches TGT-133's own
+never-expose-the-real-path convention). With C<--all>, does the same
+for every currently-queued entry in turn - one failure does not stop
+the rest from being attempted.
 
 A retry failure is reported on STDERR and the entry stays queued (it is
 never removed on failure, only on success) so the operator can retry
