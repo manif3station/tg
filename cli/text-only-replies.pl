@@ -50,7 +50,8 @@ if ( !@$flagged ) {
 }
 
 for my $row (@$flagged) {
-    print "[chat_id=$row->{chat_id}] msg #$row->{text_message_id} sent ($row->{created_at}) "
+    my $bot_note = length( $row->{bot_key} // '' ) ? " bot=$row->{bot_key}" : '';
+    print "[chat_id=$row->{chat_id}]$bot_note msg #$row->{text_message_id} sent ($row->{created_at}) "
       . "went out text-only - no voice note ever confirmed sent.\n";
 }
 
@@ -82,12 +83,29 @@ text-only condition (no separate boolean flag to fall out of sync).
 C<D2TG::Reply::resend_voice> (TGT-109's own recovery path) clears the
 flag the same way when a voice recovery succeeds.
 
-Lists every currently-flagged reply - chat_id, the text message's own
-id, and when it was sent - or C<No text-only replies found.> when clean.
-Exits 1 when anything is flagged (0 when clean), matching this
-project's other after-the-fact checker conventions, so this command is
-suitable for a periodic scheduled check rather than only manual
-inspection. C<--db>/C<-d> (or C<D2TG_DB>) resolves exactly as every
-other C<d2 tg.*> command's does.
+Lists every currently-flagged reply across every configured bot (a
+Codex review finding: C<sent_replies> is scoped by C<bot_key> the same
+way C<allow_list>/C<pending> already are, TGT-098's own lesson, so one
+bot's replies never mask or get confused with another's sharing the
+same C<chat_id> in a group both bots are members of) - chat_id, the bot
+key (omitted from the line for the common single-bot case, where it's
+empty), the text message's own id, and when it was sent - or C<No
+text-only replies found.> when clean. Exits 1 when anything is flagged
+(0 when clean), matching this project's other after-the-fact checker
+conventions, so this command is suitable for a periodic scheduled check
+rather than only manual inspection. C<--db>/C<-d> (or C<D2TG_DB>)
+resolves exactly as every other C<d2 tg.*> command's does.
+
+B<Known limitation> (a Codex review finding, accepted rather than
+solved here): the text-send and its store record are two separate
+steps against two separate systems (Telegram's API and this skill's own
+SQLite database) with no way to make them atomic. A process kill or a
+database error in the narrow window between a successful C<sendMessage>
+and C<record_sent_text> actually running would leave a genuinely-sent
+text message with no row at all, invisible to this checker if its voice
+half then also failed - the same best-effort tradeoff TGT-104's failed-
+download queue documents for its own non-fatal queue write. This is not
+a guarantee, only a substantial improvement over having no record at
+all.
 
 =cut

@@ -86,15 +86,22 @@ my $store = D2TG::Store->new(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
+my $bot_key = $bot_token // '';
+
 if ($voice_only) {
 
     # TGT-105: find the most recent still-flagged text-only send for
-    # this chat, if any, so a successful recovery here clears that
-    # audit-trail flag - the operator running --voice-only doesn't know
-    # (and isn't asked for) that earlier send's own message_id.
+    # THIS bot (Codex review finding: scoped by bot_key too, mirroring
+    # TGT-098's own multi-bot isolation lesson - a shared chat_id across
+    # bots must never let one bot's recovery select and clear another
+    # bot's still-genuinely-text-only flag) and chat, if any, so a
+    # successful recovery here clears that audit-trail flag - the
+    # operator running --voice-only doesn't know (and isn't asked for)
+    # that earlier send's own message_id.
     my ($latest_text_only) =
       sort { $b->{text_message_id} <=> $a->{text_message_id} }
-      grep { $_->{chat_id} == $chat_id } @{ $store->text_only_replies };
+      grep { $_->{chat_id} == $chat_id }
+      @{ $store->text_only_replies( bot_key => $bot_key ) };
 
     eval {
         D2TG::Reply::resend_voice(
@@ -103,6 +110,7 @@ if ($voice_only) {
             text                 => $text,
             reply_to_message_id  => $reply_to_message_id,
             store                => $store,
+            bot_key              => $bot_key,
             text_message_id      => $latest_text_only ? $latest_text_only->{text_message_id} : undef,
         );
     };
@@ -121,6 +129,7 @@ else {
             text                 => $text,
             reply_to_message_id  => $reply_to_message_id,
             store                => $store,
+            bot_key              => $bot_key,
         );
     };
     if ($@) {

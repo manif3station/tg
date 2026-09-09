@@ -40,6 +40,44 @@ my $still_flagged = $store->text_only_replies;
 is( scalar @$still_flagged, 1, 'only the reply still missing its voice half is flagged' );
 is( $still_flagged->[0]{text_message_id}, 503, 'the correct (voice-missing) reply is the one flagged' );
 
+# Codex review finding: bot isolation, mirroring TGT-098's own lesson -
+# a Telegram group shared by more than one configured bot means chat_id
+# alone isn't unique across bots. Bot A's own text-only flag for a
+# chat_id must not be visible/clearable via bot B's own lookup.
+{
+    my $bot_store = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
+
+    $bot_store->record_sent_text( 999, 900, bot_key => 'bot-a-token' );
+    $bot_store->record_sent_text( 999, 900, bot_key => 'bot-b-token' );
+
+    my $bot_a_flagged = $bot_store->text_only_replies( bot_key => 'bot-a-token' );
+    my $bot_b_flagged = $bot_store->text_only_replies( bot_key => 'bot-b-token' );
+    is( scalar @$bot_a_flagged, 1, 'bot A has its own flagged row for the shared chat_id/text_message_id' );
+    is( scalar @$bot_b_flagged, 1, 'bot B independently has its own flagged row for the same chat_id/text_message_id' );
+
+    $bot_store->record_sent_voice( 999, 900, 950, bot_key => 'bot-a-token' );
+    is_deeply( $bot_store->text_only_replies( bot_key => 'bot-a-token' ), [], "clearing bot A's flag does not affect bot B" );
+    is( scalar @{ $bot_store->text_only_replies( bot_key => 'bot-b-token' ) }, 1, "bot B's own flag is untouched by bot A's recovery" );
+
+    my $all = $bot_store->text_only_replies;
+    is( scalar @$all, 1, 'omitting bot_key lists every bot\'s still-flagged rows (bot B\'s, since bot A\'s was cleared)' );
+    is( $all->[0]{bot_key}, 'bot-b-token', 'the listed row correctly names its own bot_key' );
+}
+
+# Codex review finding: record_sent_voice against a non-existent row
+# (wrong bot_key, or the text row was never recorded at all) must warn,
+# not silently succeed and hide the gap.
+{
+    my $warn_store = D2TG::Store->new( db_path => ( tempfile( SUFFIX => '.sqlite', UNLINK => 1 ) )[1], admin_chat_id => 1 );
+    my @warnings;
+    local $SIG{__WARN__} = sub { push @warnings, $_[0] };
+
+    $warn_store->record_sent_voice( 999, 999999, 111 );
+
+    is( scalar @warnings, 1, 'record_sent_voice warns when no matching row exists' );
+    like( $warnings[0], qr/no matching sent_replies row/, 'the warning explains the gap' );
+}
+
 # Re-recording the same (chat_id, text_message_id) must not create a
 # duplicate row (mirrors TGT-104's own dedup precedent).
 $store->record_sent_text( 1000, 503 );

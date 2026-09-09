@@ -110,13 +110,21 @@ sub _ensure_schema {
     # text send is recorded and is filled in only once the voice send
     # also succeeds - a row with a still-NULL voice_message_id IS the
     # text-only flag, not a separate boolean to keep in sync.
+    #
+    # bot_key (Codex review finding): the same TGT-098/TGT-101 lesson
+    # applies here - a Telegram group shared by more than one of this
+    # skill's configured bots means chat_id alone isn't a unique key
+    # across bots. Without this, one bot's --voice-only recovery could
+    # select and clear a DIFFERENT bot's still-genuinely-text-only flag
+    # for the same chat_id, and the flag would misreport across bots.
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS sent_replies (
-             chat_id         INTEGER NOT NULL,
-             text_message_id INTEGER NOT NULL,
+             chat_id          INTEGER NOT NULL,
+             bot_key          TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
+             text_message_id  INTEGER NOT NULL,
              voice_message_id INTEGER,
-             created_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-             PRIMARY KEY (chat_id, text_message_id)
+             created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             PRIMARY KEY (chat_id, bot_key, text_message_id)
          )'
     );
 
@@ -422,37 +430,65 @@ sub remove_failed_download {
 }
 
 sub record_sent_text {
-    my ( $self, $chat_id, $text_message_id ) = @_;
+    my ( $self, $chat_id, $text_message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     # INSERT OR IGNORE: a redundant re-record of the same (chat_id,
-    # text_message_id) - e.g. a retried send_reply call after a prior
-    # partial failure - must never clobber a voice_message_id already
-    # recorded for it back to NULL.
+    # bot_key, text_message_id) - e.g. a retried send_reply call after a
+    # prior partial failure - must never clobber a voice_message_id
+    # already recorded for it back to NULL.
     $self->{dbh}->do(
-        'INSERT OR IGNORE INTO sent_replies (chat_id, text_message_id) VALUES (?, ?)',
-        undef, $chat_id, $text_message_id,
+        'INSERT OR IGNORE INTO sent_replies (chat_id, bot_key, text_message_id) VALUES (?, ?, ?)',
+        undef, $chat_id, $bot_key, $text_message_id,
     );
 
     return;
 }
 
 sub record_sent_voice {
-    my ( $self, $chat_id, $text_message_id, $voice_message_id ) = @_;
+    my ( $self, $chat_id, $text_message_id, $voice_message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
-    $self->{dbh}->do(
-        'UPDATE sent_replies SET voice_message_id = ? WHERE chat_id = ? AND text_message_id = ?',
-        undef, $voice_message_id, $chat_id, $text_message_id,
+    my $rows = $self->{dbh}->do(
+        'UPDATE sent_replies SET voice_message_id = ? WHERE chat_id = ? AND bot_key = ? AND text_message_id = ?',
+        undef, $voice_message_id, $chat_id, $bot_key, $text_message_id,
     );
+
+    # Codex review finding: a matching text row not existing (a
+    # bot_key mismatch, or the text row itself never got recorded -
+    # e.g. a crash between send_message succeeding and record_sent_text
+    # running) used to be a silent no-op, hiding exactly the kind of
+    # persistence gap this feature exists to surface. Not fatal - the
+    # voice send itself already succeeded and must not be undone or
+    # treated as a failure - but worth a loud note rather than silence.
+    warn "D2TG::Store::record_sent_voice: no matching sent_replies row for "
+      . "chat_id=$chat_id bot_key='$bot_key' text_message_id=$text_message_id "
+      . "- voice sent but the text-only audit trail could not be updated\n"
+      if !$rows || $rows eq '0E0';
 
     return;
 }
 
 sub text_only_replies {
-    my ($self) = @_;
+    my ( $self, %args ) = @_;
+
+    # bot_key (Codex review finding): optional filter, so a caller that
+    # needs to act on exactly one bot's own flags (cli/reply.pl
+    # --voice-only, so it never selects and clears a DIFFERENT bot's
+    # flag for the same chat_id) can scope the query; omitting it lists
+    # every bot's flagged replies, each row naming its own bot_key, for
+    # a human operator auditing the whole board.
+    if ( defined $args{bot_key} ) {
+        return $self->{dbh}->selectall_arrayref(
+            'SELECT chat_id, bot_key, text_message_id, created_at FROM sent_replies
+             WHERE voice_message_id IS NULL AND bot_key = ? ORDER BY chat_id, text_message_id',
+            { Slice => {} }, $args{bot_key},
+        );
+    }
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT chat_id, text_message_id, created_at FROM sent_replies
-         WHERE voice_message_id IS NULL ORDER BY chat_id, text_message_id',
+        'SELECT chat_id, bot_key, text_message_id, created_at FROM sent_replies
+         WHERE voice_message_id IS NULL ORDER BY chat_id, bot_key, text_message_id',
         { Slice => {} }
     );
 }
@@ -648,6 +684,52 @@ Removes one row from the C<failed_downloads> queue by its own C<id>
 (TGT-104) - a harmless no-op if that id doesn't exist. Called by
 C<D2TG::Download::retry_failed_download> only after a retry actually
 succeeds; a failed retry leaves the row untouched.
+
+=head2 record_sent_text($chat_id, $text_message_id, bot_key => $key)
+
+Records that a text reply was sent (TGT-105) - C<D2TG::Reply::send_reply>
+calls this immediately after C<send_message> succeeds, before synthesis
+or C<send_voice> can fail. C<INSERT OR IGNORE>: a redundant re-record of
+the same C<(chat_id, bot_key, text_message_id)> never clobbers a
+C<voice_message_id> already recorded for it back to C<NULL>. C<bot_key>
+defaults to C<DEFAULT_BOT_KEY> (the single-bot sentinel) when omitted -
+a Codex review finding, mirroring TGT-098's own C<allow_list>/C<pending>
+scoping, since a Telegram group shared by more than one configured bot
+means C<chat_id> alone isn't unique across bots.
+
+=head2 record_sent_voice($chat_id, $text_message_id, $voice_message_id, bot_key => $key)
+
+Fills in the C<voice_message_id> for an existing C<sent_replies> row
+(TGT-105) - a row whose C<voice_message_id> is still C<NULL> IS the
+text-only condition C<text_only_replies> reports, so this is what
+clears that flag once the voice half actually succeeds. Called by both
+C<D2TG::Reply::send_reply> (the normal path) and C<resend_voice>
+(TGT-109's own recovery path, clearing a flag left by an earlier failed
+attempt). Warns on STDERR (non-fatal - the voice send itself already
+succeeded and must not be treated as a failure) if no matching row
+exists for the given C<(chat_id, bot_key, text_message_id)> - a Codex
+review finding: this used to be a silent no-op, which could hide the
+narrow-window persistence gap documented on C<text_only_replies> below.
+
+=head2 text_only_replies(bot_key => $key)
+
+Returns every reply whose text was sent but whose voice was never
+confirmed sent (TGT-105) - each a hashref of C<chat_id>, C<bot_key>,
+C<text_message_id>, C<created_at>. Without C<bot_key>, lists every
+configured bot's flagged replies (each row naming its own C<bot_key>) -
+for a human operator auditing the whole board, via C<cli/text-only-replies.pl>.
+With C<bot_key>, scopes to exactly that bot - C<cli/reply.pl>'s
+C<--voice-only> uses this so it can never select and clear a
+I<different> bot's still-genuinely-text-only flag for a chat_id shared
+across bots (a Codex review finding, the same TGT-098 lesson).
+
+B<Known limitation> (accepted, not solved, per a Codex review):
+recording the text send and Telegram's own C<sendMessage> succeeding
+are two separate, non-atomic steps - a process kill or a database error
+in that narrow window leaves a genuinely-sent text message with no row
+at all, invisible here if its voice half then also fails. This mirrors
+TGT-104's own accepted best-effort tradeoff for its queue write; it is
+a substantial improvement over no record at all, not a guarantee.
 
 =head2 disconnect
 

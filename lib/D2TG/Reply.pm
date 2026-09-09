@@ -38,7 +38,7 @@ sub send_reply {
     my $text_message_id;
     if ( $args{store} ) {
         $text_message_id = eval { $text_result->[-1]{message_id} };
-        $args{store}->record_sent_text( $chat_id, $text_message_id )
+        $args{store}->record_sent_text( $chat_id, $text_message_id, bot_key => $args{bot_key} )
           if defined $text_message_id;
     }
 
@@ -49,7 +49,7 @@ sub send_reply {
     unlink $voice_path if -e $voice_path;
     die $send_voice_error if $send_voice_error;
 
-    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id} )
+    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} )
       if $args{store} && defined $text_message_id;
 
     $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
@@ -90,7 +90,7 @@ sub resend_voice {
 
     # TGT-105: this is exactly what clears a send_reply-recorded
     # text-only flag once the missing voice half is actually recovered.
-    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id} )
+    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} )
       if $args{store} && defined $text_message_id;
 
     return { voice => $voice_result };
@@ -194,7 +194,23 @@ marked read for a reply that didn't actually go out. Omitting C<store>,
 or omitting C<reply_to_message_id>, leaves read status untouched -
 unchanged from before this ticket.
 
-=head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store)
+C<store> also (TGT-105) records the text-only audit trail: the text
+send via L<D2TG::Store/record_sent_text> as soon as C<send_message>
+returns (independent of C<reply_to_message_id> - unlike C<mark_read>
+above, this happens whenever C<store> is given at all), and the voice
+send via L<D2TG::Store/record_sent_voice> once that also succeeds. The
+message_id extracted from C<send_message>'s own return is wrapped in
+C<eval> and the whole attempt skipped if it can't be found - a caller's
+C<telegram> double that returns some other shape (existing tests that
+never pass C<store> and never asked for this feature) must never be
+broken by it. C<bot_key> (Codex review finding, same ticket) is
+optional and defaults to the empty-string single-bot sentinel
+(C<D2TG::Store::DEFAULT_BOT_KEY>) when omitted - pass the same bot
+identity TGT-098's C<allow_list>/C<pending> scoping already uses, so a
+Telegram group shared by more than one configured bot never lets one
+bot's text-only audit trail collide with another's.
+
+=head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store, bot_key => $key, text_message_id => $id)
 
 TGT-109 (live-experienced incident): recovers from the specific failure
 shape C<send_reply>'s TGT-083 text-first-then-voice ordering can leave
@@ -212,6 +228,17 @@ read for this recovery path - inviting later reprocessing or a duplicate
 full reply. Same guard as C<send_reply>'s own: given I<together with>
 C<reply_to_message_id>, the message is marked read only after
 C<send_voice> has actually succeeded.
+
+C<text_message_id>/C<bot_key> (TGT-105): when given together with
+C<store>, a successful C<send_voice> here clears the text-only audit
+flag C<send_reply> recorded for that C<(bot_key, chat_id,
+text_message_id)>, via L<D2TG::Store/record_sent_voice> - the caller
+(C<cli/reply.pl>'s C<--voice-only>) is expected to look up the correct
+C<text_message_id> itself (typically the most recent still-flagged
+C<D2TG::Store/text_only_replies> row for that chat and bot), since the
+operator running a recovery command isn't asked for it directly.
+Omitting either leaves the audit trail untouched, same as omitting
+C<store> entirely.
 
 =head2 format_send_error($error)
 
