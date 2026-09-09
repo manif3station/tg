@@ -126,6 +126,16 @@ run as a Tira monitor-kind job, not under systemd or cron.
 After every poll cycle, the attachment vault is pruned to a 100MB cap
 (TGT-052) - oldest files deleted first once exceeded.
 
+`D2TG::Poller::run_once`'s fallback media branch (fires for a photo/
+document/voice message when no `download_media`/`transcribe_voice`
+callback was given) now records the message in the store too, matching
+every other successful branch (TGT-120, found via a scheduled
+bug-hunt) - previously it printed the `NEW TG MEDIA` line but never
+called `record_message`, making that message invisible to `d2
+tg.history`/`d2 tg.unread` afterward. Not exercised by this command
+itself, which always passes both callbacks unconditionally - the gap
+only mattered to a caller that legitimately omits one.
+
 Self-refreshes on a new install (TGT-036): after each poll cycle, it
 compares its own on-disk `VERSION` against the one it started with. If
 `dashboard skills install tg` has installed a newer version in the

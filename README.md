@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.88).** `d2 tg.poller` now opens its
+**Status: early implementation (v0.89).** `D2TG::Poller::run_once`'s
+fallback media branch (a photo/document/voice message with no
+`download_media`/`transcribe_voice` callback given) now records the
+message in the store too, matching every other successful branch
+(TGT-120, found via a scheduled bug-hunt) - not exercised by
+`cli/poller.pl` itself today (it always passes both callbacks), but a
+genuine gap closed in `run_once`'s own general-purpose contract.
+`d2 tg.poller` now opens its
 `STDOUT`/`STDERR` with an explicit UTF-8 encoding layer (TGT-117, a
 live-experienced incident: a real inbound Cantonese voice-note
 transcript triggered a repeated "Wide character in print" warning) -

@@ -1237,3 +1237,22 @@ covered. `D2TG::Poller` itself remains intentionally handle/layer-agnostic
 for any other caller. This is scoped to `cli/poller.pl`'s own output streams only;
 it does not change the unrelated UTF-8 *decode* fix `D2TG::Reply` already
 has for outbound reply text (TGT-073, documented above).
+
+## The fallback media branch records history the same way every other branch does (TGT-120)
+
+Found via a scheduled bug-hunt: `D2TG::Poller::run_once`'s catch-all
+`else` branch (fires when a photo/document/voice message arrives but no
+`download_media`/`transcribe_voice` callback was given) printed the
+`NEW TG MEDIA` line and the `REPLY WITH` template, but - unlike every
+other successful branch (text, transcribed voice, downloaded photo/
+document) - never called `$store->record_message`. A message handled
+this way was invisible to `d2 tg.history`/`d2 tg.unread` afterward, and
+a later reply-context lookup for it would fall back to a generic media-
+kind label instead of the actual stored summary. Not exercised in
+production today - this project's own `cli/poller.pl` always passes
+both callbacks unconditionally, so this branch is currently dead code
+in the one real caller - but it was a genuine, silently-unverified gap
+in `run_once`'s general-purpose API contract, confirmed by extending
+`t/09-media-recognition.t`'s existing no-callback test cases to assert
+on the store, not just stdout. Now fixed: this branch records the
+message the same way every other branch does.

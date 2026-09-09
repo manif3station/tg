@@ -363,6 +363,18 @@ one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
 time that sender is recorded pending (not on subsequent messages from
 the same still-pending sender). Replying is separate, later work.
 
+Every successful branch above also records the message in the store
+(when one is given and the update carries a C<message_id>) - including
+the fallback branch that fires for a photo/document/voice message when
+no C<download_media>/C<transcribe_voice> callback was given (TGT-120,
+found via a scheduled bug-hunt: this branch used to print its
+C<NEW TG MEDIA> line without recording anything, making that message
+invisible to a later C<d2 tg.history>/C<d2 tg.unread> lookup even though
+it had already been printed to stdout in real time). Not exercised by
+this project's own C<cli/poller.pl>, which always passes both
+callbacks unconditionally - this closes a latent gap in C<run_once>'s
+general-purpose API contract for any caller that legitimately omits one.
+
 This module prints message content via an unqualified C<print> (Perl's
 currently selected default output handle, ordinarily C<STDOUT>) and
 reports errors via C<warn> (which always targets C<STDERR>); it does

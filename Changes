@@ -1254,3 +1254,19 @@ Revision history for the tg skill
         bytes rather than mojibake. The test now extracts the exact
         binmode lines from cli/poller.pl and runs them, verbatim, in a
         real subprocess.
+
+0.89  2026-09-09
+      - D2TG::Poller::run_once (TGT-120, found via a scheduled
+        bug-hunt): the fallback media branch (a photo/document/voice
+        message with no download_media/transcribe_voice callback given)
+        now calls $store->record_message, matching every other
+        successful branch. This branch previously printed its NEW TG
+        MEDIA line to stdout but never recorded the message, making it
+        invisible to d2 tg.history/d2 tg.unread afterward. Not exercised
+        by cli/poller.pl itself today (it always passes both callbacks
+        unconditionally) - a genuine, silently-unverified gap in
+        run_once's own general-purpose API contract, now closed.
+      - A Codex review found t/09-media-recognition.t's new assertions
+        only checked that a store record existed, not that its
+        sender/summary actually matched what was printed - strengthened
+        to assert both explicitly.
