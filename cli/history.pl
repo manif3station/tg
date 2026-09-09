@@ -50,6 +50,16 @@ my ( $since, $until );
     @ARGV = @rest;
 }
 
+# TGT-122 (found via a scheduled hourly bug-hunt): an unrecognized flag
+# or leftover positional argument used to be silently ignored here -
+# unlike cli/send.pl's own @extra check or cli/poller.pl's unrecognized-
+# argument refusal (TGT-107) - printing "No messages found." and
+# exiting 0 as if the (mistyped) invocation had succeeded.
+if (@ARGV) {
+    print STDERR "Usage: d2 tg.history [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]\n";
+    exit 2;
+}
+
 my $store = D2TG::Store->new(
     db_path => D2TG::Config::state_db_path(
         default_root => File::Spec->catdir( $Bin, '..' ),
