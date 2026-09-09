@@ -8,6 +8,7 @@ use File::Spec;
 
 use D2TG::Config;
 use D2TG::Lock;
+use D2TG::Transcribe;
 
 # TGT-111 (user-supplied feature-gap analysis, /tmp/missing2.md item 5):
 # the only way to know the poller is actually alive was to reach into
@@ -24,13 +25,21 @@ use D2TG::Lock;
 #
 # Codex review finding: the heartbeat is written once per bot/chat pair
 # (after each pair's own run_once_safe call), not once per full poll
-# cycle - but a single pair can still legitimately take up to ~900s on
-# its own (D2TG::Transcribe's 3-tier medium->small->base retry ladder,
-# 300s per tier, for one slow voice transcription). 1200s gives genuine
-# safety margin above that worst case rather than sitting right on top
-# of it, so a healthy, actively-transcribing poller is never reported
-# STALE.
-use constant STALE_THRESHOLD_SECONDS => 1200;
+# cycle - so a single pair can legitimately take as long as
+# D2TG::Transcribe's own worst case: its retry-on-timeout ladder
+# (medium -> small -> base, TGT-100) can attempt every tier in
+# @D2TG::Transcribe::MODEL_TIERS, each bounded at up to
+# $D2TG::Transcribe::TIMEOUT_CEILING (TGT-140 - duration-scaled, not a
+# flat 300s the way this threshold originally assumed; that flat-300s
+# assumption became stale the moment TGT-140 shipped in this same
+# session and was never propagated here, a real regression a later
+# scheduled bug hunt caught, TGT-147). Derived directly from those two
+# constants (never a re-typed literal) so the two can never silently
+# drift apart again, with the same ~1.33x safety margin the original
+# 1200-over-900 ratio used, so a healthy, actively-transcribing poller
+# is never reported STALE.
+use constant STALE_THRESHOLD_SECONDS =>
+  int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
 
 my ( $db_alias, @rest );
 eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
@@ -130,10 +139,15 @@ stayed alive and held its lock for 80+ minutes while doing nothing at
 all, silently losing a message. C<heartbeat: never> means the poller has
 never completed a full poll cycle since this heartbeat file's location
 was last cleared; C<heartbeat: <N>s ago (ok)> or C<(STALE)> reports the
-age against a fixed threshold (C<STALE_THRESHOLD_SECONDS>, 1200s - kept
-safely above the worst-case time a single bot/chat pair's own poll
-cycle can legitimately take, including a slow voice transcription's
-full retry ladder).
+age against C<STALE_THRESHOLD_SECONDS> - derived (TGT-147, not a
+re-typed literal, after a scheduled bug hunt caught the original fixed
+1200s going stale the moment TGT-140 shipped its own duration-scaled
+timeout in this same session) from L<D2TG::Transcribe>'s own
+C<$TIMEOUT_CEILING> and C<@MODEL_TIERS> constants
+(C<$TIMEOUT_CEILING * scalar(@MODEL_TIERS) * 4/3>, currently 14400s/4h)
+- kept safely above the worst-case time a single bot/chat pair's own
+poll cycle can legitimately take, including a slow voice
+transcription's full retry ladder at its new, longer per-tier budget.
 
 C<--db>/C<-d> match every other C<d2 tg.*> command's own resolution
 (L<D2TG::Config/resolve_alias_dir>) - the same storage location the

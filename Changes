@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+1.18  2026-09-09
+      - RELIABILITY FIX (TGT-147, found via scheduled hourly bug hunt
+        JOB-003, a real regression this same session's own earlier
+        TGT-140 introduced): d2 tg.status's STALE_THRESHOLD_SECONDS
+        (a fixed 1200s literal) never got updated when TGT-140 changed
+        D2TG::Transcribe's per-tier timeout from a flat 300s to a
+        duration-scaled value up to 3600s - a healthy, still-
+        transcribing poller working through a long voice note's retry
+        ladder could be falsely reported STALE after only 20 minutes,
+        up to 9x below the new real worst case (up to 3 hours). Now
+        derived directly from D2TG::Transcribe's own $TIMEOUT_CEILING
+        and @MODEL_TIERS constants (currently 14400s/4h) instead of a
+        re-typed literal, so the two can never silently drift apart
+        again. Codex caught a real follow-up gap in the fix's own
+        tests (hard-coded to the literal 14400 instead of computing it
+        from the same source constants) - fixed.
+
 1.17  2026-09-09
       - Refactor (TGT-144, found via scheduled improvement hunt JOB-004):
         the fork+setpgrp-race-closing+devnull-redirect+exec preamble

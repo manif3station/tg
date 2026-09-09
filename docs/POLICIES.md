@@ -1117,10 +1117,17 @@ mirroring `lock_path`'s own `.tira/` vault resolution, written atomically
 via a temp file + `rename`) after each bot/chat pair's own poll cycle,
 unconditionally - regardless of whether any message or error activity
 happened. `d2 tg.status` reports the heartbeat's age and flags it
-`STALE` past 1200 seconds. (A Codex review caught that writing only once
-per full multi-pair cycle, against a tighter 600s threshold, could
-falsely flag a healthy, actively-transcribing poller as stale - a single
-voice transcription's retry ladder alone can take up to ~900s.)
+`STALE` past a threshold derived from `D2TG::Transcribe`'s own
+`$TIMEOUT_CEILING`/`@MODEL_TIERS` constants (`$TIMEOUT_CEILING *
+scalar(@MODEL_TIERS) * 4/3`, currently 14400s/4h - TGT-147: this was
+originally a fixed 1200s literal, and a scheduled bug hunt caught it
+going stale the moment TGT-140 shipped its own duration-scaled
+per-tier transcription timeout in this same session, since a single
+still-healthy transcription's retry ladder could then legitimately
+exceed the old threshold many times over). (A Codex review caught that
+writing only once per full multi-pair cycle, against a tighter
+threshold, could falsely flag a healthy, actively-transcribing poller
+as stale.)
 
 Deliberately **not** built here: an automatic restart when the heartbeat
 goes stale. A genuinely stuck poller cannot restart itself - that's the

@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.17).** Internal refactor (TGT-144,
+**Status: early implementation (v1.18).** `d2 tg.status`'s staleness
+threshold no longer falsely flags a healthy, still-transcribing poller
+(TGT-147, a real regression found via a scheduled bug hunt - this
+session's own earlier TGT-140 changed the transcription timeout it
+depended on, up to 3 hours worst case, without updating the 20-minute
+threshold that assumed the old, much shorter bound) - now derived
+directly from `D2TG::Transcribe`'s own constants instead of a re-typed
+literal. Internal refactor (TGT-144,
 found via a scheduled improvement hunt): the duplicated subprocess-
 launch preambles `D2TG::TTS::_run` and `D2TG::Transcribe::_run` had
 each independently accumulated are now one shared, tested

@@ -586,15 +586,20 @@ right instance.
 
 Also prints `heartbeat: never` (no pair has ever completed a poll cycle
 at this storage location), `heartbeat: <N>s ago (ok)`, or `heartbeat:
-<N>s ago (STALE)` past 1200 seconds (TGT-116, a live-experienced
+<N>s ago (STALE)` past a threshold (TGT-116, a live-experienced
 incident: a poller stayed alive and held its lock for 80+ minutes while
 doing nothing at all, silently losing a message - "alive" and "still
-genuinely cycling" are different questions). The heartbeat is written by
-`cli/poller.pl` after each bot/chat pair's own poll cycle (not once per
-full multi-pair cycle - a Codex review caught that the latter, against a
-tighter 600s threshold, could falsely flag a healthy poller as stale
-during a single slow voice transcription's full retry ladder, up to
-~900s), atomically (temp file + `rename`) via
+genuinely cycling" are different questions) now derived (TGT-147, not a
+re-typed literal, since a scheduled bug hunt caught the original fixed
+1200s going stale the moment TGT-140 shipped its own duration-scaled
+transcription timeout in this same session) from `D2TG::Transcribe`'s
+own `$TIMEOUT_CEILING`/`@MODEL_TIERS` constants - currently 14400s
+(4h), `$TIMEOUT_CEILING * scalar(@MODEL_TIERS) * 4/3`. The heartbeat is
+written by `cli/poller.pl` after each bot/chat pair's own poll cycle
+(not once per full multi-pair cycle - a Codex review caught that the
+latter could falsely flag a healthy poller as stale during a single
+slow voice transcription's full retry ladder, now up to that same
+worst-case bound), atomically (temp file + `rename`) via
 `D2TG::Config::write_heartbeat`. Automatic restart-on-stale is
 intentionally not built - a genuinely stuck poller cannot restart
 itself, so that needs either a second always-running watchdog process or

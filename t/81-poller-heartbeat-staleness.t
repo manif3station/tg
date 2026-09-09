@@ -8,6 +8,16 @@ use File::Spec;
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 require D2TG::Config;
+require D2TG::Transcribe;
+
+# TGT-147, a Codex review finding: hard-coding the expected threshold
+# (14400) here would recreate the exact failure mode this ticket
+# exists to fix - a future change to D2TG::Transcribe's own
+# TIMEOUT_CEILING/MODEL_TIERS would silently desync this test from the
+# real derivation instead of catching it. Compute the expected value
+# from the same source constants cli/status.pl itself derives from.
+my $expected_stale_threshold =
+  int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
 
 # TGT-116 (re-scoped during drafting: a genuinely stuck poller can't
 # restart itself, so full auto-restart needs an external actor - an
@@ -93,41 +103,68 @@ require D2TG::Config;
     }
 
     {
+        # TGT-147: STALE_THRESHOLD_SECONDS is now 14400s (4h), not
+        # 1200s (20m) - derived from D2TG::Transcribe's own worst-case
+        # timeout math (TGT-140's scaled per-tier timeout, up to
+        # 3600s, times 3 retry-ladder tiers, with the same ~1.33x
+        # safety margin the original threshold used) after a scheduled
+        # bug hunt caught the original flat-1200s assumption going
+        # stale the moment TGT-140 shipped in this same session. An
+        # hour-old heartbeat is comfortably still healthy under the
+        # new threshold - no longer STALE the way it was before this
+        # ticket, since a single still-transcribing bot/chat pair can
+        # now legitimately take far longer than an hour.
         open my $fh, '>', $heartbeat_path or die $!;
         print {$fh} time() - 3600;
         close $fh;
 
         my $out = `$status_cli`;
-        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'd2 tg.status flags an hour-old heartbeat as STALE' );
+        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'an hour-old heartbeat is comfortably ok under the new 14400s threshold, not STALE' );
 
         unlink $heartbeat_path;
     }
 
-    # Codex review finding: pin down that the boundary is near 1200s, not
-    # just "an hour is stale" - close enough on both sides to prove the
-    # threshold moved off 600s, with a few seconds' margin either side
-    # of the exact boundary so real subprocess-exec latency between
+    {
+        open my $fh, '>', $heartbeat_path or die $!;
+        print {$fh} time() - ( $expected_stale_threshold + 3600 );
+        close $fh;
+
+        my $out = `$status_cli`;
+        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat an hour past the derived threshold is flagged STALE' );
+
+        unlink $heartbeat_path;
+    }
+
+    # Codex review finding: pin down that the boundary is near the
+    # derived threshold, not just "well past it is stale" - close
+    # enough on both sides to prove the threshold actually moved off
+    # the old 1200s value, with a few seconds' margin either side of
+    # the exact boundary so real subprocess-exec latency between
     # writing the heartbeat and d2 tg.status reading it can never flip
-    # the result (an exact time()-1200 write can legitimately read back
-    # as 1201s old by the time the CLI subprocess actually runs).
+    # the result (an exact time()-threshold write can legitimately
+    # read back as 1s older by the time the CLI subprocess actually
+    # runs). Computed from the same source constants as cli/status.pl
+    # itself (a second Codex finding) rather than a hard-coded literal,
+    # so this test can't silently desync from the real derivation if
+    # D2TG::Transcribe's own constants ever change.
     {
         open my $fh, '>', $heartbeat_path or die $!;
-        print {$fh} time() - 1190;
+        print {$fh} time() - ( $expected_stale_threshold - 10 );
         close $fh;
 
         my $out = `$status_cli`;
-        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'a heartbeat 1190s old (comfortably under 1200s) is still ok, not STALE' );
+        like( $out, qr/heartbeat: \d+s ago \(ok\)/, 'a heartbeat just under the derived threshold is still ok, not STALE' );
 
         unlink $heartbeat_path;
     }
 
     {
         open my $fh, '>', $heartbeat_path or die $!;
-        print {$fh} time() - 1210;
+        print {$fh} time() - ( $expected_stale_threshold + 10 );
         close $fh;
 
         my $out = `$status_cli`;
-        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat 1210s old (comfortably over 1200s) flips to STALE' );
+        like( $out, qr/heartbeat: \d+s ago \(STALE\)/, 'a heartbeat just over the derived threshold flips to STALE' );
 
         unlink $heartbeat_path;
     }
