@@ -31,7 +31,8 @@ sub extract_flags {
 # itself, so `-h`/`--help` would always appear "mentioned" even if a
 # future edit removed them from the printed usage text - this closes
 # that gap).
-my $help_output = qx{$^X "$Bin/../cli/poller.pl" --help 2>&1};
+my $help_output = qx{$^X "$Bin/../cli/poller.pl" --help};
+is( $?, 0, 'cli/poller.pl --help exits successfully' ) or diag $help_output;
 die "cli/poller.pl --help produced no output\n" unless length $help_output;
 
 my $source = read_source();
