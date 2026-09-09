@@ -23,7 +23,7 @@ $ENV{D2TG_CHAT_ID} = '999999';
     my $out = `$history_cli --since 2020-01-01T00:00:00 --totally-bogus-flag 2>&1`;
     my $rc  = $? >> 8;
 
-    isnt( $rc, 0, 'cli/history with an unrecognized flag refuses instead of silently ignoring it' );
+    is( $rc, 2, 'cli/history with an unrecognized flag refuses with exit 2' );
     like( $out, qr/Usage/i, 'the message names it as a usage problem' );
     unlike( $out, qr/^No messages found\.$/m, 'never silently claims a scoped-but-empty result for an unrecognized flag' );
 }
@@ -32,7 +32,7 @@ $ENV{D2TG_CHAT_ID} = '999999';
     my $out = `$history_cli some garbage positional args 2>&1`;
     my $rc  = $? >> 8;
 
-    isnt( $rc, 0, 'cli/history with leftover positional arguments refuses instead of silently ignoring them' );
+    is( $rc, 2, 'cli/history with leftover positional arguments refuses with exit 2' );
     like( $out, qr/Usage/i, 'the message names it as a usage problem' );
     unlike( $out, qr/^No messages found\.$/m, 'never silently claims a scoped-but-empty result for leftover args' );
 }
@@ -52,6 +52,28 @@ $ENV{D2TG_CHAT_ID} = '999999';
 
     is( $rc, 0, 'a normal --since <date> --until <date> pair still exits 0' );
     like( $out, qr/No messages found\./, 'a normal range with no matching messages still reports the expected clean message' );
+}
+
+# A Codex review raised whether the new check (placed after --since/
+# --until parsing) could regress --db/-d, which is consumed earlier
+# still (D2TG::Config::extract_db_flag, before the --since/--until
+# loop even runs) - live-verified as a false alarm, but these cases
+# make that verification a permanent regression test rather than a
+# one-off manual check.
+{
+    my $out = `$history_cli --db testalias 2>&1`;
+    my $rc  = $? >> 8;
+
+    is( $rc, 0, '--db <alias> alone (already consumed before the new check runs) still exits 0' );
+    like( $out, qr/No messages found\./, 'and still reports the expected clean message' );
+}
+
+{
+    my $out = `$history_cli -d testalias --since 2026-01-01T00:00:00 2>&1`;
+    my $rc  = $? >> 8;
+
+    is( $rc, 0, '-d <alias> combined with --since still exits 0' );
+    like( $out, qr/No messages found\./, 'and still reports the expected clean message' );
 }
 
 done_testing();
