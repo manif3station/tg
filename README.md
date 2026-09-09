@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.04).** A downloaded attachment's real
+**Status: early implementation (v1.05).** `D2TG::Poller::run_once`'s 4
+`record_message` calls are now eval-wrapped (TGT-132, found via an
+ad-hoc bug-hunt) - a store write failure mid-batch (SQLite contention
+outlasting TGT-129's own busy_timeout) no longer aborts the rest of
+the poll batch, which previously caused it to be entirely redelivered
+and reprinted next cycle, risking a duplicate reply from the watching
+agent. A downloaded attachment's real
 local filesystem path is never exposed anywhere agent-facing any more
 (TGT-133, live Telegram request) - matching this project's own Tira
 board convention (`tira.attachment.get` writes raw content to stdout,

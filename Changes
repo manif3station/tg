@@ -1484,3 +1484,24 @@ Revision history for the tg skill
         local_path column (never surfaced by any display path) and a
         narrow get_attachment_path accessor; D2TG::Download's retry
         path was updated to match the same convention.
+
+1.05  2026-09-09
+      - D2TG::Poller::run_once (TGT-132, found via an ad-hoc bug-hunt):
+        all 4 record_message calls (text, transcribed voice, downloaded
+        media, and the no-callback fallback branch) are now eval-wrapped
+        via a new _record_message_safe helper, matching the sibling
+        record_failed_download call's own established pattern (TGT-104).
+        Previously, a D2TG::Store write failure mid-batch (e.g. SQLite
+        contention exceeding TGT-129's own busy_timeout) would die
+        uncaught inside run_once; run_once_safe catches that by
+        returning the poll offset UNCHANGED, causing the entire batch -
+        including updates already printed and handled - to be
+        redelivered and reprinted next cycle, risking a duplicate reply
+        from the watching agent. A record_message failure is now logged
+        non-fatally to stderr instead, and the rest of the batch (and
+        the offset advance) proceeds normally. A Codex review caught
+        that the raw exception text was initially printed verbatim - a
+        DBI/SQLite error can embed the database file's own path, an
+        information-disclosure surface this project just spent TGT-133
+        closing off elsewhere - now classified into a short, fixed
+        reason instead of ever echoing the exception itself.

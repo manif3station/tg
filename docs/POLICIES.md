@@ -1409,3 +1409,35 @@ immediately followed by a `GET ATTACHMENT WITH: d2 tg.attachment
 delivers one attachment per message, a poll cycle reporting several
 media messages produces one such instruction per message, never a
 combined or ambiguous one.
+
+## A store write failure never aborts the rest of a poll batch (TGT-132)
+
+Found via an ad-hoc bug-hunt, following directly from TGT-129's own
+SQLite `busy_timeout`/WAL fix: that fix makes a locked-database error
+*rarer*, not impossible - contention can still outlast the 5-second
+wait window. `D2TG::Poller::run_once` calls `D2TG::Store::record_message`
+on every successful text/voice/media/fallback branch, and none of those
+4 call sites were `eval`-wrapped, unlike the sibling
+`record_failed_download` call (TGT-104), which already carries an
+explicit comment explaining why it must be: "a locked/full SQLite
+database must not turn an already-reported, already-non-fatal media
+error into a poll-cycle failure."
+
+The consequence of leaving `record_message` unwrapped was worse than a
+single failed write: `run_once_safe` catches any `die` from `run_once`
+by returning the poll offset UNCHANGED - so a `record_message` failure
+partway through a multi-update batch would cause Telegram's next
+`getUpdates` call to redeliver the *entire* batch, including updates
+already printed and handled earlier in that same cycle. Every already-
+printed `NEW TG`/`REPLY WITH` line for that batch would be reprinted,
+risking the watching agent sending a duplicate reply to a message it
+already answered.
+
+Fixed the same way `record_failed_download` already was: a new private
+`_record_message_safe` helper wraps the call in `eval`, logging a
+non-fatal `record_message failed (message was already printed/handled):
+<error>` line to STDERR instead of letting the exception propagate. The
+message itself was already fully handled (printed to stdout, offered a
+`REPLY WITH` template) - only the store's own record of it failed, which
+degrades `d2 tg.history`/`d2 tg.unread`'s completeness for that one
+message, not the poller's own correctness or the batch's delivery.

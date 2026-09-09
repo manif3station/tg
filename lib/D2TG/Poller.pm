@@ -82,7 +82,7 @@ sub run_once {
 
             print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
-            $store->record_message( $chat_id, $message_id, $sender, $safe_text )
+            _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text )
               if $store && defined $message_id;
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -105,7 +105,7 @@ sub run_once {
 
                 print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
-                $store->record_message( $chat_id, $message_id, $sender, $safe_transcript )
+                _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_transcript )
                   if $store && defined $message_id;
             }
         }
@@ -127,7 +127,7 @@ sub run_once {
                     print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
                     _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
-                    $store->record_message( $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path )
+                    _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path )
                       if $store && defined $message_id;
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
@@ -179,12 +179,43 @@ sub run_once {
             # message in the store, making it invisible to
             # d2 tg.history/d2 tg.unread afterward even though it was
             # printed to stdout in real time.
-            $store->record_message( $chat_id, $message_id, $sender, "$media_kind$caption_note" )
+            _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note" )
               if $store && defined $message_id;
         }
     }
 
     return ( $updates, $next_offset );
+}
+
+sub _record_message_safe {
+    my ( $store, @args ) = @_;
+
+    # TGT-132: matching D2TG::Store::record_failed_download's own
+    # eval-wrap (TGT-104) and its stated reason - a locked/full SQLite
+    # database (a real possibility even after TGT-129's busy_timeout, if
+    # contention outlasts it) must not turn an already-printed/already-
+    # handled update into a die that aborts the rest of this batch:
+    # run_once_safe would catch it by returning the offset UNCHANGED,
+    # causing the WHOLE batch (including updates already announced) to
+    # be redelivered and reprinted next cycle.
+    local $@;
+    eval { $store->record_message(@args) };
+    if ($@) {
+        # Codex review finding: the raw exception text was previously
+        # printed verbatim - a DBI/SQLite error can embed the database
+        # file's own path (e.g. "unable to open database file: ..."),
+        # which this project has just spent TGT-133 closing off as an
+        # information-disclosure surface elsewhere. Classify into a
+        # short, fixed reason instead of ever echoing $@ itself.
+        my $error  = $@;
+        my $reason =
+            $error =~ /database is locked/i ? 'database is locked'
+          : $error =~ /database.*busy/i     ? 'database is busy'
+          : $error =~ /readonly/i           ? 'database is readonly'
+          :                                    'an unexpected error';
+        print STDERR "record_message failed ($reason) - message was already printed/handled, only its own store record is affected\n";
+    }
+    return;
 }
 
 sub _display_name {
@@ -439,6 +470,20 @@ described above but never the message text; when omitted, every
 sender's text is printed unconditionally (used by earlier tests only -
 C<cli/poller.pl> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
+
+Every C<$store-E<gt>record_message> call (text, transcribed voice,
+downloaded media, and the no-callback fallback branch - four call
+sites) goes through a private C<_record_message_safe> wrapper (TGT-132),
+matching L<D2TG::Store/record_failed_download>'s own established
+eval-wrap pattern (TGT-104): a store write failure is logged non-fatally
+to STDERR rather than propagating - the update was already printed and
+handled, only its own record of that failed, and letting the exception
+escape C<run_once> would make L</run_once_safe> return the offset
+UNCHANGED, redelivering and reprinting the entire batch next cycle. The
+raw exception text is never printed (a Codex review finding: a DBI/
+SQLite error can embed the database file's own path) - only a short,
+fixed classification (C<database is locked>/C<busy>/C<readonly>, or
+C<an unexpected error>).
 
 Every printed sender name (the main content line and any reply-context
 suffix) goes through L</_display_name> (TGT-079, a live user request):
