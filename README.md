@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v1.01).** `D2TG::Store` now sets SQLite's
+**Status: early implementation (v1.02).** SKILLS.md's `cli/*.pl` file
+list is current again (TGT-130, found via an ad-hoc bug-hunt) -
+`cli/tts.pl` had been missing since it shipped after TGT-123's own fix
+to this same list; a new regression test now guards against this
+recurring silently a third time. `D2TG::Store` now sets SQLite's
 `PRAGMA busy_timeout`/`journal_mode = WAL` on every connection (TGT-129,
 found via an ad-hoc bug-hunt) - previously a concurrent writer (the
 poller vs. an independently-invoked `d2 tg.*` command against the same

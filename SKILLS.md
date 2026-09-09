@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v1.01).** This file is a procedure to
+**Status: early implementation (v1.02).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -258,8 +258,13 @@ captured at launch.
 Every `cli/*` entrypoint file carries a `.pl` extension internally
 (`cli/approve.pl`, `cli/help.pl`, `cli/history.pl`, `cli/poller.pl`,
 `cli/reply.pl`, `cli/retry-download.pl`, `cli/send.pl`, `cli/status.pl`,
-`cli/text-only-replies.pl`, `cli/unread.pl`, `cli/whoami.pl` - TGT-093;
-TGT-123 kept this list current after 5 later entrypoints were added).
+`cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
+`cli/whoami.pl` - TGT-093; TGT-123 kept this list current after 5 later
+entrypoints were added, and TGT-130 added the one that had shipped in
+between and been missed; a new regression test,
+`t/98-skills-md-cli-list-current.t`, now checks this list against the
+real `cli/*.pl` file list so a future drift fails the suite instead of
+silently accumulating a third time).
 This is purely a source-tree
 naming convention and does not change how you run the skill: `d2
 tg.<command>` (e.g. `d2 tg.poller`) dispatches exactly as documented

@@ -1446,3 +1446,12 @@ Revision history for the tg skill
         pattern this project's own research notes on the original
         Python blueprint had flagged as worth keeping, but which had
         been dropped in the Perl port.
+
+1.02  2026-09-09
+      - SKILLS.md's cli/*.pl file list (TGT-130, found via an ad-hoc
+        bug-hunt): was missing cli/tts.pl, which TGT-106 shipped after
+        TGT-123's own fix to this exact list had already landed - the
+        same doc-drift class recurring. Added, and a new regression
+        test (t/98-skills-md-cli-list-current.t) now checks this list
+        against the real cli/*.pl file list on every run, so a future
+        drift fails the suite instead of accumulating silently again.
