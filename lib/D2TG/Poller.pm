@@ -429,6 +429,16 @@ the loop continues, matching C<transcribe_voice>'s non-fatal handling.
 Without C<download_media>, photo/document messages fall back to the
 plain C<NEW TG MEDIA> line.
 
+A C<download_media> failure, when C<$store> is given, is also queued via
+L<D2TG::Store/record_failed_download> (TGT-104, user-supplied
+feature-gap analysis) - chat_id, message_id, file_id, sender, media
+kind, caption, and the original error - so C<d2 tg.retry-download> can
+retry it later using the same C<file_id>, which Telegram keeps valid for
+a limited window after the message arrives. That queue write is itself
+wrapped in its own C<eval> and reported on STDERR if it fails (a Codex
+review finding: a locked/full SQLite database must not turn an
+already-non-fatal download error into a poll-cycle failure).
+
 If the message carries a caption (TGT-092, a live production incident:
 a caption was silently dropped entirely before this fix, causing a real
 miscommunication - C<$message->{caption}> is a field the Bot API

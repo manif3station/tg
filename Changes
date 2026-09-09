@@ -1123,3 +1123,30 @@ Revision history for the tg skill
         `poller.pl.bak`/`--note=poller.pl` - fixed by matching each
         split argv element individually against an anchored
         `(?:^|/)poller\.pl$` pattern.
+
+0.84  2026-09-09
+      - FEATURE (TGT-104, user-supplied feature-gap analysis): a failed
+        inbound photo/document download is now persisted to a retry
+        queue instead of just printed and forgotten - the old
+        `~/skills/tg` blueprint had this and the new skill dropped it,
+        the exact loss mode that once cost a real receipt sent for
+        safekeeping. New `D2TG::Store::record_failed_download`/
+        `failed_downloads`/`remove_failed_download` back a new
+        `failed_downloads` table, keyed uniquely by `(chat_id,
+        message_id)` so Telegram's at-least-once delivery redelivering
+        the same failed update refreshes the existing row instead of
+        duplicating it. New `d2 tg.retry-download [<id> | --all]` lists
+        and retries the queue via new `D2TG::Download::retry_failed_download`
+        - a successful retry restores the message into `d2
+        tg.history`/`d2 tg.unread` via `record_message`, not just
+        deleting the queue row, before removing it. New
+        `D2TG::Config::is_expired_file_error` distinguishes Telegram's
+        own shape for a permanently-gone `file_id` ("file is no longer
+        available"/"wrong file_id") from an ordinary, still-retryable
+        failure, giving the former a distinguishable `RETRY EXPIRED`
+        message. Two rounds of Codex review caught 5 real gaps before
+        shipping (duplicate queue rows on redelivery, "file is
+        temporarily unavailable" wrongly classified as permanent, an
+        unwrapped queue-write that could crash the poller on a database
+        error, retry success not restoring history, non-deterministic
+        same-second ordering) - all fixed.

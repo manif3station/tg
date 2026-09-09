@@ -568,6 +568,33 @@ same-second tiebreaker as L</unread_messages> (TGT-075). Either bound
 may be omitted (an open-ended range on that side); omitting both
 returns every stored message, oldest first.
 
+=head2 record_failed_download($chat_id, $message_id, $file_id, sender => $s, media_kind => $k, caption_note => $c, error => $e)
+
+Persists a failed inbound photo/document download for later retry
+(TGT-104) - C<D2TG::Poller> calls this when C<download_media> dies and a
+store is present, instead of only printing the error and forgetting it.
+Upserts on C<(chat_id, message_id)> - Telegram's own at-least-once
+delivery can reprocess the same update, and a second call for the same
+pair refreshes the existing row's C<file_id>/C<sender>/C<media_kind>/
+C<caption_note>/C<error>/timestamp rather than inserting a duplicate (a
+Codex review finding). Returns the row's id (new or existing).
+
+=head2 failed_downloads
+
+Returns every queued failed download (TGT-104), ordered by C<id> (not
+C<created_at>, whose second precision isn't a reliable tiebreaker - a
+Codex review finding) - each a hashref of C<id>, C<chat_id>,
+C<message_id>, C<file_id>, C<sender>, C<media_kind>, C<caption_note>,
+C<error>, C<created_at>. C<cli/retry-download.pl> lists and acts on
+this.
+
+=head2 remove_failed_download($id)
+
+Removes one row from the C<failed_downloads> queue by its own C<id>
+(TGT-104) - a harmless no-op if that id doesn't exist. Called by
+C<D2TG::Download::retry_failed_download> only after a retry actually
+succeeds; a failed retry leaves the row untouched.
+
 =head2 disconnect
 
 Disconnects the underlying DBI handle (TGT-036). C<cli/poller.pl> calls

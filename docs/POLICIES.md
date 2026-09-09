@@ -1037,3 +1037,39 @@ kernel's own NUL separators) - false-positiving on `not-a-poller.pl`,
 `poller.pl.bak`, `--note=poller.pl`, and even a match spanning two
 unrelated argv elements. Fixed by matching each NUL-split argv element
 on its own against the anchored pattern.
+
+## A failed media download is queued for retry, not lost after one report
+
+User-supplied feature-gap analysis (TGT-104): the old `~/skills/tg`
+blueprint kept a small on-disk queue recording which message and
+Telegram's own internal file handle failed to download - this mattered
+because Telegram's Bot API file handles expire a limited time after the
+message arrives, after which the file is permanently unrecoverable. The
+new `d2 tg.*` skill reported a download failure once (`MEDIA DOWNLOAD
+ERROR ...`) and moved on - no queue, no retry, exactly the loss mode the
+old queue existed to close (motivated by a real prior incident: a
+receipt sent for safekeeping was lost when its download failed and the
+`file_id` later expired before anyone noticed).
+
+`D2TG::Poller` now persists every such failure - chat_id, message_id,
+file_id, sender, media kind, caption, the original error - to
+`D2TG::Store`'s `failed_downloads` queue, keyed uniquely by `(chat_id,
+message_id)` so Telegram's own at-least-once delivery redelivering the
+same failed update refreshes the existing row instead of duplicating it
+(a Codex review finding). The queue write itself is wrapped in its own
+`eval` - a locked/full SQLite database must not turn an already-non-fatal
+download error into a poll-cycle failure (another Codex finding).
+
+`d2 tg.retry-download` lists the queue and retries a given id (or
+`--all`) via `D2TG::Download::retry_failed_download`. A successful retry
+restores the message into `D2TG::Store`'s own history via
+`record_message` - the same thing a first-time success already does -
+before removing the queue row (a Codex review caught an earlier design
+only deleted the row, leaving nothing for `d2 tg.history`/`d2 tg.unread`
+to ever show for a recovered file). A failed retry leaves the row
+untouched. If the failure looks like Telegram's own shape for a
+permanently-gone `file_id` ("file is no longer available"/"wrong
+file_id"), the message says `RETRY EXPIRED` - deliberately NOT for "file
+is temporarily unavailable" (a Codex review caught an earlier draft
+treating that genuinely transient wording as permanent too, which would
+have told an operator to give up on something that might still work).

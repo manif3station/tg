@@ -1,6 +1,22 @@
 # tg
 
-**Status: early implementation (v0.83).** `d2 tg.poller` now warns on
+**Status: early implementation (v0.84).** A failed inbound photo/
+document download is now persisted to a retry queue instead of just
+printed and forgotten (TGT-104, user-supplied feature-gap analysis) -
+`d2 tg.retry-download` lists it and retries by id or `--all` using the
+saved Telegram `file_id`, which stays valid for a limited window after
+the message arrives; a successful retry restores the message into `d2
+tg.history`/`d2 tg.unread` the same way a first-time success does, not
+just deleting the queue row. A retry against a permanently-gone
+`file_id` (Telegram's own "file is no longer available"/"wrong
+file_id" shapes) gets a distinguishable `RETRY EXPIRED` message - a
+Codex review caught an earlier draft also treating "file is temporarily
+unavailable" as permanent, when that wording describes a real
+transient condition that can still succeed later. The same review
+caught the queue itself needed a `(chat_id, message_id)` uniqueness
+constraint, since Telegram's at-least-once delivery could otherwise
+insert a duplicate row for the same failed media on redelivery.
+`d2 tg.poller` now warns on
 stderr if it detects another live process whose command line looks like
 a poller instance, right after acquiring its own lock (TGT-113, a
 live-experienced incident: a poller crashed mid-restart and left an

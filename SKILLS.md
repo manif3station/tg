@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.83).** This file is a procedure to
+**Status: early implementation (v0.84).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -37,7 +37,13 @@ crashed mid-restart, left an orphaned second instance running under a
 different PID, and nothing noticed it was still competing for the same
 bot token's `getUpdates` queue. This is a report, not a kill - a cmdline
 pattern match alone isn't strong enough evidence for this skill to act
-on unprompted.
+on unprompted. A failed inbound photo/document download is now queued
+for retry (TGT-104) instead of just printed and forgotten - `d2
+tg.retry-download` lists and retries it later using the same Telegram
+`file_id`, which stays valid for a limited window after the message
+arrives; a retry against a permanently-gone `file_id` gets a
+distinguishable `RETRY EXPIRED` message rather than the same generic
+failure text an ordinary, still-retryable failure gets.
 
 ## 2. Prep before install
 
