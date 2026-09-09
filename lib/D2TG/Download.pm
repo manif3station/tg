@@ -7,6 +7,8 @@ use File::Temp qw(tempfile);
 use File::Spec;
 use Digest::SHA qw(sha256_hex);
 
+use constant DEFAULT_HARD_TIMEOUT => 50;
+
 sub download_file {
     my ( $telegram, $file_id, %args ) = @_;
 
@@ -14,10 +16,11 @@ sub download_file {
     die "D2TG::Download::download_file: no file_path returned for $file_id\n"
       unless defined $file_path;
 
-    my $ua  = $args{ua} || LWP::UserAgent->new;
+    my $ua  = $args{ua} || LWP::UserAgent->new( timeout => DEFAULT_HARD_TIMEOUT );
     my $url = $telegram->file_download_url($file_path);
 
-    my $res = $ua->get($url);
+    my $timeout = $args{timeout} || eval { $ua->timeout } || DEFAULT_HARD_TIMEOUT;
+    my $res = _with_hard_timeout( $timeout, sub { $ua->get($url) } );
     die "D2TG::Download::download_file: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
       unless $res->is_success;
 
@@ -45,6 +48,21 @@ sub download_file {
     close $fh;
 
     return $local_path;
+}
+
+sub _with_hard_timeout {
+    my ( $seconds, $coderef ) = @_;
+    my $result;
+    eval {
+        local $SIG{ALRM} = sub { die "D2TG::Download::download_file: request timed out after ${seconds}s\n" };
+        alarm($seconds);
+        $result = $coderef->();
+        alarm(0);
+    };
+    my $error = $@;
+    alarm(0);
+    die $error if $error;
+    return $result;
 }
 
 sub _atomic_write {
@@ -150,12 +168,22 @@ preserving the original file extension.
 
 =head1 FUNCTIONS
 
-=head2 download_file($telegram, $file_id, ua => $optional_client, dir => $optional_dir)
+=head2 download_file($telegram, $file_id, ua => $optional_client, dir => $optional_dir, timeout => $optional_seconds)
 
 Returns the local path to the downloaded file. Dies if C<get_file>
 returns no C<file_path>, or if the download request fails. C<ua> is
-optional and defaults to L<LWP::UserAgent> (TGT-028); tests inject a
+optional and defaults to L<LWP::UserAgent> with an explicit
+C<timeout =E<gt> DEFAULT_HARD_TIMEOUT> (TGT-028, TGT-126); tests inject a
 fake here instead.
+
+The underlying HTTP GET (TGT-126, same failure class as
+L<D2TG::Telegram>'s own TGT-044 incident) is wrapped in L</_with_hard_timeout>
+so a connection stuck in TCP C<connect()> - which a plain C<LWP::UserAgent>
+C<timeout> does not reliably bound - still dies with a clear timeout
+message instead of hanging the poll cycle indefinitely. C<timeout> is
+optional and overrides the bound used for this call only (mainly for
+tests); otherwise it's the injected/default C<ua>'s own C<timeout>, or
+C<DEFAULT_HARD_TIMEOUT> if that can't be read.
 
 C<dir> (TGT-051, typically C<D2TG::Config::attachments_dir>'s result) is
 optional. When given, the file is named by its own content's SHA256
@@ -180,6 +208,17 @@ crash during a direct C<open/print/close> to that path used to leave
 exactly that: a truncated file whose real content no longer matched
 its own filename's claimed hash, silently trusted forever after since
 the dedup check only tests C<-e>, never re-hashes.
+
+=head2 _with_hard_timeout($seconds, \&coderef)
+
+TGT-126: runs C<&coderef> under an C<alarm()>/C<SIGALRM>-based hard
+timeout, matching L<D2TG::Telegram>'s own C<_with_hard_timeout> pattern
+exactly - C<alarm()> reliably interrupts any blocking syscall, including
+a stuck C<connect()>, regardless of which phase it's stuck in, unlike
+C<LWP::UserAgent>'s own C<timeout>. Dies with
+C<"D2TG::Download::download_file: request timed out after ${seconds}s">
+if the alarm fires; always clears the alarm before returning or
+re-dying, on both the success and timeout paths.
 
 =head2 _atomic_write($path, $content, after_write => \&coderef)
 

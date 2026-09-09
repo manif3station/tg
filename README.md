@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v0.97).** `d2 tg.send`'s outbound photo/
+**Status: early implementation (v0.98).** `D2TG::Download::download_file`'s
+HTTP GET (fetches inbound photo/document/voice bytes) is now protected
+by the same SIGALRM-based hard timeout `D2TG::Telegram`'s Bot API calls
+already use (TGT-126, found via an ad-hoc bug-hunt - the same failure
+class as a real prior incident, TGT-044, where a connection stuck in
+TCP `connect()` wedged the poller indefinitely, immune even to
+`SIGTERM`) - a hung download now dies with a clear timeout message
+instead of blocking the whole poll cycle forever. `d2 tg.send`'s outbound photo/
 document uploads now escape and sanitize the local filename before
 inserting it into the multipart request Telegram receives (TGT-125,
 found via a scheduled bug-hunt) - a literal double-quote previously

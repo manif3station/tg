@@ -1385,3 +1385,18 @@ Revision history for the tg skill
         control characters and DEL entirely first - the file still
         sends correctly with a sanitized displayed filename, rather
         than refusing the whole send.
+
+0.98  2026-09-09
+      - D2TG::Download::download_file (TGT-126, found via an ad-hoc
+        bug-hunt): the HTTP GET that fetches inbound photo/document/
+        voice file bytes had no explicit LWP timeout and no SIGALRM-
+        based hard-timeout wrapper - the same failure class already
+        fixed once in D2TG::Telegram (TGT-035, TGT-044), where LWP's
+        own 180s default proved unreliable for a request stuck in the
+        initial TCP connect() phase and could wedge the poller
+        indefinitely, immune even to SIGTERM. download_file's
+        LWP::UserAgent now defaults to an explicit timeout, and the
+        get() call itself is wrapped in a new _with_hard_timeout
+        helper (matching D2TG::Telegram::_with_hard_timeout's own
+        SIGALRM pattern) so a hung download dies with a clear timeout
+        message instead of hanging the poll cycle forever.

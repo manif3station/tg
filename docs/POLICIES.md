@@ -641,6 +641,18 @@ production `ua`'s own timeout and the SIGALRM fallback derive from the
 exact same constant, so the two values can never silently drift apart
 again the way a bare `timeout => 35` literal once could.
 
+A fourth, related gap (TGT-126, found via an ad-hoc bug-hunt rather than
+a live incident) was closed proactively before it repeated: the same
+stuck-`connect()` failure mode TGT-044 fixed on `D2TG::Telegram`'s Bot
+API calls was never applied to `D2TG::Download::download_file`'s own
+separate HTTP GET, which fetches inbound photo/document/voice file
+bytes - arguably the higher-risk call, since it transfers full file
+content rather than a small JSON payload, and `D2TG::Poller`'s own
+`eval`-based `_run_non_fatal` catches a `die`, not a hang. `download_file`
+now sets an explicit `LWP::UserAgent` timeout and wraps its `get()` call
+in a private `_with_hard_timeout` helper, matching
+`D2TG::Telegram::_with_hard_timeout`'s exact SIGALRM pattern.
+
 ## The startup line confirms which credentials actually loaded, without exposing them
 
 Live request (TGT-045, raised while diagnosing TGT-044's incident): the
