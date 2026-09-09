@@ -620,6 +620,28 @@ pruning as the likely cause specifically, rather than a generic
 "cannot open" message. Redirect stdout to save the file:
 `d2 tg.attachment 398296603 130 > photo.jpg`.
 
+**Worked example** (TGT-136): a poll cycle reporting one photo message
+prints something like this on stdout -
+
+```
+[2026-09-09 07:44:47] NEW TG MEDIA [398296603] Michael: photo (msg #130)
+GET ATTACHMENT WITH: d2 tg.attachment 398296603 130
+REPLY WITH: d2 tg.reply 398296603 "..." --reply-to-message-id 130
+```
+
+- The `NEW TG MEDIA` line announces the message - chat id, sender, kind,
+  and message id - but never the file's real path.
+- The `GET ATTACHMENT WITH` line names the exact `chat_id`/`message_id`
+  to use - run it with a redirect appended (never bare, which dumps raw
+  bytes to the terminal): `d2 tg.attachment 398296603 130 > photo.jpg`.
+- The `REPLY WITH` line (unrelated to the attachment) is the usual
+  reply-command template, printed after every content line as always.
+
+A poll cycle reporting several media messages at once prints this same
+three-line block once per message, each with its own `message_id` - a
+photo and a document arriving together produce two independent
+`GET ATTACHMENT WITH` lines, never one combined or ambiguous one.
+
 ## `d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]`
 
 TGT-104 (user-supplied feature-gap analysis): `d2 tg.poller` now

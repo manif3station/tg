@@ -1530,3 +1530,13 @@ Revision history for the tg skill
         walkthrough mentioned it, so a reader skimming just the
         overview had an incomplete picture of how downloaded media
         actually works.
+
+1.08  2026-09-09
+      - docs/commands.md (TGT-136, self-review while completing
+        TGT-135's pending-push gate): added a worked example to the
+        d2 tg.attachment section showing the full three-line stdout
+        sequence a photo/document message actually produces (NEW TG
+        MEDIA, GET ATTACHMENT WITH, REPLY WITH), and noting that
+        multiple media messages in one poll cycle each get their own
+        independent GET ATTACHMENT WITH line. Previously this flow was
+        only described in separate prose across two sections.

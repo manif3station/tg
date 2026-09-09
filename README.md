@@ -1,6 +1,8 @@
 # tg
 
-**Status: early implementation (v1.07).** SKILLS.md's onboarding
+**Status: early implementation (v1.08).** docs/commands.md now has a
+worked example of the NEW TG MEDIA + GET ATTACHMENT WITH flow (TGT-136)
+instead of only separate prose. SKILLS.md's onboarding
 overview now names `d2 tg.attachment` explicitly (TGT-135) - previously
 only the later step-by-step walkthrough mentioned it. `d2 tg.attachment`'s refusal
 for a missing stored file now names `prune_vault`'s own byte-cap
