@@ -103,6 +103,12 @@ status - report whether the poller is currently running, dispatched as C<d2 tg.s
 
 =head1 DESCRIPTION
 
+C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> (TGT-124,
+found via a scheduled improvement-hunt fixing a hand-rolled duplicate
+loop), the same shared helper every other C<d2 tg.*> command uses -
+this command accepts no other flags, so the fix is a behavior-preserving
+consistency cleanup, not a change in what invocations it accepts.
+
 TGT-111 (user-supplied feature-gap analysis): the only way to know the
 poller is actually alive used to be reaching into Tira job metadata
 (C<pid>/C<last_output_at>) from outside this skill entirely. This

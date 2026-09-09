@@ -434,8 +434,14 @@ document (downloadable) is decided by its extension - `.jpg`/`.jpeg`/
 else as a document. No content sniffing - Telegram accepts any file type
 via `sendDocument` regardless of what it actually contains.
 
-`--db`/`-d` and `--bot` match `d2 tg.reply`'s own leading-position shape
-and validation. `--caption <text>` is optional free text attached to the
+`--db`/`-d` is recognized anywhere in the argument list (TGT-124, found
+via a scheduled improvement-hunt) - it used to be hand-parsed in a loop
+that stopped at the first non-flag token, so `d2 tg.send <chat_id>
+<file> --db myalias` refused with a bogus Usage error instead of
+resolving `--db` from its trailing position; now matches every other
+`d2 tg.*` command's own `D2TG::Config::extract_db_flag` behavior.
+`--bot` still matches `d2 tg.reply`'s own leading-position shape and
+validation. `--caption <text>` is optional free text attached to the
 sent photo/document. `--reply-to-message-id <id>` (numeric) threads the
 send under an existing Telegram message, same as `d2 tg.reply`'s own
 flag - but recognized in leading position here (unlike `d2 tg.reply`'s
@@ -493,6 +499,12 @@ use of it at all - purely a thin wrapper via the new
 
 ## `d2 tg.whoami [--db <alias> | -d <alias>]`
 
+`--db`/`-d` uses the same shared `D2TG::Config::extract_db_flag` every
+other `d2 tg.*` command does (TGT-124, found via a scheduled
+improvement-hunt fixing a hand-rolled duplicate) - since this command
+accepts no other flags, this is a behavior-preserving consistency fix,
+not a change in what invocations it accepts.
+
 TGT-115 (user-supplied feature-gap analysis): with several projects on
 one host each running their own installed copy of this skill under
 different Developer Dashboard path aliases, there was no cheap way to
@@ -519,6 +531,12 @@ output ends up (shell scrollback, captured logs) applies as with any
 other `d2 tg.*` command.
 
 ## `d2 tg.status [--db <alias> | -d <alias>]`
+
+`--db`/`-d` uses the same shared `D2TG::Config::extract_db_flag` every
+other `d2 tg.*` command does (TGT-124, found via a scheduled
+improvement-hunt fixing a hand-rolled duplicate) - since this command
+accepts no other flags, this is a behavior-preserving consistency fix,
+not a change in what invocations it accepts.
 
 TGT-111 (user-supplied feature-gap analysis): reports the installed
 version and whether the poller is currently alive, without reaching into

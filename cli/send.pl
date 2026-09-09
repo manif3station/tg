@@ -153,12 +153,19 @@ C<.png>/C<.gif>/C<.webp> (case-insensitive) send as a photo; everything
 else sends as a document. No content sniffing - Telegram itself accepts
 any file type via C<sendDocument> regardless.
 
-C<--db>/C<-d>, C<--bot>, C<--caption>, and C<--reply-to-message-id> may
-appear in any order before C<chat_id>/C<file_path>. C<--caption> is
+C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> and may
+appear anywhere in the argument list, not just before the other flags/
+positionals (TGT-124, found via a scheduled improvement-hunt: the
+previous hand-rolled loop stopped at the first non-flag token, so
+C<d2 tg.send E<lt>chat_idE<gt> E<lt>fileE<gt> --db myalias> refused with
+a bogus Usage error instead of resolving C<--db> from its trailing
+position - now matches every other C<d2 tg.*> command's own behavior).
+C<--bot>, C<--caption>, and C<--reply-to-message-id> may still appear in
+any order before C<chat_id>/C<file_path> (unchanged). C<--caption> is
 optional free text attached to the sent photo/document.
 C<--reply-to-message-id> (numeric) threads the send under an existing
-Telegram message, matching C<d2 tg.reply>'s own flag. C<--db>/C<-d>/
-C<--bot> match C<d2 tg.reply>'s own leading-flag shape and validation
+Telegram message, matching C<d2 tg.reply>'s own flag. C<--bot> matches
+C<d2 tg.reply>'s own leading-flag shape and validation
 (L<D2TG::Config/shift_flag_value>). Any argument left over after
 C<chat_id>/C<file_path> refuses with C<Usage> (exit 2) rather than being
 silently dropped (a real gap caught by Codex review before shipping -

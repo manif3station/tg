@@ -1346,3 +1346,23 @@ Revision history for the tg skill
         inside it instead of failing) and didn't clean up a partial/
         corrupt destination file left by a failed cross-filesystem
         move - both fixed.
+
+0.96  2026-09-09
+      - cli/status.pl, cli/whoami.pl, cli/send.pl (TGT-124, found via a
+        scheduled improvement-hunt): switched from a hand-rolled --db/-d
+        parsing loop to the shared D2TG::Config::extract_db_flag, matching
+        the other 7 cli/*.pl scripts. extract_db_flag scans the entire
+        argument list, so --db/-d can appear anywhere; the hand-rolled
+        loops stopped at the first non---db/-d token. Real, user-facing
+        behavior divergence for cli/send.pl (the only one of the 3 that
+        also accepts other flags/positionals --db could legitimately
+        follow) - 'd2 tg.send <chat_id> <file> --db myalias' previously
+        refused with a bogus Usage error instead of resolving --db from
+        its trailing position. status.pl/whoami.pl accept no other
+        flags, so this is a behavior-preserving consistency fix for
+        them.
+      - A Codex review found the tests only covered --db (not -d) and
+        only proved --db was removed from argv, not that the alias
+        value itself was genuinely resolved - strengthened with both
+        flag spellings and an unregistered-alias case whose error names
+        the exact bogus value end-to-end.

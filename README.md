@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.95).** New `d2 tg.tts [--out <path>]
+**Status: early implementation (v0.96).** `d2 tg.status`, `d2
+tg.whoami`, and `d2 tg.send` now recognize `--db`/`-d` anywhere in
+their arguments (TGT-124, found via a scheduled improvement hunt),
+matching every other `d2 tg.*` command - `d2 tg.send <chat_id> <file>
+--db myalias` previously refused with a bogus Usage error because
+`--db` had to come before `chat_id`/`file_path`. New `d2 tg.tts [--out <path>]
 <text...>` command (TGT-106, user-supplied feature-gap analysis)
 synthesizes text to a local audio file with no Telegram interaction at
 all - the underlying `D2TG::TTS::synthesize` was previously only

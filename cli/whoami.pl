@@ -59,6 +59,12 @@ whoami - report which token/chat/storage a d2 tg.* invocation is actually config
 
 =head1 DESCRIPTION
 
+C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> (TGT-124,
+found via a scheduled improvement-hunt fixing a hand-rolled duplicate
+loop), the same shared helper every other C<d2 tg.*> command uses -
+this command accepts no other flags, so the fix is a behavior-preserving
+consistency cleanup, not a change in what invocations it accepts.
+
 TGT-115 (user-supplied feature-gap analysis): with several projects on
 this host each running their own installed copy of this skill under
 different Developer Dashboard path aliases, there was no cheap way to
