@@ -35,14 +35,29 @@ sub get_message {
 }
 
 sub record_failed_download {
-    my ( $self, $chat_id, $message_id, $file_id, $error ) = @_;
+    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
+
+    my ($existing) = grep { $_->{chat_id} == $chat_id && $_->{message_id} == $message_id }
+      @{ $self->{failed_downloads} || [] };
+
+    if ($existing) {
+        @{$existing}{qw(file_id sender media_kind caption_note error)} =
+          ( $file_id, @args{qw(sender media_kind caption_note error)} );
+        return $existing->{id};
+    }
+
+    my $id = ++$self->{_next_failed_download_id};
     push @{ $self->{failed_downloads} }, {
-        chat_id    => $chat_id,
-        message_id => $message_id,
-        file_id    => $file_id,
-        error      => $error,
+        id           => $id,
+        chat_id      => $chat_id,
+        message_id   => $message_id,
+        file_id      => $file_id,
+        sender       => $args{sender},
+        media_kind   => $args{media_kind},
+        caption_note => $args{caption_note},
+        error        => $args{error},
     };
-    return scalar @{ $self->{failed_downloads} };
+    return $id;
 }
 
 sub failed_downloads {
@@ -76,7 +91,8 @@ C<chat_id>+C<message_id>.
 
 C<record_failed_download>/C<failed_downloads> (TGT-104) are simple
 in-memory mirrors of L<D2TG::Store>'s same-named methods - an ordered
-array of hashrefs rather than a real table, since no test needs to
-remove/query them individually.
+array of hashrefs rather than a real table, but mirroring the real
+table's C<(chat_id, message_id)> upsert behavior (a second call for the
+same pair refreshes the existing entry instead of duplicating it).
 
 =cut

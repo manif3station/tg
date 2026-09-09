@@ -136,9 +136,34 @@ sub run_once {
                     # transfer) used to be reported once and forgotten -
                     # no way to retry it later, even though Telegram's
                     # own file_id stays valid for a limited window after
-                    # the message arrives. Persist enough to retry:
-                    # which message, which file_id, and why it failed.
-                    $store->record_failed_download( $chat_id, $message_id, $file_id, $result_or_error );
+                    # the message arrives. Persist enough to retry AND
+                    # to fully restore the message into history on a
+                    # successful retry later (sender/media_kind/
+                    # caption_note, the same pieces record_message's own
+                    # success-path summary is built from above).
+                    #
+                    # Wrapped in eval (Codex review finding): this queue
+                    # write is itself non-fatal, exactly like the
+                    # download failure it's recording - a locked/full
+                    # SQLite database must not turn an already-reported,
+                    # already-non-fatal media error into a poll-cycle
+                    # failure that could cause this same update to be
+                    # redelivered.
+                    eval {
+                        $store->record_failed_download(
+                            $chat_id, $message_id, $file_id,
+                            sender       => $sender,
+                            media_kind   => $media_kind,
+                            caption_note => $caption_note,
+                            error        => $result_or_error,
+                        );
+                    };
+                    if ($@) {
+                        my $queue_error = $@;
+                        $queue_error =~ s/\n\z//;
+                        print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: "
+                          . "failed to queue for retry too: $queue_error\n";
+                    }
                 }
             }
         }

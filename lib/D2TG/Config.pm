@@ -294,8 +294,15 @@ sub is_transient_error {
 sub is_expired_file_error {
     my ($error) = @_;
 
+    # Codex review finding: Telegram's own "file is temporarily
+    # unavailable" wording describes a condition that CAN still succeed
+    # on a later retry (a real transient server-side hiccup, the same
+    # shape as any other getFile failure) - it must not be presented to
+    # an operator as permanently unrecoverable. Only "no longer
+    # available" and "wrong file_id" are Telegram's genuinely-permanent
+    # shapes (an expired or invalid file_id can never resolve).
     return 0 unless defined $error;
-    return 1 if $error =~ /file is (?:no longer available|temporarily unavailable)/i;
+    return 1 if $error =~ /file is no longer available/i;
     return 1 if $error =~ /wrong file_id/i;
     return 0;
 }
@@ -654,13 +661,20 @@ a single bot/chat pair's own poll cycle can legitimately take.
 =head2 is_expired_file_error($error)
 
 Returns true if C<$error> looks like Telegram's own shape for a
-C<getFile> call against a file_id whose retention window has passed -
-matches C</file is (no longer available|temporarily unavailable)/i> or
-C</wrong file_id/i>, the description text L<D2TG::Telegram>'s C<_call>
-forwards verbatim from a failed Bot API response - false otherwise
-(TGT-104). C<cli/retry-download.pl> uses this to give a retry against an
-expired handle a specific, actionable message instead of the same
-generic download-failure text a fresh, still-recoverable failure gets.
+C<getFile> call against a file_id that can never resolve - matches
+C</file is no longer available/i> or C</wrong file_id/i>, the
+description text L<D2TG::Telegram>'s C<_call> forwards verbatim from a
+failed Bot API response - false otherwise (TGT-104). C<cli/retry-download.pl>
+uses this to give a retry against a permanently-gone handle a specific,
+actionable message instead of the same generic download-failure text a
+fresh, still-recoverable failure gets.
+
+Deliberately does NOT match C<"file is temporarily unavailable"> (a
+Codex review caught an earlier draft treating it as permanent) - that
+wording describes a real transient condition that can still succeed on
+a later retry, the same shape as any other C<getFile> failure; labeling
+it unrecoverable would tell an operator to give up on something that
+might well work again.
 
 =head2 is_transient_error($error)
 

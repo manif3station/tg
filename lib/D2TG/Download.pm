@@ -80,6 +80,31 @@ sub _atomic_write {
     return;
 }
 
+sub retry_failed_download {
+    my ( $telegram, $store, $row, $dir, %args ) = @_;
+
+    my $local_path = eval { download_file( $telegram, $row->{file_id}, dir => $dir, ua => $args{ua} ) };
+
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        return ( 0, $error );
+    }
+
+    # TGT-104, Codex review finding: a retry success used to only
+    # remove the queue row, leaving nothing in D2TG::Store's own
+    # message history the way a first-time success already gets via
+    # D2TG::Poller's own record_message call - restore it the same way.
+    if ( defined $row->{media_kind} ) {
+        my $summary = "$row->{media_kind} $local_path" . ( $row->{caption_note} // '' );
+        $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary );
+    }
+
+    $store->remove_failed_download( $row->{id} );
+
+    return ( 1, $local_path );
+}
+
 sub prune_vault {
     my ( $dir, %args ) = @_;
     my $max_bytes = $args{max_bytes} // 100 * 1024 * 1024;
@@ -167,6 +192,23 @@ fully written and closed but before the rename - it exists so a test
 can deterministically synchronize a real process kill to land exactly
 between those two steps, instead of racing wall-clock timing against a
 production write that has no such hook.
+
+=head2 retry_failed_download($telegram, $store, $row, $dir, ua => $optional_client)
+
+TGT-104: retries one L<D2TG::Store/failed_downloads> row - C<$row> is
+one of the hashrefs that method returns (C<id>, C<chat_id>,
+C<message_id>, C<file_id>, C<sender>, C<media_kind>, C<caption_note>,
+C<error>). Returns C<(1, $local_path)> on success or C<(0, $error)> on
+failure, mirroring L<D2TG::Poller>'s own C<_run_non_fatal> return shape.
+
+On success, restores the message into C<$store>'s own history via
+C<record_message> when C<$row> carries a C<media_kind> (the same
+summary shape a first-time download success already builds), then
+removes the row via C<remove_failed_download> - in that order, so a
+crash between the two would at worst leave a harmless, already-restored
+row still in the queue rather than a message nowhere at all. On failure,
+the row is left untouched - never removed - so the caller (typically
+C<cli/retry-download.pl>) can retry again later.
 
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 

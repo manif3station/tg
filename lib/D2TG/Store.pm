@@ -72,16 +72,33 @@ sub _ensure_schema {
     # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
     # to retry it later, even though Telegram's own file_id stays valid
     # for a limited window after the message arrives. This table
-    # persists exactly what's needed to retry: which message, which
-    # Telegram file_id, and why it failed the first time.
+    # persists what's needed to retry (which message, which Telegram
+    # file_id, why it failed) AND what's needed to fully restore the
+    # message into history on a successful retry (sender, media_kind,
+    # caption_note) - a Codex review caught that a retry success
+    # originally only removed the queue row, leaving nothing in
+    # D2TG::Store's own messages table the way a first-time success
+    # already does via record_message.
+    #
+    # UNIQUE(chat_id, message_id): Telegram's own delivery is
+    # at-least-once - if the poller crashes after recording a failure
+    # but before its offset advances, the identical update is
+    # reprocessed and would otherwise insert a duplicate queue row for
+    # the same failed media (another Codex review finding). A single
+    # INSERT ... ON CONFLICT DO UPDATE (record_failed_download below)
+    # collapses redelivery into refreshing the existing row instead.
     $self->{dbh}->do(
         'CREATE TABLE IF NOT EXISTS failed_downloads (
-             id         INTEGER PRIMARY KEY AUTOINCREMENT,
-             chat_id    INTEGER NOT NULL,
-             message_id INTEGER NOT NULL,
-             file_id    TEXT NOT NULL,
-             error      TEXT,
-             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+             id           INTEGER PRIMARY KEY AUTOINCREMENT,
+             chat_id      INTEGER NOT NULL,
+             message_id   INTEGER NOT NULL,
+             file_id      TEXT NOT NULL,
+             sender       TEXT,
+             media_kind   TEXT,
+             caption_note TEXT,
+             error        TEXT,
+             created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             UNIQUE (chat_id, message_id)
          )'
     );
 
@@ -340,21 +357,40 @@ sub messages_in_range {
 }
 
 sub record_failed_download {
-    my ( $self, $chat_id, $message_id, $file_id, $error ) = @_;
+    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
 
+    my ( $sender, $media_kind, $caption_note, $error ) =
+      @args{qw(sender media_kind caption_note error)};
+
+    # ON CONFLICT (chat_id, message_id): Telegram's at-least-once
+    # delivery can reprocess the same update (e.g. the poller crashes
+    # after this call but before its offset advances) - refresh the
+    # existing row's file_id/error/timestamp instead of inserting a
+    # second queue entry for the same failed media.
     $self->{dbh}->do(
-        'INSERT INTO failed_downloads (chat_id, message_id, file_id, error) VALUES (?, ?, ?, ?)',
-        undef, $chat_id, $message_id, $file_id, $error,
+        'INSERT INTO failed_downloads (chat_id, message_id, file_id, sender, media_kind, caption_note, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chat_id, message_id) DO UPDATE SET
+             file_id = excluded.file_id, sender = excluded.sender,
+             media_kind = excluded.media_kind, caption_note = excluded.caption_note,
+             error = excluded.error, created_at = CURRENT_TIMESTAMP',
+        undef, $chat_id, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
     );
 
-    return $self->{dbh}->last_insert_id( '', '', 'failed_downloads', '' );
+    my $row = $self->{dbh}->selectrow_hashref(
+        'SELECT id FROM failed_downloads WHERE chat_id = ? AND message_id = ?',
+        undef, $chat_id, $message_id,
+    );
+
+    return $row->{id};
 }
 
 sub failed_downloads {
     my ($self) = @_;
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, message_id, file_id, error, created_at FROM failed_downloads ORDER BY created_at',
+        'SELECT id, chat_id, message_id, file_id, sender, media_kind, caption_note, error, created_at
+         FROM failed_downloads ORDER BY id',
         { Slice => {} }
     );
 }
