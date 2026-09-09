@@ -676,6 +676,21 @@ a real race a Codex review caught: without it, a timeout firing before
 the child's own `setpgrp` call would target a process group that does
 not exist yet, silently killing nothing.
 
+A sixth gap in the same family (TGT-128, found via a further ad-hoc
+bug-hunt immediately after TGT-127) landed one EPIC over, in
+`D2TG::Transcribe::_run`'s own already-existing hard timeout (TGT-031):
+it correctly bounded and killed the immediate `whisper` process, but
+never put it in its own process group, so any child process `whisper`
+itself spawned (Whisper CLIs commonly shell out to `ffmpeg`/`ffprobe`-
+family tooling for audio decoding, and this same module's own
+`_probe_duration` already depends on `ffprobe`) was left running/
+orphaned after the timeout kill - the exact gap TGT-127 had just closed
+in `D2TG::TTS::_run`. `_run` now applies the identical fix: `setpgrp`
+called by both the child and the parent immediately after `fork`
+(closing the same race TGT-127's own Codex review caught), and both the
+`TERM` and `KILL` timeout steps now signal the whole process group
+(`-$pid`) plus the direct pid as a fallback.
+
 ## The startup line confirms which credentials actually loaded, without exposing them
 
 Live request (TGT-045, raised while diagnosing TGT-044's incident): the

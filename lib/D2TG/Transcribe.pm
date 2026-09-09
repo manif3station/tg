@@ -114,10 +114,26 @@ sub _run {
     die "D2TG::Transcribe::_run: fork failed: $!\n" unless defined $pid;
 
     if ( $pid == 0 ) {
+        # TGT-128: its own process group, so a timeout can terminate the
+        # whole tree (whisper commonly shells out to ffmpeg/ffprobe-family
+        # tooling for audio decoding - this same module's own
+        # _probe_duration already depends on ffprobe) with one signal to
+        # -$pid, not just this immediate child.
+        setpgrp( 0, 0 );
         open( STDOUT, '>', File::Spec->devnull ) or POSIX::_exit(127);
         open( STDERR, '>', File::Spec->devnull ) or POSIX::_exit(127);
         exec(@cmd) or POSIX::_exit(127);
     }
+
+    # A Codex review finding on the sibling D2TG::TTS::_run fix (TGT-127):
+    # without the parent ALSO calling setpgrp on the child immediately
+    # after fork, there is a race - a timeout firing before the child's
+    # own setpgrp(0,0) above would target a process group that does not
+    # exist yet. Calling it here too, redundantly (whichever process wins
+    # the race sets it first, harmlessly), closes that race regardless of
+    # scheduling order. eval-guarded since it can legitimately fail (e.g.
+    # the child already exited).
+    eval { setpgrp( $pid, $pid ) };
 
     local $CURRENT_PID = $pid;
     my $deadline = time() + $TIMEOUT;
@@ -129,9 +145,28 @@ sub _run {
         }
 
         if ( time() >= $deadline ) {
+            # TGT-128: signal the whole process group, not just $pid, so
+            # any child whisper itself spawned is terminated too - plus
+            # the direct pid as a fallback (a Codex review finding on the
+            # sibling TTS fix: a signal delivered straight to a pid can't
+            # be missed by a process-group mismatch the way -$pid
+            # targeting can, if setpgrp somehow never took effect on
+            # either end).
+            kill( 'TERM', -$pid );
             kill( 'TERM', $pid );
             sleep(1);
-            kill( 'KILL', $pid ) if waitpid( $pid, WNOHANG ) != $pid;
+
+            # A further Codex review finding: gating the KILL escalation
+            # on whether the group LEADER ($pid) itself was reaped missed
+            # the case where the leader exits cleanly on TERM but a
+            # descendant it spawned ignores TERM and survives - that
+            # descendant would never receive a KILL at all. Always
+            # escalate to KILL, unconditionally, for both the group and
+            # the direct pid - sending KILL to an already-dead group/pid
+            # is a harmless no-op (ESRCH), so this can never do anything
+            # wrong, only ever close a real remaining gap.
+            kill( 'KILL', -$pid );
+            kill( 'KILL', $pid );
             waitpid( $pid, 0 );
             die "D2TG::Transcribe::_run: command timed out after ${TIMEOUT}s and was killed\n";
         }
@@ -240,10 +275,27 @@ handler) gets a chance to run promptly rather than being deferred until
 the child exits (TGT-031: this was the root cause of the poller
 appearing unresponsive to Ctrl+C while transcribing). If C<@cmd> has not
 exited by C<$TIMEOUT> seconds (package variable, default 300, settable
-per-call via C<local>), it is sent C<TERM>, given one second to exit,
-then C<KILL>ed if still alive - C<_run> then dies with a
-timeout-specific message rather than returning. On normal exit, returns
-the command's exit status as before.
+per-call via C<local>), the whole process group is sent C<TERM>
+(TGT-128, same failure class as TGT-035/044/126/127: C<whisper>
+commonly shells out to C<ffmpeg>/C<ffprobe>-family tooling for audio
+decoding, and killing only the immediate pid left any such child
+running/orphaned), given one second to exit, then C<KILL>ed the same
+way if still alive - C<_run> then dies with a timeout-specific message
+rather than returning. On normal exit, returns the command's exit
+status as before.
+
+Both the child (C<setpgrp(0, 0)>) and the parent
+(C<eval { setpgrp($pid, $pid) }>) set the child's process group
+immediately after C<fork> - deliberately redundant, closing a race the
+sibling L<D2TG::TTS>C</_run> fix's own Codex review caught: without the
+parent's own call too, a timeout firing before the child's C<setpgrp>
+call would target a process group that does not exist yet, and C<kill>
+would silently do nothing. Both the group kill (C<-$pid>) and a direct
+kill on the known pid (C<$pid>) are sent on both the C<TERM> and C<KILL>
+steps - the direct kill is a fallback in case process-group targeting
+somehow misses the child. Accepted, documented limitation (matching the
+sibling fix): a grandchild that deliberately detaches into its own new
+process group/session would not be reached by this kill.
 
 Before C<exec>, the child reopens its own C<STDOUT>/C<STDERR> onto
 C<File::Spec-E<gt>devnull> (TGT-030: C<whisper>'s own console chatter -

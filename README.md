@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v0.99).** `D2TG::TTS::_run`'s gtts-cli/
+**Status: early implementation (v1.00).** `D2TG::Transcribe::_run`'s
+whisper subprocess now has the same process-group protection (TGT-128,
+found via an ad-hoc bug-hunt immediately after TGT-127) - a timeout
+signals the whole process group, not just the immediate whisper
+process, so any child process whisper itself spawns (e.g. for audio
+decoding) is terminated too, not left orphaned. `D2TG::TTS::_run`'s gtts-cli/
 ffmpeg calls (used by every outbound voice reply) are now protected by a
 SIGALRM hard timeout too (TGT-127, found via an ad-hoc bug-hunt
 immediately after TGT-126) - a hung external command now dies with a

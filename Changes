@@ -1418,3 +1418,17 @@ Revision history for the tg skill
         of blocking forever. synthesize()'s two call sites also now
         clean up their temp files on a thrown die, not just a non-zero
         exit status.
+
+1.00  2026-09-09
+      - D2TG::Transcribe::_run (TGT-128, found via an ad-hoc bug-hunt
+        immediately after TGT-127): whisper's subprocess had no
+        process-group protection - on a timeout, only the immediate
+        whisper process was signalled, leaving any child processes
+        whisper itself spawned (whisper CLIs commonly shell out to
+        ffmpeg/ffprobe-family tooling for audio decoding, and this same
+        module's own _probe_duration already depends on ffprobe)
+        running/orphaned. _run now puts the child in its own process
+        group (both parent and child call setpgrp immediately after
+        fork, closing a race the sibling D2TG::TTS fix's own review
+        caught) and signals the whole process group - plus the direct
+        pid as a fallback - on both the TERM and KILL timeout steps.
