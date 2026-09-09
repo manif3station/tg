@@ -89,6 +89,28 @@ CHANGES
     );
 }
 
+# Codex review finding (round 2): the boundary must require the full
+# header shape (version + whitespace + ISO date + end of line), not
+# just "digits, dot, digits, whitespace" - a stray prose line like
+# "1.2 notes on something" inside a still-valid entry must not be
+# mistaken for the next version header either.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+0.08  2026-09-08
+      - First bullet (TGT-008): still fine.
+      - 1.2 notes on something unrelated, not a real header.
+      - A second real bullet, still part of 0.08's own entry.
+CHANGES
+
+    is(
+        D2TG::Config::changes_summary( version => '0.08', default_root => $skill_root ),
+        'First bullet (TGT-008): still fine.',
+        'a bullet line merely starting with digits/dot/digits/whitespace is not mistaken for a version header'
+    );
+}
+
 # No entry for the requested version at all.
 {
     my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
