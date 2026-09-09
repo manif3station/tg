@@ -1328,3 +1328,21 @@ Revision history for the tg skill
         entrypoints, stale since 5 later tickets added send.pl/
         status.pl/retry-download.pl/text-only-replies.pl/whoami.pl - now
         lists all 11.
+
+0.95  2026-09-09
+      - New d2 tg.tts command (TGT-106, user-supplied feature-gap
+        analysis): the old ~/skills/tg blueprint exposed
+        text-to-speech as its own callable step; this skill's
+        D2TG::TTS::synthesize was only ever reachable from inside
+        D2TG::Reply::send_reply. cli/tts.pl (d2 tg.tts [--out <path>]
+        <text...>) exposes it directly - no Telegram interaction at
+        all, useful for anything needing a spoken audio file (e.g.
+        attaching a voice note to a tira.question.ask card question).
+        New D2TG::TTS::synthesize_to_file wraps the existing, unchanged
+        synthesize with the "write here, or a sensible default"
+        plumbing the CLI needs.
+      - A Codex review found synthesize_to_file mishandled an existing
+        directory as --out (File::Copy::move silently drops the file
+        inside it instead of failing) and didn't clean up a partial/
+        corrupt destination file left by a failed cross-filesystem
+        move - both fixed.

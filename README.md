@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v0.94).** SKILLS.md's `cli/*.pl` file
+**Status: early implementation (v0.95).** New `d2 tg.tts [--out <path>]
+<text...>` command (TGT-106, user-supplied feature-gap analysis)
+synthesizes text to a local audio file with no Telegram interaction at
+all - the underlying `D2TG::TTS::synthesize` was previously only
+reachable from inside `d2 tg.reply`. Useful for anything needing a
+spoken audio file on its own, e.g. attaching a voice note to a
+`tira.question.ask` card question. SKILLS.md's `cli/*.pl` file
 list is now current (TGT-123, found via a scheduled doc-accuracy hunt) -
 5 entrypoints added by later tickets (`send.pl`, `status.pl`,
 `retry-download.pl`, `text-only-replies.pl`, `whoami.pl`) were missing
