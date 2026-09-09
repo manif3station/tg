@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use File::Temp qw(tempfile);
 use File::Spec;
+use File::Copy qw(move);
 
 sub synthesize {
     my ( $text, %args ) = @_;
@@ -30,6 +31,22 @@ sub synthesize {
 
     unlink $mp3_path;
     return $ogg_path;
+}
+
+sub synthesize_to_file {
+    my ( $text, %args ) = @_;
+
+    my $ogg_path = synthesize( $text, runner => $args{runner} );
+
+    return $ogg_path unless defined $args{out};
+
+    move( $ogg_path, $args{out} ) or do {
+        my $err = $!;
+        unlink $ogg_path;
+        die "D2TG::TTS::synthesize_to_file: cannot write to $args{out}: $err\n";
+    };
+
+    return $args{out};
 }
 
 sub _run {
@@ -83,6 +100,24 @@ C<runner> is an optional coderef taking a command's argument list and
 returning its exit status (0 for success); it defaults to C<_run>
 (list-form C<system(@cmd)>, no shell), and exists so callers (tests) can
 inject a fake runner instead of invoking real subprocesses.
+
+=head2 synthesize_to_file($text, out => $path, runner => \&coderef)
+
+TGT-106 (user-supplied feature-gap analysis): C<synthesize> itself is
+unchanged - this wraps it with the "write the result somewhere specific,
+or return a sensible default location" plumbing that C<cli/tts.pl>
+needs to expose synthesis as its own standalone command, matching the
+old C<~/skills/tg> blueprint's own separate TTS step (previously only
+reachable from inside L<D2TG::Reply/send_reply>).
+
+Calls C<synthesize($text, runner => $runner)> exactly as before. With no
+C<out>, returns that C<.ogg> path unchanged (a real, already-existing
+file - the sensible default). With C<out> given, moves the synthesized
+file there (via L<File::Copy/move>, which falls back to copy+unlink
+across filesystems) and returns C<$path> instead. A synthesis failure
+still dies exactly as C<synthesize> already does - fail-loud, no file
+ever left at C<$path> on failure, matching this skill's TTS convention
+(never a silent empty/missing output).
 
 =head2 _run(@cmd)
 
