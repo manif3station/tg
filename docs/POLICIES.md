@@ -414,6 +414,26 @@ ticket - that class of failure is something an operator should actually
 see, since the poller can't self-heal from it the way it can from a
 routine timeout.
 
+**Confirmed still true after a real 2h50m timeout spike (TGT-108,
+2026-09-08 13:00-15:50)**: investigated whether this silencing merely
+hid a still-occurring problem rather than reflecting an actual fix.
+Confirmed via git history that TGT-097 changed nothing about the
+underlying timeout/retry frequency, only whether it prints - and that
+the timeout margin (`DEFAULT_HARD_TIMEOUT`/`DEFAULT_LONG_POLL_MARGIN`
+below) had already been widened once before, in TGT-066, for this exact
+symptom shape. The spike recurred anyway using that already-widened
+margin - most likely a genuine Telegram-side or network delay exceeding
+even a generous bound, not a design flaw in the margin choice. No
+message loss occurred (the offset only advances on a successful
+`getUpdates` call). Widening the margin further was considered and
+rejected: TGT-035's own reason for bounding this timeout at all is
+`cli/poller.pl`'s `SIGTERM`/`SIGINT` shutdown responsiveness, so every
+second added here is a second added to worst-case shutdown delay, and
+there's no evidence a wider bound would have prevented this specific
+incident. No code change made - this silencing is confirmed correct and
+sufficient, not a report that was quietly failing to actually fix
+anything.
+
 ## Only one poller may ever hold the lock, and the last one to try wins (TGT-084)
 
 Live production incident (TGT-062): "it is not always works. when send
