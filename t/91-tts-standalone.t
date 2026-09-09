@@ -58,6 +58,30 @@ require D2TG::TTS;
 }
 
 {
+    # Codex review finding (critical, second round): an earlier version
+    # of the failure-cleanup logic deleted ANY file already sitting at
+    # --out after a failed write attempt, including a pre-existing,
+    # unrelated file that had nothing to do with this call - a real
+    # destructive bug. A failed synthesis-to-file must never touch a
+    # file that was already there.
+    my $out_dir  = tempdir( CLEANUP => 1 );
+    my $out_path = File::Spec->catfile( $out_dir, 'precious-existing-file.ogg' );
+    open my $fh, '>', $out_path or die $!;
+    print {$fh} 'irreplaceable pre-existing content';
+    close $fh;
+
+    my $runner = sub { return 1; };    # gtts fails
+    eval { D2TG::TTS::synthesize_to_file( 'hello', out => $out_path, runner => $runner ) };
+    like( $@, qr/gtts-cli failed/, 'synthesis failure with a pre-existing --out file still dies loudly' );
+
+    ok( -e $out_path, 'the pre-existing file at --out is NOT deleted by a failed synthesis' );
+    open my $check_fh, '<', $out_path or die $!;
+    local $/;
+    is( <$check_fh>, 'irreplaceable pre-existing content', 'the pre-existing file\'s content is completely untouched' );
+    close $check_fh;
+}
+
+{
     # The move() itself (not the synthesis step) failing - e.g. the
     # requested --out path's parent directory doesn't exist - must
     # still die loudly and never leave a partial file at $out.
