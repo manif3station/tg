@@ -1321,3 +1321,10 @@ Revision history for the tg skill
         header) - tightened to anchor on the actual version-header
         shape, with a regression test covering an unindented aside line
         inside a still-valid entry.
+
+0.94  2026-09-09
+      - SKILLS.md (TGT-123, found via a scheduled doc-accuracy hunt):
+        the TGT-093 paragraph's cli/*.pl file list only named 6 of 11
+        entrypoints, stale since 5 later tickets added send.pl/
+        status.pl/retry-download.pl/text-only-replies.pl/whoami.pl - now
+        lists all 11.

@@ -1,6 +1,10 @@
 # tg
 
-**Status: early implementation (v0.93).** `d2 tg.poller`'s version-bump
+**Status: early implementation (v0.94).** SKILLS.md's `cli/*.pl` file
+list is now current (TGT-123, found via a scheduled doc-accuracy hunt) -
+5 entrypoints added by later tickets (`send.pl`, `status.pl`,
+`retry-download.pl`, `text-only-replies.pl`, `whoami.pl`) were missing
+from it. `d2 tg.poller`'s version-bump
 restart notice now names what actually changed, not just the version
 numbers (TGT-112, user-supplied live-experienced feedback) - it appends
 the new version's own first `Changes` bullet line, read from the
