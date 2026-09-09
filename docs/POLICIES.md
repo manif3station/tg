@@ -1146,3 +1146,44 @@ to this checker if its voice half then also fails. This mirrors `d2
 tg.retry-download`'s own accepted best-effort tradeoff for its queue
 write (TGT-104) - a substantial improvement over no record at all, not
 a guarantee.
+
+## The same reply text is never sent to the same chat twice within seconds
+
+User-supplied feature-gap analysis (TGT-114): an accidentally re-run `d2
+tg.reply` command, or a retry after a confirmed prior success whose
+voice half then failed (TGT-083's own text-first-then-voice ordering,
+TGT-105's own audit trail for exactly this outcome), previously had no
+way to avoid delivering the identical text a second time.
+
+`D2TG::Store::is_recent_duplicate_reply` checks whether the exact same
+text was already sent to a chat under a given `bot_key` within a short
+window (default 10 seconds), sourced from the same `sent_replies` table
+TGT-105 already records into. `D2TG::Reply::send_reply` checks this
+*before* calling `send_message` at all - dies immediately if a match is
+found, so the duplicate never reaches Telegram in the first place.
+Scoped by `bot_key` for the same TGT-098 reason every other multi-bot
+check in this skill is: a Telegram group shared by more than one
+configured bot must never let one bot's own recent send be mistaken for
+a duplicate of a different bot's identical text to the same `chat_id`.
+
+Accepted, documented limitations (a Codex review found these real but
+out of proportion to solve for this skill's actual usage pattern - a
+human-paced, single-operator CLI tool):
+
+- Does not protect against retrying after an *ambiguous* `send_message`
+  failure (the request errored/timed out without confirming whether
+  Telegram actually received it) - only a *confirmed* prior success is
+  ever checked against.
+- Not an atomic guarantee under genuine concurrent callers - two truly
+  simultaneous `send_reply` calls for the same text could both pass the
+  check before either records its own send.
+- The window comparison is second-granular (SQLite's own timestamp
+  functions discard fractional seconds), so the true elapsed time can
+  exceed the stated window by under a second.
+
+A Codex review also caught a critical schema-migration gap before this
+shipped: the `text` column this feature adds to `sent_replies` needed
+the same `ALTER TABLE`-with-duplicate-tolerance pattern
+`messages.read_at` already uses - a bare `CREATE TABLE IF NOT EXISTS` is
+a no-op against a database that already has `sent_replies` from an
+earlier install of TGT-105 alone, without this column.

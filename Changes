@@ -1192,3 +1192,27 @@ Revision history for the tg skill
         existing test's own differently-shaped fake telegram - fixed
         to only attempt the extraction when a store is given, and to
         tolerate any other return shape via `eval`.
+
+0.86  2026-09-09
+      - FEATURE (TGT-114, user-supplied feature-gap analysis): `d2
+        tg.reply` now refuses to send the exact same text to the same
+        chat (and bot) twice within a short window (default 10s) -
+        an accidentally re-run reply command, or a retry after a
+        confirmed prior success whose voice half then failed, no
+        longer delivers the same message a second time. New
+        `D2TG::Store::is_recent_duplicate_reply` checks a new `text`
+        column on the existing `sent_replies` table (TGT-105);
+        `D2TG::Reply::send_reply` checks it before calling
+        `send_message` at all, so a duplicate never reaches Telegram.
+        Only active when a store is given.
+      - Codex review caught a CRITICAL gap before shipping: the new
+        `text` column needed the same `ALTER TABLE`-with-duplicate-
+        tolerance migration pattern `messages.read_at` already uses - a
+        bare `CREATE TABLE IF NOT EXISTS` is a no-op against a database
+        that already has `sent_replies` from an earlier TGT-105-only
+        install. Also fixed: `window_seconds` now rejects negative/
+        non-numeric values. Three further findings (no protection
+        against an ambiguous `send_message` failure, no atomicity under
+        genuine concurrency, second-granular timing) were confirmed
+        real but accepted as documented limitations, matching this
+        project's own established practice for this class of tradeoff.

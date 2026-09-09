@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v0.85).** A reply that went out
+**Status: early implementation (v0.86).** `d2 tg.reply` now refuses to
+send the exact same text to the same chat (and bot) twice within a
+short window (TGT-114, default 10s) - an accidentally re-run reply
+command, or a retry after a confirmed prior success whose voice half
+then failed, no longer delivers the message a second time. Only applies
+when a store is given (unchanged behavior otherwise); doesn't protect
+against retrying after an ambiguous send failure (one where Telegram's
+own response never confirmed success or failure) - only a confirmed
+prior success is ever checked against. A Codex review caught that the
+underlying schema change needed the same upgrade-safe migration pattern
+this project already uses elsewhere (a bare `CREATE TABLE IF NOT
+EXISTS` is a no-op against a database that already has the table from
+an earlier install), now fixed. A reply that went out
 text-only (TGT-083's own send-text-then-voice ordering means a late
 voice failure can leave one behind, always reported loudly at the time
 but easy to miss if that failure scrolled past) is now flagged for

@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v0.85).** This file is a procedure to
+**Status: early implementation (v0.86).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -50,7 +50,11 @@ went out text-only - TGT-083's own send-text-then-voice ordering means a
 late voice failure can leave one behind, always reported loudly at the
 time but easy to miss - is now flagged for later discovery too (TGT-105)
 via `d2 tg.text-only-replies`, scoped per configured bot the same way
-access control already is.
+access control already is. `d2 tg.reply` now also refuses to send the
+exact same text to the same chat twice within a short window (TGT-114)
+- an accidentally re-run reply command, or a retry after a confirmed
+prior success whose voice half then failed, no longer delivers the same
+message a second time.
 
 ## 2. Prep before install
 
