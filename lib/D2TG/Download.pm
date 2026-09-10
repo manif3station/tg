@@ -167,7 +167,8 @@ C<timeout =E<gt> DEFAULT_HARD_TIMEOUT> (TGT-028, TGT-126); tests inject a
 fake here instead.
 
 The underlying HTTP GET (TGT-126, same failure class as
-L<D2TG::Telegram>'s own TGT-044 incident) is wrapped in L</_with_hard_timeout>
+L<D2TG::Telegram>'s own TGT-044 incident) is wrapped in
+L<D2TG::Config/_with_hard_timeout>
 so a connection stuck in TCP C<connect()> - which a plain C<LWP::UserAgent>
 C<timeout> does not reliably bound - still dies with a clear timeout
 message instead of hanging the poll cycle indefinitely. C<timeout> is

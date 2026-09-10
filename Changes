@@ -1,5 +1,14 @@
 Revision history for the tg skill
 
+1.41  2026-09-10
+      - DOC FIX (TGT-174, found via a scheduled JOB-005 doc-accuracy-hunt
+        fork, immediately after TGT-173 shipped): lib/D2TG/Download.pm's
+        POD still linked to L</_with_hard_timeout> (a same-document
+        anchor) after TGT-173 moved that function out into D2TG::Config -
+        fixed to L<D2TG::Config/_with_hard_timeout>, matching the
+        already-correct cross-module link used elsewhere in the same
+        file. Doc-only, no code/behavior change.
+
 1.40  2026-09-10
       - REFACTOR (TGT-173, found via a scheduled JOB-004 improvement-hunt
         fork): D2TG::Telegram (TGT-044) and D2TG::Download (TGT-126)

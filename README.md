@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.40).** REFACTOR (TGT-173, found via
+**Status: early implementation (v1.41).** DOC FIX (TGT-174, found via a
+scheduled doc-accuracy hunt immediately after TGT-173 shipped):
+`D2TG::Download`'s POD still linked to its own now-removed
+`_with_hard_timeout` instead of `D2TG::Config`'s - fixed. Doc-only, no
+code/behavior change.
+REFACTOR (TGT-173, found via
 a scheduled improvement hunt): `D2TG::Telegram` and `D2TG::Download`
 each independently implemented the identical SIGALRM-based
 `_with_hard_timeout` wrapper - extracted into a shared helper in
