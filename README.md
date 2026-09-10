@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.38).** REFACTOR (TGT-171, found via
+**Status: early implementation (v1.39).** REFACTOR (TGT-172, found via
+a scheduled improvement hunt): 11 of the 13 `cli/*.pl` scripts each
+duplicated the same 4-line error-handling block after calling
+`D2TG::Config::resolve_alias_dir` - extracted into a shared
+`resolve_alias_dir_or_die` helper, no behavioral change (verified via a
+before/after full-suite diff and 100% statement+subroutine coverage on
+`D2TG::Config.pm`, including a new dedicated test to close a coverage
+gap left by subprocess-run cli scripts).
+REFACTOR (TGT-171, found via
 a scheduled improvement hunt): `D2TG::Telegram`'s `reply_to_message_id`
 numeric-validation block was triplicated across `send_message`,
 `send_voice`, and `_send_file` (only the method name in the die

@@ -330,6 +330,23 @@ sub resolve_alias_dir {
     return $dir;
 }
 
+# TGT-172: extracted after this exact eval/print-STDERR/exit(1) wrapper
+# around resolve_alias_dir was found duplicated identically across 11 of
+# the 13 cli/*.pl scripts - matches the established shift_flag_value
+# (TGT-072) / _classify_store_error (TGT-167) / _format_forwarded_sender
+# (TGT-170) / _validate_reply_to_message_id (TGT-171) precedent for this
+# shape of duplication.
+sub resolve_alias_dir_or_die {
+    my (%args) = @_;
+
+    my $base_dir = eval { resolve_alias_dir(%args) };
+    if ($@) {
+        print STDERR $@;
+        exit 1;
+    }
+    return $base_dir;
+}
+
 sub require_existing_base_dir {
     my ($base_dir) = @_;
 
@@ -673,14 +690,26 @@ request, which TGT-051's first shipped version missed by silently
 returning C<undef> (falling back to the skill's own install directory)
 in this exact case - or when an alias I<is> given but isn't a
 recognized path (unchanged since TGT-051). There is no longer any input
-that returns C<undef> - every C<d2 tg.*> command's C<eval { ... }>
-wrapper around this call turns either die into a clean refusal (STDERR
-message, exit 1) before any state is ever touched.
+that returns C<undef> - each affected command turns either die into a
+clean refusal (STDERR message, exit 1) before any state is ever
+touched, via the shared L</resolve_alias_dir_or_die> wrapper (TGT-172,
+11 of the 13 C<cli/*.pl> scripts) rather than each repeating that
+C<eval { ... }> pattern inline.
 
 Note that C<resolve_alias_dir> itself never checks whether the
 directory it returns actually exists - see L</require_existing_base_dir>
 below, which every C<cli/*> script calls immediately afterward to close
 that gap (TGT-090).
+
+=head2 resolve_alias_dir_or_die(alias => $alias, paths => \%paths)
+
+TGT-172 (found via a scheduled improvement hunt): a thin wrapper around
+L</resolve_alias_dir> that catches its die, prints the message to
+STDERR, and exits 1 - the exact eval/print-STDERR/exit(1) pattern 11 of
+the 13 C<cli/*.pl> scripts had each independently duplicated after
+calling C<resolve_alias_dir> directly. Returns the resolved base_dir on
+success, same as C<resolve_alias_dir>; never returns on failure. A pure
+extraction - no behavior change at any of the 11 call sites.
 
 =head2 require_existing_base_dir($base_dir)
 

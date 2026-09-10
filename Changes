@@ -1,5 +1,31 @@
 Revision history for the tg skill
 
+1.39  2026-09-10
+      - REFACTOR (TGT-172, found via a scheduled JOB-004 improvement-hunt
+        fork): 11 of the 13 cli/*.pl scripts (history.pl,
+        retry-download.pl, approve.pl, text-only-replies.pl,
+        attachment.pl, send.pl, reply.pl, poller.pl, unread.pl,
+        status.pl, whoami.pl) each independently duplicated the exact
+        same 4-line block after calling
+        D2TG::Config::resolve_alias_dir: an eval, then a
+        print-to-STDERR-and-exit(1) wrapper on failure. Extracted a
+        shared resolve_alias_dir_or_die($alias) into D2TG::Config that
+        wraps this internally; all 11 call sites now use it instead of
+        the duplicated inline logic - matches the established
+        shift_flag_value (TGT-072) / _classify_store_error (TGT-167) /
+        _format_forwarded_sender (TGT-170) / _validate_reply_to_message_id
+        (TGT-171) precedent for this shape of duplication, this time
+        spanning 11 files rather than 2-3. No behavioral change -
+        verified via a before/after full-suite diff (Files=130,
+        Tests=1254 both times before the new test below, no behavioral
+        test changes) and 100% statement+subroutine coverage on
+        D2TG::Config.pm; a new t/172-resolve-alias-dir-or-die.t was
+        added to close a genuine coverage gap discovered mid-ticket -
+        the new helper's exit(1) branch showed 0% coverage, since the
+        11 call sites are exercised only via subprocess-run cli
+        scripts, and this project's coverage gate command does not run
+        those subprocesses under Devel::Cover.
+
 1.38  2026-09-10
       - REFACTOR (TGT-171, found via a scheduled JOB-004 improvement-hunt
         fork): D2TG::Telegram had the reply_to_message_id numeric-

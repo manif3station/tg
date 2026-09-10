@@ -288,9 +288,11 @@ directory that had never actually existed. Reproduced live in a
 `telegram.messages.db` inside it, rooted at whatever the current
 working directory happened to be, with no error and no confirmation.
 Fixed with a new `D2TG::Config::require_existing_base_dir`, called by
-every `cli/*` script immediately after `resolve_alias_dir` returns: it
-dies if the resolved base_dir is not already a real, existing
-directory. The `.tira/` subdirectory *under* an already-real base_dir is
+every `cli/*` script immediately after `resolve_alias_dir`/
+`resolve_alias_dir_or_die` (the latter added by TGT-172, a pure
+extraction of the eval/print-STDERR/exit(1) wrapper 11 scripts had
+duplicated) returns: it dies if the resolved base_dir is not already a
+real, existing directory. The `.tira/` subdirectory *under* an already-real base_dir is
 still created as before - that's this skill's own controlled state
 folder, not the bug; the bug was the base_dir itself never being
 checked to actually pre-exist.

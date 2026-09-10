@@ -123,11 +123,7 @@ exit 1
 my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
 @ARGV = @leftover;
 
-my $base_dir = eval { D2TG::Config::resolve_alias_dir( alias => $db_alias ) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 eval { D2TG::Config::require_existing_base_dir($base_dir) };
 if ($@) {
