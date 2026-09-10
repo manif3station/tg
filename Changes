@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+1.27  2026-09-10
+      - DOC/CONSISTENCY FIX (TGT-159, found via scheduled improvement
+        hunt JOB-004, a systematic cli/*.pl sweep after TGT-157 found
+        the same pattern in cli/reply.pl): cli/approve.pl's own STDERR
+        Usage string was missing --bot <token>, already correctly
+        documented in the same file's own POD SYNOPSIS. Now matches.
+        New t/114-approve-usage-pod-parity.t guards this the same way
+        t/113-reply-usage-pod-parity.t already guards cli/reply.pl.
+        Every other cli/*.pl script was checked in the same sweep and
+        found already correct.
+
 1.26  2026-09-10
       - TEST REFACTOR (TGT-158, found via scheduled improvement hunt
         JOB-004): D2TG::Reply::send_reply and resend_voice each

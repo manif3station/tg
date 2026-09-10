@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.26).** Test refactor (TGT-158, found
+**Status: early implementation (v1.27).** DOC/CONSISTENCY FIX (TGT-159,
+found via a scheduled improvement hunt, a systematic `cli/*.pl` sweep
+after TGT-157 found the same pattern once already): `cli/approve.pl`'s
+own STDERR Usage string was missing `--bot <token>` - correctly
+documented in the same file's own POD SYNOPSIS but drifted apart; a new
+POD-parity test now guards it the same way an existing one already
+guards `cli/reply.pl`. Every other `cli/*.pl` script was checked in the
+same sweep and found already correct. Test refactor (TGT-158, found
 via a scheduled improvement hunt): `D2TG::Reply::send_reply` and
 `resend_voice` no longer duplicate the same synthesize/send/cleanup
 sequence - extracted into a shared `_synthesize_and_send_voice` helper,

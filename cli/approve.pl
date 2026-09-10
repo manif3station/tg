@@ -40,7 +40,7 @@ if ($@) {
 }
 
 if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
-    print STDERR "Usage: d2 tg.approve <chat_id> [--db <alias> | -d <alias>]\n";
+    print STDERR "Usage: d2 tg.approve <chat_id> [--db <alias> | -d <alias>] [--bot <token>]\n";
     exit 2;
 }
 
