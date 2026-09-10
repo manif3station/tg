@@ -109,4 +109,50 @@ like( $@, qr/fork failed/, 'dies with a "fork failed" message when the forker re
     waitpid( $pid, 0 );
 }
 
+{
+    # TGT-179: the new optional `stdout` param redirects the child's
+    # STDOUT to a real file instead of devnull - opt-in, for a caller
+    # (D2TG::Transcribe::_probe_duration) that needs to capture output
+    # rather than discard it.
+    my $tempdir = tempdir( CLEANUP => 1 );
+    my $out_path = File::Spec->catfile( $tempdir, 'captured' );
+
+    my $pid = D2TG::Subprocess::fork_in_own_process_group(
+        cmd    => [ 'sh', '-c', 'echo hello-stdout' ],
+        stdout => $out_path,
+    );
+    waitpid( $pid, 0 );
+
+    open my $fh, '<', $out_path or die $!;
+    my $captured = <$fh>;
+    close $fh;
+
+    is( $captured, "hello-stdout\n", 'the stdout param redirects the child\'s real stdout to the given path instead of devnull' );
+}
+
+{
+    # Every existing caller that does NOT pass `stdout` keeps the
+    # original devnull-only behavior - no regression from the new
+    # optional param.
+    my $tempdir = tempdir( CLEANUP => 1 );
+    my $out_capture = File::Spec->catfile( $tempdir, 'captured_out' );
+
+    open( my $saved_stdout, '>&', \*STDOUT ) or die $!;
+    open( STDOUT, '>', $out_capture ) or die $!;
+
+    my $pid = D2TG::Subprocess::fork_in_own_process_group(
+        cmd => [ 'sh', '-c', 'echo to-stdout' ],
+    );
+    waitpid( $pid, 0 );
+
+    open( STDOUT, '>&', $saved_stdout ) or die $!;
+
+    open my $fh, '<', $out_capture or die $!;
+    local $/;
+    my $captured = <$fh>;
+    close $fh;
+
+    is( $captured, '', 'without stdout given, the child\'s output still goes to devnull, unchanged from before TGT-179' );
+}
+
 done_testing();

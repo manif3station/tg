@@ -11,6 +11,14 @@ sub fork_in_own_process_group {
     my @cmd    = @{ $args{cmd} };
     my $forker = $args{forker} || sub { return CORE::fork() };
 
+    # TGT-179: optional, defaults to the original devnull-only
+    # behavior for every existing caller (TTS/Transcribe's own _run,
+    # neither of which need the child's stdout captured). A caller
+    # that DOES need it (D2TG::Transcribe::_probe_duration's ffprobe
+    # call) passes a path instead - still never inherits the parent's
+    # own real STDOUT, matching this module's whole reason to exist.
+    my $stdout = $args{stdout};
+
     my $pid = $forker->();
     die "D2TG::Subprocess::fork_in_own_process_group: fork failed: $!\n"
       unless defined $pid;
@@ -23,7 +31,7 @@ sub fork_in_own_process_group {
         # from an exec failure (127) - collapsing both to the same
         # code here would be an observable (if narrow) behavior change
         # for a ticket that promises none. Preserved exactly.
-        open( STDOUT, '>', File::Spec->devnull ) or POSIX::_exit(126);
+        open( STDOUT, '>', $stdout // File::Spec->devnull ) or POSIX::_exit(126);
         open( STDERR, '>', File::Spec->devnull ) or POSIX::_exit(126);
         exec(@cmd) or POSIX::_exit(127);
     }
@@ -72,7 +80,7 @@ not duplication to remove.
 
 =head1 FUNCTIONS
 
-=head2 fork_in_own_process_group(cmd => \@cmd, forker => \&coderef)
+=head2 fork_in_own_process_group(cmd => \@cmd, forker => \&coderef, stdout => $path)
 
 Forks C<$forker> (default: a plain C<fork()> call; tests inject a fake
 here to exercise the fork-failure path, matching
@@ -85,10 +93,14 @@ In the child: C<setpgrp(0, 0)> puts it in its own process group (so a
 caller's timeout/shutdown signal can reach the whole subprocess tree,
 not just this immediate child - important since a shelled-out command
 like C<whisper> or C<ffmpeg> commonly spawns children of its own),
-redirects C<STDOUT>/C<STDERR> onto C<File::Spec-E<gt>devnull> (so the
-external command's own console chatter never leaks onto the caller's
-real stdout/stderr), then C<exec>s C<@cmd> - never via a shell, so no
-injection risk. C<POSIX::_exit(126)> if the devnull redirect itself
+redirects C<STDOUT> onto C<$path> if given, C<File::Spec-E<gt>devnull>
+otherwise (TGT-179 - opt-in, every caller that doesn't pass C<stdout>
+keeps the original devnull-only behavior unchanged; the one that does,
+L<D2TG::Transcribe/_probe_duration>, still never inherits the parent's
+own real stdout), redirects C<STDERR> onto C<File::Spec-E<gt>devnull>
+unconditionally either way (so the external command's own console
+chatter never leaks onto the caller's real stdout/stderr), then
+C<exec>s C<@cmd> - never via a shell, so no injection risk. C<POSIX::_exit(126)> if the devnull redirect itself
 fails (before C<exec> is even attempted), C<POSIX::_exit(127)> if
 C<exec> itself fails - two distinguishable codes, matching
 L<D2TG::TTS/_run>'s own pre-extraction convention. A Codex review

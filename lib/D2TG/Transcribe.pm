@@ -2,7 +2,7 @@ package D2TG::Transcribe;
 
 use strict;
 use warnings;
-use File::Temp qw(tempdir);
+use File::Temp qw(tempdir tempfile);
 use File::Spec;
 use File::Basename qw(fileparse);
 use File::Path qw(remove_tree);
@@ -29,6 +29,18 @@ our @MODEL_TIERS = qw(medium small base);
 # constant) and capped at a sane ceiling (never unbounded).
 our $TIMEOUT_MULTIPLIER = 8;
 our $TIMEOUT_CEILING    = 3600;
+
+# TGT-179 (JOB-003 scheduled hourly bug hunt finding): _probe_duration's
+# open('-|', 'ffprobe', ...) below had no timeout at all, unlike every
+# sibling subprocess call in this codebase (whisper, gtts-cli/ffmpeg,
+# HTTP downloads - all guarded by SIGALRM/_with_hard_timeout per
+# TGT-035/044/126/127). It runs synchronously, before transcribe()'s
+# own retry-loop timeout scoping even begins, so a hang here blocks the
+# ENTIRE single-threaded poller indefinitely for every chat, not just
+# the one triggering it - reproduced live via a stalled FIFO. A probe
+# genuinely only reads one short line of ffprobe's own metadata output,
+# so this is deliberately much shorter than $TIMEOUT itself.
+our $PROBE_TIMEOUT = 10;
 
 sub _scaled_timeout {
     my ($duration) = @_;
@@ -70,17 +82,62 @@ sub _next_tier {
 sub _probe_duration {
     my ($audio_path) = @_;
 
-    open my $fh, '-|', 'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-      '-of', 'csv=p=0', $audio_path
-      or die "D2TG::Transcribe::_probe_duration: failed to run ffprobe: $!\n";
-    my $duration = <$fh>;
-    close $fh;
+    # TGT-179 (JOB-003 scheduled hourly bug hunt finding): this used to
+    # be a plain blocking open('-|', 'ffprobe', ...) with NO timeout at
+    # all - unlike every sibling subprocess call in this codebase
+    # (whisper/gtts-cli/ffmpeg/HTTP downloads, all guarded by SIGALRM
+    # or a waitpid-poll timeout). It runs synchronously in transcribe()
+    # before the retry loop's own timeout scoping even begins, so a
+    # hang here blocked the ENTIRE single-threaded poller indefinitely
+    # for every chat, not just the one triggering it - reproduced live
+    # via a stalled FIFO. A plain alarm()-around-a-blocking-readline
+    # does NOT reliably interrupt it either (PerlIO retries a buffered
+    # read on EINTR without giving Perl a chance to run the deferred
+    # SIGALRM handler mid-read) - the same waitpid(WNOHANG)-poll
+    # pattern _run (below) already uses for whisper is what's actually
+    # proven to interrupt reliably in this codebase, so this reuses it
+    # via D2TG::Subprocess's own now-optional stdout-capture support,
+    # rather than a third alarm-based implementation.
+    my ( $out_fh, $out_path ) = tempfile( UNLINK => 1 );
+    close $out_fh;
 
-    # A failed/unparseable probe (ffprobe missing, corrupt audio, no
-    # output) deliberately falls back to 0 seconds, i.e. select_model's
-    # 'medium' tier - the same model transcribe() always used before
-    # this feature existed, so a probe failure never behaves worse than
-    # pre-TGT-100 code did.
+    my $pid = D2TG::Subprocess::fork_in_own_process_group(
+        cmd    => [ 'ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', $audio_path ],
+        stdout => $out_path,
+    );
+
+    my $deadline = time() + $PROBE_TIMEOUT;
+    while (1) {
+        my $reaped = waitpid( $pid, WNOHANG );
+        last if $reaped == $pid;
+
+        if ( time() >= $deadline ) {
+            # Same group-then-direct-pid kill escalation _run already
+            # uses below (TGT-128, hardened by a Codex review finding:
+            # a signal straight to a pid can't be missed by a
+            # process-group mismatch the way -$pid targeting can) - no
+            # orphaned ffprobe process or process group is left behind
+            # either way.
+            kill( 'KILL', -$pid );
+            kill( 'KILL', $pid );
+            waitpid( $pid, 0 );
+            last;
+        }
+
+        sleep(0.2);
+    }
+
+    my $duration;
+    if ( open my $fh, '<', $out_path ) {
+        $duration = <$fh>;
+        close $fh;
+    }
+
+    # A failed/unparseable/timed-out probe (ffprobe missing, corrupt
+    # audio, no output, or a hang killed above) deliberately falls back
+    # to 0 seconds, i.e. select_model's 'medium' tier - the same model
+    # transcribe() always used before this feature existed, so a probe
+    # failure never behaves worse than pre-TGT-100 code did.
     return 0 unless defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
     return $duration + 0;
 }
@@ -280,9 +337,22 @@ only ever applies to an automatically-selected model.
 =head2 _probe_duration($audio_path)
 
 Returns C<$audio_path>'s duration in seconds via C<ffprobe>, invoked
-through a list-form pipe C<open> (never a shell string) so the path can
-never reach a shell. C<transcribe> calls this only when no explicit
-C<model> was given.
+through L<D2TG::Subprocess/fork_in_own_process_group> (never a shell
+string, so the path can never reach a shell) with its own C<stdout>
+capture support (TGT-179), the same process-group-killable subprocess
+launch C<_run> below uses for whisper. Waits under a
+C<waitpid(WNOHANG)> poll loop bounded by C<$PROBE_TIMEOUT> (10s
+default) - not a plain C<alarm()>-around-a-blocking-readline, which
+does NOT reliably interrupt a buffered pipe read (PerlIO retries on
+C<EINTR> without giving Perl a chance to run a deferred C<SIGALRM>
+handler mid-read), confirmed directly: an earlier attempt at exactly
+that approach still blocked for the hung command's full duration in
+testing. On timeout, kills the process group and the direct pid (same
+escalation C<_run> uses) and falls back to 0 seconds, exactly like a
+missing/corrupt-output probe already did before this fix - a hang no
+longer blocks the entire single-threaded poller indefinitely to get
+there. C<transcribe> calls this only when no explicit C<model> was
+given.
 
 =head2 transcribe($audio_path, model => $name, runner => \&coderef, duration_fn => \&coderef)
 

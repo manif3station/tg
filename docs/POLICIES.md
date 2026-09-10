@@ -1950,3 +1950,26 @@ idempotent, so no schema change was needed - the remaining half of
 TGT-178's work was suppressing the resulting duplicate `NEW TG` print/
 re-download/re-transcribe on the redelivered pass, done via a
 `store->get_message` check before acting on a plain message.
+
+A separate finding, **TGT-179**, shipped in 1.44, found by a scheduled
+JOB-003 hourly bug hunt the same evening: `D2TG::Transcribe::_probe_duration`'s
+`ffprobe` call had no timeout at all, unlike every sibling subprocess
+call in this codebase (whisper, gtts-cli/ffmpeg, HTTP downloads - all
+guarded by `SIGALRM`/`_with_hard_timeout` or a `waitpid` poll loop).
+Reproduced live in a `developer-dashboard:latest` container via a
+stalled FIFO (`mkfifo` with no writer, `ffprobe` blocked indefinitely).
+It runs synchronously in `transcribe()` before the retry loop's own
+timeout scoping even begins, so a hang there blocked the ENTIRE
+single-threaded poller indefinitely for every chat, not just the one
+triggering it. A plain `alarm()`-around-a-blocking-readline does NOT
+reliably interrupt it (verified directly - a first attempt at exactly
+this fix still took the full 30s in testing): PerlIO retries a
+buffered pipe read on `EINTR` without giving Perl a chance to run a
+deferred `SIGALRM` handler mid-read. Fixed by reusing the
+`waitpid(WNOHANG)`-poll pattern `_run` already uses for whisper -
+`D2TG::Subprocess::fork_in_own_process_group` gained a new optional
+`stdout => $path` param (opt-in, every existing devnull-only caller
+unaffected) so `_probe_duration` can capture ffprobe's output the same
+killable way. A timed-out probe falls back to 0 duration exactly like
+every other probe failure mode already did - the poller no longer
+blocks to get there.

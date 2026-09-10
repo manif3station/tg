@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.43).** RELIABILITY FIX (TGT-178,
+**Status: early implementation (v1.44).** RELIABILITY FIX (TGT-179,
+found via a scheduled hourly bug hunt, reproduced live via a stalled
+FIFO): `D2TG::Transcribe::_probe_duration`'s `ffprobe` call had no
+timeout at all - a hang there blocked the ENTIRE single-threaded
+poller indefinitely for every chat. Now guarded by a `waitpid`-poll
+timeout matching this module's own established pattern for whisper,
+rather than a plain `alarm()`-around-a-blocking-readline (which does
+NOT reliably interrupt a buffered pipe read). A timed-out probe falls
+back to 0 duration exactly like every other probe failure mode already
+did.
+RELIABILITY FIX (TGT-178,
 implementing Michael's own Q-011 ruling on the TGT-176 message-loss
 investigation): a local `record_message` write failure used to let the
 poller's offset advance past that update anyway, and Telegram never

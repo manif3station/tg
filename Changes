@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+1.44  2026-09-10
+      - RELIABILITY FIX (TGT-179, found via a scheduled JOB-003 hourly
+        bug hunt, reproduced live via a stalled FIFO): D2TG::Transcribe
+        ::_probe_duration's ffprobe call had no timeout at all, unlike
+        every sibling subprocess call in this codebase - it runs
+        synchronously in transcribe() before the retry loop's own
+        timeout scoping even begins, so a hang here blocked the ENTIRE
+        single-threaded poller indefinitely for every chat. Now runs
+        via D2TG::Subprocess::fork_in_own_process_group (a new
+        optional stdout-capture param) under a waitpid(WNOHANG) poll
+        loop bounded by $PROBE_TIMEOUT (10s), killing the process
+        group on timeout, rather than a plain alarm()-around-a-
+        blocking-readline (which does not reliably interrupt a
+        buffered pipe read - PerlIO retries on EINTR). A timed-out
+        probe falls back to 0 duration exactly like every other probe
+        failure mode already did.
+
 1.43  2026-09-10
       - RELIABILITY FIX (TGT-178, implementing Michael's own Q-011
         design ruling on TGT-176's message-loss investigation):
