@@ -43,6 +43,18 @@ sub capture_std {
 # ENTIRE batch (including updates already printed/handled) to be
 # refetched and reprinted next cycle - a duplicate NEW TG/REPLY WITH
 # announcement risking a duplicate reply from the watching agent.
+#
+# TGT-178 (Michael's Q-011 ruling, superseding this test's own
+# original offset assertion below): letting the offset advance past a
+# genuinely failed record_message call permanently lost that message,
+# since Telegram never redelivers an update once the offset has moved
+# past it. run_once now caps the returned offset at the FAILING
+# update's own update_id instead of the batch's full next offset, so
+# Telegram redelivers it (and everything after it) next cycle - see
+# t/178-offset-cap-on-record-failure.t for the full behavior this
+# change adds (offset capping + redelivery dedupe). This file's own
+# batch-not-abandoned/non-fatal-STDERR/no-path-leak assertions are
+# otherwise unchanged and still hold.
 
 {
     my $tg = Fake::Telegram->new(
@@ -66,7 +78,7 @@ sub capture_std {
 
     like( $out, qr/first message/,  'the first update in the batch is still printed despite record_message dying' );
     like( $out, qr/second message/, 'the second update in the batch is still printed too - the batch is not abandoned' );
-    is( $next_offset, 502, 'run_once still advances the offset past the whole batch, not just up to the failure' );
+    is( $next_offset, 500, 'run_once (TGT-178) caps the offset at the FAILING update_id (500 - the first update in this batch), not past it, so Telegram redelivers it next cycle' );
     like( $err, qr/record_message/i, 'the record_message failure is reported on stderr, non-fatally' );
     unlike( $err, qr{/secret/internal/path}, 'stderr never echoes the raw exception text - a DBI error can embed the DB file path, which must never leak' );
 }

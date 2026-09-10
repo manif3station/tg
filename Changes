@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.43  2026-09-10
+      - RELIABILITY FIX (TGT-178, implementing Michael's own Q-011
+        design ruling on TGT-176's message-loss investigation):
+        run_once's returned offset used to advance past an update
+        whose local record_message write failed regardless, and
+        Telegram never redelivers an update once the offset has moved
+        past it - a genuine store write failure (locked/busy/readonly
+        database) permanently and silently lost that message's local
+        history. _record_message_safe now returns a success/failure
+        flag; run_once caps the returned offset at the first failing
+        update's own update_id encountered while iterating the batch
+        in order instead of the batch's full offset, so Telegram redelivers it (and everything after it in
+        the same batch) next cycle. record_message's own existing
+        PRIMARY KEY(chat_id, message_id) upsert already makes a
+        redelivered message's store write idempotent - no schema
+        change needed. To avoid re-announcing an already-recorded
+        update on redelivery, run_once now checks store->get_message
+        before acting on a plain message and skips it when already
+        found.
+
+1.42  2026-09-10
       - INVESTIGATION (TGT-176, no code change this entry - tracked
         under 1.42 since it's the same incident window): identified a
         real, confirmed design-level gap (a local record_message write
@@ -11,10 +32,8 @@ Revision history for the tg skill
         (then-unfixed) crash bug as the likelier primary cause.
         Michael's own architectural ruling: stop advancing the offset
         past a failed write, let Telegram redeliver, dedupe the
-        resulting duplicate. Implementation tracked separately as
-        TGT-178 (not yet shipped). Full write-up in docs/POLICIES.md.
-
-1.42  2026-09-10
+        resulting duplicate. Implemented as TGT-178 (see 1.43 above).
+        Full write-up in docs/POLICIES.md.
       - RELIABILITY FIX (TGT-175, live production incident reported via
         the budget project, Michael's own owner chat): cli/poller.pl's
         main-loop version-change check called

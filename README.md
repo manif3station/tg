@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.42).** RELIABILITY FIX (TGT-175,
+**Status: early implementation (v1.43).** RELIABILITY FIX (TGT-178,
+implementing Michael's own Q-011 ruling on the TGT-176 message-loss
+investigation): a local `record_message` write failure used to let the
+poller's offset advance past that update anyway, and Telegram never
+redelivers an update once the offset has moved past it - a genuine
+store write failure (locked/busy/readonly database) permanently and
+silently lost that message's local history. The offset is now capped
+at the failing update so Telegram redelivers it (and everything after
+it in the same batch) next cycle, with a dedupe check so an
+already-recorded update isn't re-announced on redelivery.
+RELIABILITY FIX (TGT-175,
 live production incident reported via the budget project): the
 poller's main-loop version-change check crashed the ENTIRE process if
 `.env` was transiently missing/unreadable during the skill's own

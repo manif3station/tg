@@ -1936,13 +1936,17 @@ Michael's own architectural ruling (question Q-011 on TGT-176,
 answered 2026-09-10T22:20:50+0100): change the design so the offset is
 never persisted past an update whose local `record_message` write
 failed - let Telegram redeliver it next cycle, and add dedupe-by-
-message-id to handle the resulting duplicate delivery. The actual code
-change implementing this is tracked separately as **TGT-178** (not yet
-implemented as of this writing) - `record_message`'s own
+message-id to handle the resulting duplicate delivery. Implemented as
+**TGT-178**, shipped in 1.43: `_record_message_safe` now returns a
+success/failure flag, and `run_once` tracks the first failing update's
+own `update_id` encountered while iterating the batch in order (the
+same as the earliest, since Telegram delivers updates in increasing
+`update_id` order), capping the returned offset there instead of
+the batch's full next offset. `record_message`'s own existing
 `ON CONFLICT(chat_id, message_id) DO UPDATE` upsert (backed by the
 `messages` table's `PRIMARY KEY (chat_id, message_id)`, not a separate
-`UNIQUE` constraint) already makes a redelivered message's store write
-idempotent, so TGT-178's remaining work is capping `run_once`'s
-returned offset on a `_record_message_safe` failure and suppressing
-the resulting duplicate `NEW TG` print/re-download/re-transcribe on
-the redelivered pass.
+`UNIQUE` constraint) already made a redelivered message's store write
+idempotent, so no schema change was needed - the remaining half of
+TGT-178's work was suppressing the resulting duplicate `NEW TG` print/
+re-download/re-transcribe on the redelivered pass, done via a
+`store->get_message` check before acting on a plain message.

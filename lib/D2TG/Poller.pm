@@ -44,7 +44,22 @@ sub run_once {
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
+    # TGT-178 (Michael's Q-011 ruling on TGT-176's message-loss
+    # investigation): _record_message_safe (TGT-132) treats a store
+    # write failure as non-fatal, but the offset used to advance past
+    # the failed update regardless - Telegram never redelivers an
+    # update once the offset has moved past it, so that message's
+    # local history was permanently, silently lost. Track the first
+    # update_id (in iteration order, which is also the earliest, since
+    # Telegram delivers updates in increasing update_id order) whose
+    # record_message call failed; if any did, cap the returned offset
+    # there below instead of the batch's
+    # own full next offset, so Telegram redelivers that update (and
+    # everything after it in the same batch) next cycle.
+    my $offset_cap;
+
     for my $update (@$updates) {
+        my $update_id = $update->{update_id};
 
         # TGT-143 (live Telegram question, msg #176, Michael: "the user
         # can give a like or mark a message with emoji, is that
@@ -186,8 +201,10 @@ sub run_once {
             # real text to record; the edit is still announced either
             # way, just not (yet) reflected in d2 tg.history when it's
             # a caption/media change.
-            _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text )
-              if $store && defined $message_id && $has_text;
+            if ( $store && defined $message_id && $has_text ) {
+                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text );
+                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+            }
             next;
         }
 
@@ -251,6 +268,24 @@ sub run_once {
         my $message_id = $message->{message_id};
         my $msg_note   = defined $message_id ? " (msg #$message_id)" : '';
 
+        # TGT-178: this update is only being seen again because
+        # Telegram redelivered it - an EARLIER sibling in that same
+        # original batch failed to record and capped the offset below
+        # it (see $offset_cap above). If THIS update was already
+        # successfully recorded on a prior cycle, skip announcing/
+        # acting on it entirely rather than printing a duplicate NEW
+        # TG/re-downloading/re-transcribing something the watching
+        # agent has already seen. A transient lookup error here is
+        # treated as "not previously recorded" (proceed as normal) -
+        # a rare duplicate announcement is a smaller cost than
+        # silently dropping a message this check can't confirm either
+        # way, matching this file's established degrade-not-crash
+        # philosophy (TGT-165/166/167).
+        if ( $store && defined $message_id ) {
+            my $already_recorded = eval { $store->get_message( $chat_id, $message_id ) };
+            next if !$@ && $already_recorded;
+        }
+
         # TGT-092 (live production incident): a photo/document's caption
         # was never read at all - Telegram's Bot API attaches it as a
         # field separate from $message->{text} (which is only present
@@ -266,8 +301,10 @@ sub run_once {
 
             print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
-            _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text )
-              if $store && defined $message_id;
+            if ( $store && defined $message_id ) {
+                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text );
+                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+            }
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
             my $file_id = $message->{voice}{file_id};
@@ -289,8 +326,10 @@ sub run_once {
 
                 print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
-                _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_transcript )
-                  if $store && defined $message_id;
+                if ( $store && defined $message_id ) {
+                    my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_transcript );
+                    $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                }
             }
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
@@ -311,8 +350,10 @@ sub run_once {
                     print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
                     _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
-                    _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path )
-                      if $store && defined $message_id;
+                    if ( $store && defined $message_id ) {
+                        my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path );
+                        $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                    }
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
 
@@ -363,9 +404,18 @@ sub run_once {
             # message in the store, making it invisible to
             # d2 tg.history/d2 tg.unread afterward even though it was
             # printed to stdout in real time.
-            _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note" )
-              if $store && defined $message_id;
+            if ( $store && defined $message_id ) {
+                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note" );
+                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+            }
         }
+    }
+
+    # TGT-178: if any update's record_message call failed, cap the
+    # returned offset there instead of the batch's own full next
+    # offset - see $offset_cap's own comment above the loop.
+    if ( defined $offset_cap && ( !defined $next_offset || $offset_cap < $next_offset ) ) {
+        $next_offset = $offset_cap;
     }
 
     return ( $updates, $next_offset );
@@ -382,6 +432,10 @@ sub _record_message_safe {
     # run_once_safe would catch it by returning the offset UNCHANGED,
     # causing the WHOLE batch (including updates already announced) to
     # be redelivered and reprinted next cycle.
+    #
+    # TGT-178: now returns a true/false success flag instead of void,
+    # so run_once can cap the offset at this update instead of letting
+    # it advance past a message whose local record was never written.
     local $@;
     eval { $store->record_message(@args) };
     if ($@) {
@@ -393,8 +447,9 @@ sub _record_message_safe {
         # short, fixed reason instead of ever echoing $@ itself.
         my $reason = _classify_store_error($@);
         print STDERR "record_message failed ($reason) - message was already printed/handled, only its own store record is affected\n";
+        return 0;
     }
-    return;
+    return 1;
 }
 
 sub _classify_store_error {
@@ -931,9 +986,10 @@ sender's text is printed unconditionally (used by earlier tests only -
 C<cli/poller.pl> always passes a real store). Returns the raw updates array
 and the next offset to pass on the following call.
 
-Every C<$store-E<gt>record_message> call (text, transcribed voice,
-downloaded media, and the no-callback fallback branch - four call
-sites) goes through a private C<_record_message_safe> wrapper (TGT-132),
+Every C<$store-E<gt>record_message> call (edited text, plain text,
+transcribed voice, downloaded media, and the no-callback fallback
+branch - five call sites) goes through a private
+C<_record_message_safe> wrapper (TGT-132),
 matching L<D2TG::Store/record_failed_download>'s own established
 eval-wrap pattern (TGT-104): a store write failure is logged non-fatally
 to STDERR rather than propagating - the update was already printed and
@@ -944,6 +1000,29 @@ raw exception text is never printed (a Codex review finding: a DBI/
 SQLite error can embed the database file's own path) - only a short,
 fixed classification (C<database is locked>/C<busy>/C<readonly>, or
 C<an unexpected error>).
+
+B<TGT-178> (Michael's own architectural ruling, answering the message-
+loss investigation raised as TGT-176): C<_record_message_safe> now
+returns a true/false success flag rather than void. C<run_once> tracks
+the first update whose call failed, in the order the batch is
+iterated (the same as the earliest, since Telegram delivers updates in
+increasing C<update_id> order), and at the end of the batch caps the
+returned offset at that failing update's own C<update_id>
+instead of the batch's full next offset - Telegram never redelivers an
+update once the offset has moved past it, so the old behavior (always
+returning the batch's full offset) let a genuine store-write failure
+permanently and silently lose that message's local history. Because
+L<D2TG::Store/record_message> already upserts on its own
+C<PRIMARY KEY (chat_id, message_id)>, a redelivered message's store
+write is already idempotent with no schema change needed. To avoid
+re-announcing a redelivered-but-already-recorded update (a duplicate
+C<NEW TG>/re-download/re-transcription), C<run_once> checks
+L<D2TG::Store/get_message> before acting on a plain message and skips
+it entirely when a prior recording is found; a lookup failure is
+treated as "not previously recorded" (proceed as normal), matching
+this function's own established degrade-not-crash philosophy rather
+than risking a silently dropped message over a possible rare duplicate
+announcement.
 
 An C<message_reaction> update (TGT-143, a live Telegram question -
 "the user can give a like or mark a message with emoji") - Telegram's
