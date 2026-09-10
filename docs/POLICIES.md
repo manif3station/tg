@@ -1625,3 +1625,30 @@ attachment is therefore only reliable for one still within the vault's
 currently-retained set, not a permanent guarantee - documented
 explicitly in `docs/commands.md`'s own
 `d2 tg.attachment` section and `cli/attachment.pl`'s own POD.
+
+## A video message is announced and recorded, not silently dropped (TGT-161)
+
+Scheduled hourly bug hunt finding, 2026-09-10: `run_once`'s own guard -
+`next unless (defined $text && length $text) || $media_kind` - drops an
+update with no plain text and no recognized media kind, with zero
+footprint: not printed to stdout, not queued as `NEW TG PENDING` for an
+unapproved sender, not recorded via `record_message`, no stderr line,
+and the poll offset still advances past it since it is computed once
+per batch from `get_updates`, unaffected by a per-update `next`. Before
+this fix, `_media_kind` recognized only `photo`/`document`/`voice`, so
+a video message (whether or not it carried a caption) fell into exactly
+this gap - gone forever, indistinguishable from an update that never
+arrived. `_media_kind` now also recognizes `video`
+(`$message->{video}`); the existing generic fallback branch (see
+"The fallback media branch records history the same way every other
+branch does (TGT-120)" above) - which video always reaches, since there
+is no video-specific handling or download path at all, unlike
+photo/document/voice which only reach it when their own callback is
+omitted - already prints and records generically by whatever
+`$media_kind` names, so no other code change was needed - a
+video is announced and recorded exactly like an undownloaded
+photo/document already is. Actual video download support (extending
+`download_media`) is a separate, larger decision and stays out of
+scope; `video_note`/`audio`/`animation`/`sticker` are the same failure
+class but are deliberately deferred to a follow-up ticket, to keep this
+fix narrow and reviewable.

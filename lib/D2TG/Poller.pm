@@ -473,6 +473,16 @@ sub _media_kind {
     return 'photo'    if $message->{photo};
     return 'document' if $message->{document};
     return 'voice'    if $message->{voice};
+
+    # TGT-161 (found via a scheduled hourly bug hunt): a video message
+    # had neither $message->{text} nor a recognized media kind, so it
+    # failed run_once's own "next unless text or media_kind" guard and
+    # was silently dropped - not printed, not queued pending, not
+    # recorded, no stderr line. video_note/audio/animation/sticker are
+    # the same failure class but are deliberately out of scope here -
+    # see this ticket's own key_details for why.
+    return 'video' if $message->{video};
+
     return undef;
 }
 
@@ -543,11 +553,14 @@ the bound is short and actually enforced end to end.
 =head1 DESCRIPTION
 
 C<run_once> performs a single C<get_updates> call and, for each update
-carrying a text message or recognized media (photo/document/voice) from
-an allow-listed sender, prints one line to STDOUT: the message text, or
-C<NEW TG MEDIA [chat_id] sender: <type>> for photo/document (and voice
-too, when no C<transcribe_voice> callback is given; photo/document too,
-when no C<download_media> callback is given). A message from a sender
+carrying a text message or recognized media (photo/document/voice/video,
+TGT-161) from an allow-listed sender, prints one line to STDOUT: the
+message text, or C<NEW TG MEDIA [chat_id] sender: <type>> for
+photo/document (and voice too, when no C<transcribe_voice> callback is
+given; photo/document too, when no C<download_media> callback is given).
+A video always takes this same fallback path regardless of what
+callbacks are given, since there is no video-specific handling or
+download path at all. A message from a sender
 not yet allow-listed produces no content output at all, but does print a
 one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
 time that sender is recorded pending (not on subsequent messages from
@@ -555,13 +568,21 @@ the same still-pending sender). Replying is separate, later work.
 
 Every successful branch above also records the message in the store
 (when one is given and the update carries a C<message_id>) - including
-the fallback branch that fires for a photo/document/voice message whose
-applicable callback (C<download_media> for photo/document,
-C<transcribe_voice> for voice) was not given (TGT-120, found via a
-scheduled bug-hunt: this branch used to print its C<NEW TG MEDIA> line
-without recording anything, making that message invisible to a later
-C<d2 tg.history>/C<d2 tg.unread> lookup even though it had already been
-printed to stdout in real time). Not exercised by this project's own
+the fallback branch that fires for a photo/document/voice/video message
+whose applicable callback (C<download_media> for photo/document,
+C<transcribe_voice> for voice, always for video since it has none) was
+not given (TGT-120, found via a scheduled bug-hunt: this branch used to
+print its C<NEW TG MEDIA> line without recording anything, making that
+message invisible to a later C<d2 tg.history>/C<d2 tg.unread> lookup
+even though it had already been printed to stdout in real time). Before
+TGT-161 (found via a scheduled hourly bug hunt), a video message had
+neither plain text nor a recognized media kind - C<_media_kind> only
+knew photo/document/voice - so it silently failed C<run_once>'s own
+"text or media_kind" guard: not printed, not queued pending, not
+recorded, no stderr line, the poll offset still advancing past it.
+C<video_note>/C<audio>/C<animation>/C<sticker> are the same failure
+class but are deliberately still unrecognized, deferred to a follow-up
+ticket to keep this fix narrow. Not exercised by this project's own
 C<cli/poller.pl>, which always supplies both callbacks - this closes a
 latent gap in C<run_once>'s
 general-purpose API contract for any caller that legitimately omits one.

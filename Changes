@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.29  2026-09-10
+      - BUG FIX (TGT-161, found via scheduled hourly bug hunt JOB-003):
+        D2TG::Poller::_media_kind only recognized photo/document/voice,
+        so a video message (no plain text, no recognized media kind)
+        failed run_once's own "next unless text or media_kind" guard
+        and was silently dropped - not printed to stdout, not queued as
+        NEW TG PENDING for an unapproved sender, not recorded in the
+        store, no stderr line, and the poll offset still advanced past
+        it. Gone forever, indistinguishable from an update that never
+        arrived. _media_kind now also recognizes video
+        ($message->{video}); the existing generic fallback branch (which
+        video always reaches, since there is no video-specific handling
+        or download path at all) already prints/records generically by
+        media kind, so it needed no change to announce and record a
+        video the same way an
+        undownloaded photo/document already is. Actual video download
+        support is a separate, larger decision and stays out of scope;
+        video_note/audio/animation/sticker are the same failure class
+        but are deliberately deferred to a follow-up ticket, to keep
+        this fix narrow and reviewable.
+
 1.28  2026-09-10
       - RELIABILITY FIX (TGT-160, found via scheduled hourly bug hunt
         JOB-003): D2TG::Config::is_transient_error never classified

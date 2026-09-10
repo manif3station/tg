@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.28).** RELIABILITY FIX (TGT-160,
+**Status: early implementation (v1.29).** BUG FIX (TGT-161, found via a
+scheduled hourly bug hunt): a video message (no plain text, no
+recognized media kind) was previously silently dropped by the poller -
+not printed, not queued pending, not recorded - `_media_kind` now also
+recognizes `video`, so it is announced and recorded exactly like an
+undownloaded photo/document already is. Video download support itself,
+and the same failure class for video_note/audio/animation/sticker,
+remain out of scope, deliberately deferred.
+RELIABILITY FIX (TGT-160,
 found via a scheduled hourly bug hunt): a routine Telegram `429` rate-
 limit response was previously logged as a genuine `POLL ERROR` on the
 monitored stream instead of being silently retried like a 5xx/timeout
