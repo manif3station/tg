@@ -11,11 +11,7 @@ use D2TG::Store;
 use D2TG::Reply;
 
 my ( $db_alias, @rest );
-eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 my ( $bot_key, @after_bot );

@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.45  2026-09-11
+      - REFACTOR (TGT-177, found via a scheduled improvement hunt): 10
+        cli/*.pl scripts (approve, attachment, history, poller,
+        retry-download, send, status, text-only-replies, unread,
+        whoami - the ticket's own original drafting undercounted this
+        at 9, missing text-only-replies.pl) each duplicated the
+        identical eval { extract_db_flag } / print STDERR $@ / exit 1
+        boilerplate - extracted into a new
+        D2TG::Config::extract_db_flag_or_die, matching the existing
+        resolve_alias_dir_or_die convention exactly (TGT-172). No
+        behavior change - same exit code, same STDERR text byte-for-
+        byte, same return shape for every caller (verified via a
+        before/after full-suite diff and 100% statement+subroutine
+        coverage on D2TG::Config.pm). cli/reply.pl is unaffected - it
+        uses its own separate leading-position-only --db extraction.
+
 1.44  2026-09-10
       - RELIABILITY FIX (TGT-179, found via a scheduled JOB-003 hourly
         bug hunt, reproduced live via a stalled FIFO): D2TG::Transcribe

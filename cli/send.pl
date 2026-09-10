@@ -44,11 +44,7 @@ my $reply_to_message_id;
 # defeat the entire point of this ticket (consistency with those 7
 # scripts) for a scenario with no legitimate real usage.
 my ( $db_alias, @after_db );
-eval { ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+( $db_alias, @after_db ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @after_db;
 
 while (@ARGV) {

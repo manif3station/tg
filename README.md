@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.44).** RELIABILITY FIX (TGT-179,
+**Status: early implementation (v1.45).** REFACTOR (TGT-177, found via
+a scheduled improvement hunt): 10 `cli/*.pl` scripts each duplicated
+the identical `eval { extract_db_flag } / print STDERR $@ / exit 1`
+boilerplate - extracted into `D2TG::Config::extract_db_flag_or_die`,
+matching the existing `resolve_alias_dir_or_die` convention. No
+behavior change - same exit code, same STDERR text, same return shape
+for every caller.
+RELIABILITY FIX (TGT-179,
 found via a scheduled hourly bug hunt, reproduced live via a stalled
 FIFO): `D2TG::Transcribe::_probe_duration`'s `ffprobe` call had no
 timeout at all - a hang there blocked the ENTIRE single-threaded

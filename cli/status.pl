@@ -42,11 +42,7 @@ use constant STALE_THRESHOLD_SECONDS =>
   int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
 
 my ( $db_alias, @rest );
-eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 if (@ARGV) {

@@ -12,11 +12,7 @@ use D2TG::Telegram;
 use D2TG::Download;
 
 my ( $db_alias, @rest );
-eval { ( $db_alias, @rest ) = D2TG::Config::extract_db_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );

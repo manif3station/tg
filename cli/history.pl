@@ -10,11 +10,7 @@ use D2TG::Config;
 use D2TG::Store;
 
 my ( $db_alias, @after_db );
-eval { ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+( $db_alias, @after_db ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @after_db;
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
