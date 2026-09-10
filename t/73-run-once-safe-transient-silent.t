@@ -71,6 +71,31 @@ sub capture_std {
 }
 
 {
+    # TGT-160 (found via a scheduled hourly bug hunt): Telegram's own
+    # Bot API documents 429 ("Too Many Requests") as a designed,
+    # expected rate-limit signal, not an application error - it was
+    # previously misclassified as non-transient (is_transient_error
+    # only matched /timed out/i or /status 5\d\d/, never 429), so a
+    # routine flood-control response got logged loudly as a genuine
+    # POLL ERROR every time, adding noise to the monitored
+    # tira.policy.bridge stream for something that isn't actually wrong.
+    package Fake::Telegram::TooManyRequests;
+    sub new { return bless {}, shift; }
+    sub get_updates { die "D2TG::Telegram getUpdates: HTTP request failed (status 429 Too Many Requests)\n"; }
+
+    package main;
+
+    my $tg    = Fake::Telegram::TooManyRequests->new;
+    my $store = Fake::Store->new( allowed => [999] );
+
+    my ( $out, $err ) = capture_std( sub {
+        D2TG::Poller::run_once_safe( $tg, 42, $store, sleep => sub { } );
+    } );
+
+    is( $err, '', 'nothing printed to stderr for a transient 429 (rate-limit) either' );
+}
+
+{
     package Fake::Telegram::Malformed;
     sub new { return bless {}, shift; }
     sub get_updates { die "D2TG::Telegram getUpdates: response was not valid JSON\n"; }

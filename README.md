@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.27).** DOC/CONSISTENCY FIX (TGT-159,
+**Status: early implementation (v1.28).** RELIABILITY FIX (TGT-160,
+found via a scheduled hourly bug hunt): a routine Telegram `429` rate-
+limit response was previously logged as a genuine `POLL ERROR` on the
+monitored stream instead of being silently retried like a 5xx/timeout
+already is - `is_transient_error` now classifies it the same way.
+DOC/CONSISTENCY FIX (TGT-159,
 found via a scheduled improvement hunt, a systematic `cli/*.pl` sweep
 after TGT-157 found the same pattern once already): `cli/approve.pl`'s
 own STDERR Usage string was missing `--bot <token>` - correctly

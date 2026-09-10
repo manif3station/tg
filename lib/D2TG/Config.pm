@@ -355,6 +355,17 @@ sub is_transient_error {
 
     return 1 if $error =~ /timed out/i;
     return 1 if $error =~ /status 5\d\d/;
+
+    # TGT-160 (found via a scheduled hourly bug hunt): Telegram's own
+    # Bot API documents 429 ("Too Many Requests") as a designed,
+    # expected, retryable rate-limit condition (a response body
+    # containing parameters.retry_after) - matches the same "not
+    # actually wrong" treatment 5xx/timeout already get. Deliberately
+    # does not read parameters.retry_after here - that would require
+    # parsing the response body, out of scope for this narrow
+    # classification fix.
+    return 1 if $error =~ /status 429\b/;
+
     return 0;
 }
 
@@ -798,9 +809,10 @@ might well work again.
 =head2 is_transient_error($error)
 
 Returns true if C<$error> looks like a transient failure - matches
-C</timed out/i> or C</status 5\d\d/>, the same shapes
-L<D2TG::Telegram>'s own C<die> messages already use for a network
-timeout or a 5xx response - false otherwise (TGT-097). A shared
+C</timed out/i>, C</status 5\d\d/>, or C</status 429\b/>, the same
+shapes L<D2TG::Telegram>'s own C<die> messages already use for a
+network timeout, a 5xx response, or Telegram's own documented rate-
+limit signal - false otherwise (TGT-097, widened by TGT-160). A shared
 predicate: L<D2TG::Reply/format_send_error> (TGT-096) uses it to decide
 whether a failed C<d2 tg.reply> should tell the calling agent to retry;
 C<D2TG::Poller::run_once_safe> (TGT-097) uses it to decide whether a
@@ -808,5 +820,17 @@ poll-cycle failure is worth printing at all - a transient one retries
 completely silently, since the retry loop already recovers on its own
 and each printed occurrence was reaching the project's
 C<tira.policy.bridge> as pure noise.
+
+TGT-160 (found via a scheduled hourly bug hunt): a C<429> ("Too Many
+Requests") response is Telegram's own designed, expected, retryable
+rate-limit condition - a response body containing
+C<parameters.retry_after> - not a genuine application error, even
+though 429 remains an HTTP error status. It was previously
+misclassified as non-transient and logged loudly as a genuine
+C<POLL ERROR> on every routine flood-control response. Deliberately
+does not read or honor C<parameters.retry_after> here - that would
+require parsing the response body, out of scope for this narrow
+classification fix; C<run_once_safe>'s own retry/backoff timing is
+unchanged, only the loud-vs-silent logging decision changes.
 
 =cut

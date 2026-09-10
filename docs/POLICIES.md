@@ -491,6 +491,24 @@ confirms that silencing routine transient poll failures remains
 appropriate, rather than masking an unaddressed change to timeout or
 retry behavior.
 
+## A routine 429 rate-limit response is silenced too, not just 5xx/timeout (TGT-160)
+
+Scheduled hourly bug hunt finding, 2026-09-10: `is_transient_error`'s
+own classification only ever matched a network timeout or a 5xx status
+- Telegram's own `429` ("Too Many Requests") response, which the Bot
+API documents as a designed, expected, retryable rate-limit condition
+(a response body containing `parameters.retry_after`), not a genuine
+application error even though 429 remains an HTTP error status,
+matched neither pattern and was misclassified as non-transient. The
+exact same TGT-097 noise problem this section describes for
+5xx/timeout applied identically to a routine 429: logged loudly as
+`POLL ERROR` on every occurrence, even though `run_once_safe` was
+already retrying and recovering on its own. `is_transient_error` now
+also matches `/status 429\b/`, silencing it the same way. Not
+reading/honoring the `parameters.retry_after` value itself - that
+would require parsing the response body, a separate, larger change
+than this narrow classification fix.
+
 ## Only one poller may ever hold the lock, and the last one to try wins (TGT-084)
 
 Live production incident (TGT-062): "it is not always works. when send

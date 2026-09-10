@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.28  2026-09-10
+      - RELIABILITY FIX (TGT-160, found via scheduled hourly bug hunt
+        JOB-003): D2TG::Config::is_transient_error never classified
+        Telegram's own 429 ("Too Many Requests") rate-limit response as
+        transient - only /timed out/i and /status 5\d\d/ matched.
+        Telegram's Bot API documents 429 as a designed, expected,
+        retryable rate-limit condition (a response body containing
+        parameters.retry_after), not a genuine application error, but
+        it was previously logged loudly as a genuine POLL ERROR on the
+        monitored tira.policy.bridge stream every time routine rate
+        limiting kicked in. Now returns true for a 429, matching the
+        same treatment 5xx/timeout errors already get - run_once_safe's
+        own retry/backoff timing is unchanged, only the loud-vs-silent
+        logging decision changes. Deliberately does not read/honor
+        Telegram's own parameters.retry_after value (would require
+        parsing the response body, out of scope for this narrow
+        classification fix).
+
 1.27  2026-09-10
       - DOC/CONSISTENCY FIX (TGT-159, found via scheduled improvement
         hunt JOB-004, a systematic cli/*.pl sweep after TGT-157 found

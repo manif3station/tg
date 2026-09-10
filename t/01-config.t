@@ -115,4 +115,19 @@ ok( D2TG::Config::require_chat_id_or_warn(),
         'require_chat_id_or_warn() succeeds for a negative (group/channel-shaped) chat id' );
 }
 
+# TGT-160 (found via a scheduled hourly bug hunt, widened after a Codex
+# review finding of its own): is_transient_error's own classification
+# is tested directly here, not only through the end-to-end
+# run_once_safe assertion in t/73 - a Codex review pointed out the
+# broader assertion alone leaves the actual classification contract and
+# its boundary implicit.
+ok( D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 429 Too Many Requests)'),
+    'is_transient_error() returns true for a genuine 429 rate-limit error string' );
+ok( !D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 4290 something else)'),
+    'is_transient_error() does not match a near-miss like status 4290 - the \b boundary holds' );
+ok( D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 502 Bad Gateway)'),
+    'is_transient_error() still returns true for a 5xx, unaffected by the 429 addition' );
+ok( !D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 401 Unauthorized)'),
+    'is_transient_error() still returns false for a non-transient 4xx other than 429' );
+
 done_testing();
