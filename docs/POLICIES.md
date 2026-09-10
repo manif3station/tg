@@ -1708,3 +1708,34 @@ them caught one more real drift immediately: `history.pl`'s own
 new tests pass immediately, serving as the same safety net for future
 drift that `t/88`/`t/113`/`t/114` already provide for their own
 scripts.
+
+## A malformed D2TG_CHAT_ID is caught even when the CLI also declares its own --chat_id group (TGT-164)
+
+Scheduled bug hunt finding, 2026-09-10: `D2TG_CHAT_ID`'s canonical-shape
+validation (`require_chat_id_or_warn`, TGT-155 - matches
+`/^-?\d+$/`) was only ever called from `cli/poller.pl`'s startup guard
+when the CLI did NOT declare its own `--chat_id` group. Whenever the
+multi-bot CLI support (TGT-049) was used at all - even a single
+`--chat_id`/`--bot` pair - that guard was skipped entirely, and
+`D2TG::Config::bot_groups`'s second call (which folds `D2TG_CHAT_ID` in
+as an implicit trailing group) still ran with no shape check of its
+own, silently adding a broken poll group instead of refusing. Traced to
+a genuinely-reproducible hang: a still-buggy poller given a CLI group
+plus a malformed env `D2TG_CHAT_ID` doesn't refuse at all - it proceeds
+straight into a real poll loop and never exits, discovered live while
+writing this ticket's own regression test (`t/126`), which uses a
+bounded-timeout subprocess read specifically because a naive blocking
+read would have hung the test suite the same way. `cli/poller.pl` now
+also refuses whenever `D2TG_CHAT_ID` is actually SET (not merely
+unset) but fails the same canonical-shape check, regardless of whether
+CLI groups are also present. A CLI-declared `--chat_id` group's own
+value remains unvalidated by this fix, unchanged - it is caller-
+supplied and outside this env-var validation, not an env leak.
+
+An empty-but-set `D2TG_CHAT_ID` (`D2TG_CHAT_ID=''`) is deliberately
+NOT refused by this new guard, matching `D2TG::Config::bot_groups`'s
+own env-folding condition (`defined $env_chat_id && length
+$env_chat_id`) exactly: an empty string is never folded in as a group
+either, so there is no broken group for this guard to prevent - an
+empty env value behaves identically to an unset one throughout this
+whole code path, by design, not by omission.

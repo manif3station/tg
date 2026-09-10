@@ -125,7 +125,15 @@ an opaque database error.
 Starts the long-poll loop. Refuses to start (warning to STDERR, exit 1)
 if `D2TG_CHAT_ID` is not set AND no `--chat_id` was given on the command
 line at all (a CLI-declared group supplies its own chat id
-independently of the env var). Also acquires an exclusive lock
+independently of the env var). Also refuses (TGT-164, found via a
+scheduled bug hunt) if `D2TG_CHAT_ID` is non-empty but malformed - even when
+a `--chat_id` group was also given on the command line: before this
+fix, that case skipped the canonical-shape check (TGT-155) entirely,
+and `D2TG::Config::bot_groups` still silently folded the malformed
+value in as an extra, broken poll group instead of refusing. A merely
+*unset* `D2TG_CHAT_ID` alongside CLI-declared groups is unaffected -
+nothing is folded in for that case, so there is nothing to validate.
+Also acquires an exclusive lock
 (`.tira/telegram.pid` under the resolved `--db`/`-d`/`D2TG_DB` storage
 location, TGT-062; nested under `.tira/` as of TGT-087, matching
 TGT-081's own nesting of the vault's other files - was a flat

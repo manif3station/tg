@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.31).** TEST COVERAGE (TGT-163,
+**Status: early implementation (v1.32).** BUG FIX (TGT-164, found via
+a scheduled bug hunt): D2TG_CHAT_ID's canonical-shape validation
+(TGT-155) was silently bypassed whenever the CLI also declared its own
+`--chat_id` group (TGT-049's multi-bot support) - a malformed env
+value became a broken extra poll group instead of being refused. Now
+validated in that branch too, whenever D2TG_CHAT_ID is actually set.
+TEST COVERAGE (TGT-163,
 found via a scheduled improvement hunt): 9 of the 12 `cli/*.pl` scripts
 with a Usage string had no test guarding it against their own POD SYNOPSIS -
 the same drift class caught 3 times before (TGT-119/157/159). New

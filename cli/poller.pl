@@ -105,6 +105,21 @@ if (@cli_leftover) {
 my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
 exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
 
+# TGT-164 (found via a scheduled bug hunt): even when the CLI supplies
+# its own --chat_id group(s), D2TG::Config::bot_groups below still
+# silently folds a SET D2TG_CHAT_ID in as an additional implicit group
+# with no shape validation at all - the same canonical-shape check
+# require_chat_id_or_warn already enforces (TGT-155) never ran in this
+# branch. Only refuse when D2TG_CHAT_ID is actually set (a merely unset
+# env var alongside CLI groups is fine - bot_groups simply won't fold
+# anything in); require_chat_id_or_warn's own defined+shape check
+# covers "set but malformed" correctly.
+exit 1
+  if $has_cli_groups
+  && defined $ENV{D2TG_CHAT_ID}
+  && length $ENV{D2TG_CHAT_ID}
+  && !D2TG::Config::require_chat_id_or_warn();
+
 my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
 @ARGV = @leftover;
 
@@ -459,7 +474,12 @@ Calls L<D2TG::Config>'s original startup guard only when no CLI
 C<--chat_id> was given at all (so CLI-declared groups aren't blocked by
 an unset C<D2TG_CHAT_ID>, which only matters for the plain env-var-only
 case), refuses to proceed (non-zero exit, nothing on STDOUT) when
-C<D2TG_CHAT_ID> is missing in that case. Once past every guard, prints a
+C<D2TG_CHAT_ID> is missing in that case. Also refuses (TGT-164, found
+via a scheduled bug hunt) whenever C<D2TG_CHAT_ID> is non-empty but fails the
+same canonical-shape check, even when a CLI C<--chat_id> group was
+given - before this fix, that combination skipped validation entirely
+and L<D2TG::Config/bot_groups> still silently folded the malformed
+value in as an extra, broken poll group instead of refusing. Once past every guard, prints a
 startup line naming each group's chat id and its bots' masked tokens
 (L<D2TG::Config/masked_token>, TGT-045; the single-bot case keeps the
 original one-line format verbatim), opens a L<D2TG::Store> (auto-

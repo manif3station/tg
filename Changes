@@ -1,5 +1,28 @@
 Revision history for the tg skill
 
+1.32  2026-09-10
+      - BUG FIX (TGT-164, found via a scheduled bug hunt): D2TG_CHAT_ID's
+        canonical-shape validation (TGT-155's require_chat_id_or_warn)
+        was only ever called when the CLI did NOT declare its own
+        --chat_id group. Whenever cli/poller.pl's multi-bot CLI
+        support (TGT-049) was used (e.g. `d2 tg.poller --chat_id 999
+        --bot TOKEN`), the startup guard was skipped entirely -
+        D2TG::Config::bot_groups' second call still silently folded a
+        SET but malformed D2TG_CHAT_ID in as an additional implicit
+        poll group, with no shape validation at all, instead of being
+        refused the way the plain env-only path already refuses it.
+        The env-folded value now runs through the same
+        require_chat_id_or_warn check whenever D2TG_CHAT_ID is
+        actually set (a merely unset env var alongside CLI groups is
+        unaffected - bot_groups simply won't fold anything in for
+        that case). CLI-declared --chat_id groups' own values remain
+        unvalidated by this fix, unchanged - a CLI-declared chat_id is
+        caller-supplied and outside this env-var validation, not an env
+        leak. An empty-but-set D2TG_CHAT_ID is deliberately not refused
+        by this guard either, matching bot_groups' own env-folding
+        condition exactly - an empty string is never folded in as a
+        group, so there is nothing for this guard to prevent there.
+
 1.31  2026-09-10
       - TEST COVERAGE (TGT-163, found via scheduled improvement hunt
         JOB-004): only 3 of 12 cli/*.pl scripts with a Usage: STDERR
