@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.42  2026-09-10
+      - RELIABILITY FIX (TGT-175, live production incident reported via
+        the budget project, Michael's own owner chat): cli/poller.pl's
+        main-loop version-change check called
+        D2TG::Config::skill_version() directly, unwrapped - a transient
+        window where .env was briefly missing/unreadable during the
+        skill's own self-update (an install rewriting the directory
+        mid-flight) was fatal to the ENTIRE poller process, killing the
+        owner's own Telegram channel for about a minute until a human
+        noticed monitor-dead and manually restarted the job. New
+        D2TG::Poller::skill_version_check_safe wraps the call, matching
+        persist_offset_safe's (TGT-166) own non-fatal-degradation
+        pattern - a failure is logged to STDERR and the version-change
+        check is skipped for that cycle only, retried next cycle. The
+        poller's own startup call to skill_version (which still refuses
+        to start loudly on a genuinely missing .env at launch) is
+        deliberately unchanged - only this periodic re-check, made once
+        the process is already running, is safe to degrade.
+
 1.41  2026-09-10
       - DOC FIX (TGT-174, found via a scheduled JOB-005 doc-accuracy-hunt
         fork, immediately after TGT-173 shipped): lib/D2TG/Download.pm's

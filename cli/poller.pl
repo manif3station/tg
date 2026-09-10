@@ -339,8 +339,8 @@ until ($shutting_down) {
     D2TG::Download::prune_vault($attachments_dir);
 
     unless ($shutting_down) {
-        my $current_version = D2TG::Config::skill_version( default_root => $skill_root );
-        if ( $current_version ne $starting_version ) {
+        my $current_version = D2TG::Poller::skill_version_check_safe( default_root => $skill_root );
+        if ( defined $current_version && $current_version ne $starting_version ) {
             my $summary = D2TG::Config::changes_summary(
                 version      => $current_version,
                 default_root => $skill_root,

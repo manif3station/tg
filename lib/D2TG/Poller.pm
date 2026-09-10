@@ -445,6 +445,35 @@ sub persist_offset_safe {
     return;
 }
 
+# TGT-175 (live production incident, reported via the budget project):
+# cli/poller.pl's main-loop version-change check called
+# D2TG::Config::skill_version() directly, unwrapped - a transient
+# window where .env is briefly missing/unreadable during the skill's
+# own self-update (an install rewriting the directory mid-flight) was
+# fatal to the ENTIRE poller process, not just to that one version
+# check, killing the owner's own Telegram channel until a human
+# noticed and restarted the job. Matches persist_offset_safe's own
+# non-fatal-degradation philosophy above - the poller's core
+# message-processing loop does not need to know the skill's version to
+# keep running; the check simply runs again next cycle. Deliberately
+# does NOT touch D2TG::Config::skill_version itself, nor the poller's
+# own startup call to it - a fresh process launch with no readable
+# .env at all should still refuse to start loudly, not silently
+# proceed with an unknown version; only this periodic re-check, made
+# once the process is already running, is safe to degrade.
+sub skill_version_check_safe {
+    my (%args) = @_;
+
+    my $version = eval { D2TG::Config::skill_version(%args) };
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        print STDERR "skill_version_check_safe: $error - skipping this cycle's version-change check, will retry next cycle\n";
+        return undef;
+    }
+    return $version;
+}
+
 sub _display_name {
     my ( $chat_id, $username ) = @_;
 
@@ -838,6 +867,32 @@ C<_>-prefixed one like C<_record_message_safe> below) specifically so
 it is directly unit-testable from outside this module, since the
 caller (a persistent script requiring a live Telegram connection to
 run its main loop at all) cannot practically be integration-tested.
+
+=head2 skill_version_check_safe(%args)
+
+TGT-175 (live production incident, reported via the budget project,
+Michael's own owner chat): C<cli/poller.pl>'s main loop calls this
+instead of C<D2TG::Config::skill_version(%args)> directly for its
+per-cycle version-change check. A transient window where C<.env> is
+briefly missing/unreadable during the skill's own self-update (an
+install rewriting the directory mid-flight) used to be fatal to the
+ENTIRE poller process, not just to that one check - matches
+L</persist_offset_safe> above's own non-fatal-degradation pattern
+(though unlike that function, this one logs the raw exception text
+rather than classifying it first, since C<skill_version>'s own
+failure messages never embed anything sensitive the way a raw
+DBI/SQLite error can). C<eval>-wraps C<skill_version>; on error, logs
+the message to STDERR (trailing newline stripped) and returns
+C<undef> instead of dying, so the version-change check is simply
+skipped for that cycle and re-checked on the next one. Returns the
+version string unchanged on
+success. Deliberately does NOT wrap the poller's own I<startup> call
+to C<skill_version> (C<$starting_version>, read once before the poll
+loop begins) - a fresh process launch with a genuinely missing or
+misconfigured C<.env> should still refuse to start loudly, the same
+"refuse to start" pattern C<D2TG_CHAT_ID>'s own hard guard already
+uses; only this periodic re-check, made once the process is already
+safely running, is the one that's safe to degrade instead of crash.
 
 =head2 run_once_safe($telegram, $offset, $store, sleep => \&coderef, %run_once_opts)
 

@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.41).** DOC FIX (TGT-174, found via a
+**Status: early implementation (v1.42).** RELIABILITY FIX (TGT-175,
+live production incident reported via the budget project): the
+poller's main-loop version-change check crashed the ENTIRE process if
+`.env` was transiently missing/unreadable during the skill's own
+self-update - killed the owner's Telegram channel for about a minute.
+Now non-fatal, matching `persist_offset_safe`'s own degradation
+pattern; the poller's startup version check is unaffected and still
+refuses to start loudly.
+DOC FIX (TGT-174, found via a
 scheduled doc-accuracy hunt immediately after TGT-173 shipped):
 `D2TG::Download`'s POD still linked to its own now-removed
 `_with_hard_timeout` instead of `D2TG::Config`'s - fixed. Doc-only, no

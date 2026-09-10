@@ -1875,3 +1875,43 @@ gap in this skill's own implementation, and not something any
 client-side workaround can close (a bot can at best infer a deletion
 indirectly, e.g. a later reply-reference to the same message id
 failing, never receive a direct notification).
+
+## The main poll loop's version-change check no longer crashes the whole process either (TGT-175)
+
+Live production incident, reported via the budget project (Michael's
+own owner chat, 398296603), 2026-09-10: the poller (a Tira monitor
+job) died outright with `D2TG::Config::skill_version: cannot read
+.../skills/tg/.env: No such file or directory` during a run of rapid
+version-bump self-restarts across one evening. `.env` was briefly
+missing/unreadable during the skill directory's own self-update (a
+git-based rewrite - every file in the directory carried an identical
+timestamp, consistent with the whole directory having just been
+replaced) - a transient window, not a real misconfiguration. The
+owner's Telegram channel was down for about a minute until a human
+noticed `monitor-dead` and manually restarted the job. Same failure
+class as TGT-166's own `persist_offset_safe` fix one call site over:
+`cli/poller.pl`'s main loop called `D2TG::Config::skill_version()`
+directly, unwrapped, once per poll cycle to check for a version
+change - any exception there was fatal to the ENTIRE poller process,
+not just to that one check. Fixed with a new
+`D2TG::Poller::skill_version_check_safe`, matching
+`persist_offset_safe`'s own non-fatal-degradation pattern:
+catches the error, logs it to STDERR, and returns `undef` instead of
+dying - the version-change check is simply skipped for that cycle and
+retried next cycle, once the file is stable again. Deliberately does
+NOT touch `skill_version` itself, nor the poller's own startup call to
+it (`$starting_version`, read once before the poll loop begins) - a
+fresh process launch with a genuinely missing/misconfigured `.env`
+should still refuse to start loudly, exactly like `D2TG_CHAT_ID`'s own
+existing hard-guard pattern; only this periodic re-check, made once
+the process is already safely running, is the one that's safe to
+degrade instead of crash.
+
+A second, related HIGH-severity finding was reported the same evening
+(two of the owner's Telegram messages never reached local storage,
+despite Telegram's own `getUpdates` confirming they'd already been
+consumed) - tracked separately as TGT-176, an investigation-only
+ticket, since the exact mechanism is not yet conclusively established
+and any fix would be a deliberate architectural decision (whether to
+change `_record_message_safe`'s TGT-132 non-fatal-skip philosophy to a
+redeliver-and-dedupe model), not a mechanical bug fix like this one.
