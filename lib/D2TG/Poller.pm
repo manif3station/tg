@@ -64,7 +64,26 @@ sub run_once {
             # Reuses the exact same gate the message branch uses; no
             # add_pending here since a reaction isn't a first-contact
             # event the way a message is.
-            next if $store && !$store->is_allowed( $chat_id, $bot_token );
+            #
+            # TGT-165 (found via a scheduled hourly bug-hunt): is_allowed
+            # runs against a RaiseError=>1 DBI handle, so a locked/busy
+            # SQLite database makes it die - unwrapped, that propagated
+            # uncaught out of run_once, aborting the whole poll batch and
+            # (since run_once_safe preserves the pre-batch offset on
+            # error) causing the ENTIRE batch, including already-printed
+            # updates, to be redelivered and reprinted next cycle - the
+            # same failure class TGT-132 already fixed once for
+            # record_message. Skip this update non-fatally on error.
+            if ($store) {
+                my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
+                if ($@) {
+                    my $error = $@;
+                    $error =~ s/\n\z//;
+                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                    next;
+                }
+                next unless $allowed;
+            }
 
             my $message_id = $reaction->{message_id};
 
@@ -136,11 +155,39 @@ sub run_once {
 
         my $ts = _timestamp_prefix($message);
 
-        if ( $store && !$store->is_allowed( $chat_id, $bot_token ) ) {
-            if ( $store->add_pending( $chat_id, $bot_token ) ) {
-                print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
+        if ($store) {
+
+            # TGT-165 (found via a scheduled hourly bug-hunt): both
+            # is_allowed and add_pending run against a RaiseError=>1 DBI
+            # handle, so a locked/busy SQLite database makes either die -
+            # unwrapped, that propagated uncaught out of run_once,
+            # aborting the whole poll batch and (since run_once_safe
+            # preserves the pre-batch offset on error) causing the
+            # ENTIRE batch, including already-printed updates, to be
+            # redelivered and reprinted next cycle - the same failure
+            # class TGT-132 already fixed once for record_message. Skip
+            # this update non-fatally on either call's error.
+            my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
+            if ($@) {
+                my $error = $@;
+                $error =~ s/\n\z//;
+                print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                next;
             }
-            next;
+
+            unless ($allowed) {
+                my $added = eval { $store->add_pending( $chat_id, $bot_token ) };
+                if ($@) {
+                    my $error = $@;
+                    $error =~ s/\n\z//;
+                    print STDERR "STORE ERROR [$chat_id]: add_pending failed - $error\n";
+                    next;
+                }
+                if ($added) {
+                    print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
+                }
+                next;
+            }
         }
 
         my $reply_ctx  = _reply_context_suffix( $message, $store, $chat_id );
@@ -565,6 +612,34 @@ not yet allow-listed produces no content output at all, but does print a
 one-time C<NEW TG PENDING [chat_id] awaiting approval> line the first
 time that sender is recorded pending (not on subsequent messages from
 the same still-pending sender). Replying is separate, later work.
+
+TGT-165 (found via a scheduled hourly bug-hunt): the access-control
+gate itself - C<is_allowed> (both the message and message_reaction
+branches) and C<add_pending> (message branch) - is C<eval>-wrapped, not
+called directly, for the identical reason C<_record_message_safe>
+below wraps C<record_message> (TGT-132): both run against a
+C<RaiseError=E<gt>1> DBI handle, so a locked/busy SQLite database used
+to make either die, aborting the whole batch (and, since
+C<run_once_safe> preserves the pre-batch offset on error, causing the
+entire batch - including updates already printed earlier in that same
+cycle - to be redelivered and reprinted next cycle). A store error at
+either call now prints C<STORE ERROR [chat_id]: E<lt>what failedE<gt>
+- E<lt>errorE<gt>> to STDERR and skips that one update non-fatally
+instead. Deliberate tradeoff (a Codex review point, worth stating
+explicitly rather than leaving implicit): "skip" here means the
+poller's own C<offset> still advances past that update, same as any
+successfully-handled one - the failed update is not retried or
+queued, unlike a failed media download (C<record_failed_download>,
+TGT-104). A transient lock is expected to be gone by the time
+Telegram's own next poll cycle would have redelivered a REAL retry
+anyway (this codebase's poll interval is short), so the update is
+effectively lost rather than delayed - preferable to the alternative
+this ticket fixes (redelivering and reprinting the ENTIRE batch,
+including already-handled updates, forever until the lock clears).
+C<eval> here also suppresses any other exception C<is_allowed>/
+C<add_pending> could raise, not only a locked database - STDERR is the
+only signal for those too, matching how every other store-error path
+in this module already behaves.
 
 Every successful branch above also records the message in the store
 (when one is given and the update carries a C<message_id>) - including

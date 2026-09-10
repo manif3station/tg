@@ -1739,3 +1739,34 @@ $env_chat_id`) exactly: an empty string is never folded in as a group
 either, so there is no broken group for this guard to prevent - an
 empty env value behaves identically to an unset one throughout this
 whole code path, by design, not by omission.
+
+## The access-control gate itself never aborts the rest of a poll batch either (TGT-165)
+
+Scheduled hourly bug hunt finding, 2026-09-10: "A store write failure
+never aborts the rest of a poll batch (TGT-132)" above fixed
+`record_message`'s own call sites, but `run_once`'s access-control gate
+- `is_allowed` (message and message_reaction branches) and
+`add_pending` (message branch) - ran unwrapped, with no `eval` at all.
+Both run against the same `RaiseError=>1` DBI handle `record_message`
+does, so the identical locked/busy-SQLite failure TGT-132 addressed
+could still reach `run_once` through this different, earlier call
+site: a locked database mid-batch made `is_allowed`/`add_pending` die,
+which propagated uncaught out of `run_once` and aborted the whole poll
+batch - and since `run_once_safe` preserves the pre-batch offset on
+error (deliberately, as the last-resort safety net for a genuinely
+unexpected failure), the ENTIRE batch, including updates already
+printed earlier in that same cycle, got redelivered and reprinted
+verbatim on the next poll cycle. Both call sites now catch the error,
+print a `STORE ERROR [chat_id]: <what failed> - <error>` line to
+STDERR, and skip that one update non-fatally - the rest of the batch,
+and its own correct final offset, still completes normally.
+
+**Deliberate tradeoff, stated explicitly (a Codex review point):**
+"skip" here means the poller's own offset still advances past the
+failed update, same as any successfully-handled one - it is not
+retried or queued, unlike a failed media download
+(`D2TG::Store::record_failed_download`, TGT-104). This is preferable
+to the alternative this ticket fixes (redelivering and reprinting the
+entire batch, including already-handled updates, on every subsequent
+poll cycle until the lock clears) but does mean the one affected
+update is effectively lost, not merely delayed.

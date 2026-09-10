@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.33  2026-09-10
+      - BUG FIX (TGT-165, found via a scheduled hourly bug hunt):
+        D2TG::Poller::run_once's is_allowed/add_pending calls (message_
+        reaction branch and plain message branch) had no eval wrapper,
+        unlike every record_message call site, which TGT-132 already
+        wrapped for this exact reason. Both is_allowed and add_pending
+        run against a RaiseError=>1 DBI handle, so a locked/busy
+        SQLite database made either call die - unwrapped, that
+        propagated uncaught out of run_once, aborting the whole poll
+        batch. Since run_once_safe preserves the pre-batch offset on
+        error, the ENTIRE batch - including already-printed updates -
+        was then redelivered and reprinted verbatim on the next poll
+        cycle, the same "risking a duplicate reply to an already-
+        answered message" symptom TGT-132's own docs describe, just
+        via a different unguarded call site. Both call sites now catch
+        the error, print a STORE ERROR line to STDERR, and skip that
+        one update non-fatally - the rest of the batch (and its own
+        correct final offset) still completes normally.
+
 1.32  2026-09-10
       - BUG FIX (TGT-164, found via a scheduled bug hunt): D2TG_CHAT_ID's
         canonical-shape validation (TGT-155's require_chat_id_or_warn)

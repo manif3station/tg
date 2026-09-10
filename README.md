@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.32).** BUG FIX (TGT-164, found via
+**Status: early implementation (v1.33).** BUG FIX (TGT-165, found via
+a scheduled hourly bug hunt): `run_once`'s `is_allowed`/`add_pending`
+calls had no eval wrapper, unlike every `record_message` call site
+(TGT-132) - a locked SQLite database could die there, aborting the
+whole poll batch and causing it to be redelivered and reprinted
+verbatim on the next cycle. Both call sites now catch the error and
+skip that one update non-fatally instead.
+BUG FIX (TGT-164, found via
 a scheduled bug hunt): D2TG_CHAT_ID's canonical-shape validation
 (TGT-155) was silently bypassed whenever the CLI also declared its own
 `--chat_id` group (TGT-049's multi-bot support) - a malformed env
