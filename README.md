@@ -1,6 +1,11 @@
 # tg
 
-**Status: early implementation (v1.24).** SECURITY/RELIABILITY FIX
+**Status: early implementation (v1.25).** DOC/CONSISTENCY FIX (TGT-157,
+found via a scheduled improvement hunt): `cli/reply.pl`'s own STDERR
+Usage string was missing `--db`/`-d`, `--bot`, and `--voice-only` -
+correctly documented in the same file's own POD SYNOPSIS but drifted
+apart over time; a new POD-parity test now guards this the same way an
+existing one already guards `cli/poller.pl`. SECURITY/RELIABILITY FIX
 (TGT-155, found via a scheduled hourly bug hunt): a non-canonical
 `D2TG_CHAT_ID` - whitespace-only, or leading/trailing whitespace around
 an otherwise-valid id (a copy-paste error, a shell quoting mistake) -

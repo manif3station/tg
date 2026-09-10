@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+1.25  2026-09-10
+      - DOC/CONSISTENCY FIX (TGT-157, found via scheduled improvement
+        hunt JOB-004): cli/reply.pl's own STDERR Usage string was
+        missing --db/-d, --bot, and --voice-only - all three are
+        correctly documented in the same file's own POD SYNOPSIS, but
+        the two copies had drifted apart as flags were added over time.
+        Now names the same flags. New t/113-reply-usage-pod-parity.t
+        guards flag-set parity between the two the same way
+        t/88-poller-help-pod-parity.t already guards cli/poller.pl (a
+        deliberately loose check, matching that same precedent - it
+        catches a missing/renamed flag, not wording or ordering drift).
+
 1.24  2026-09-09
       - SECURITY/RELIABILITY FIX (TGT-155, found via scheduled hourly
         bug hunt JOB-003, widened after a Codex review finding of its

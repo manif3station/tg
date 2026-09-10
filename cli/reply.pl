@@ -72,7 +72,7 @@ if ( !defined $chat_id
     || !length $text
     || ( defined $reply_to_message_id && $reply_to_message_id !~ /^\d+$/ ) )
 {
-    print STDERR "Usage: d2 tg.reply <chat_id> <text...> [--reply-to-message-id <id>]\n";
+    print STDERR "Usage: d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]\n";
     exit 2;
 }
 
