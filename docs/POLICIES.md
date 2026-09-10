@@ -1939,10 +1939,10 @@ failed - let Telegram redeliver it next cycle, and add dedupe-by-
 message-id to handle the resulting duplicate delivery. The actual code
 change implementing this is tracked separately as **TGT-178** (not yet
 implemented as of this writing) - `record_message`'s own
-`UNIQUE(chat_id, message_id)` upsert already makes a redelivered
-message's store write idempotent (the `messages` table's
-`PRIMARY KEY (chat_id, message_id)`, not a separate `UNIQUE`
-constraint), so TGT-178's remaining work is capping `run_once`'s
+`ON CONFLICT(chat_id, message_id) DO UPDATE` upsert (backed by the
+`messages` table's `PRIMARY KEY (chat_id, message_id)`, not a separate
+`UNIQUE` constraint) already makes a redelivered message's store write
+idempotent, so TGT-178's remaining work is capping `run_once`'s
 returned offset on a `_record_message_safe` failure and suppressing
 the resulting duplicate `NEW TG` print/re-download/re-transcribe on
 the redelivered pass.
