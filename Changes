@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.37  2026-09-10
+      - REFACTOR (TGT-170, found via a scheduled JOB-004 improvement-hunt
+        fork): D2TG::Poller had the exact forward-attribution formatting
+        block - the same four-line logic duplicated at two call sites
+        (the main message branch and _reply_context_suffix's
+        replied-to-message handling, only the variable name differed),
+        both introduced by TGT-142. Extracted a shared private
+        helper, _format_forwarded_sender($sender, $forward_origin), that
+        both call sites now use instead of the duplicated inline logic -
+        matches the established shift_flag_value (TGT-072) /
+        _classify_store_error (TGT-167) precedent for this shape of
+        duplication. No behavioral change - verified via a before/after
+        full-suite diff (Files=130, Tests=1254 both times, no behavioral
+        test changes) and 100% statement+subroutine coverage on
+        D2TG::Poller.pm, rather than new tests for unchanged behavior.
+
 1.36  2026-09-10
       - FEATURE (TGT-169, live Telegram question from Michael, msg
         #246): "is the implementable if the user on telegram edit the

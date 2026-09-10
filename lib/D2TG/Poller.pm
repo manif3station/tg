@@ -208,10 +208,7 @@ sub run_once {
         # (D2TG::Telegram::get_updates strips nothing), names A when
         # present - not an unavoidable platform limitation, just a
         # previously-unread field.
-        my $origin_name = _forward_origin_name( $message->{forward_origin} );
-        if ( defined $origin_name ) {
-            $sender = _sanitize_for_stdout($origin_name) . " (forwarded by $sender)";
-        }
+        $sender = _format_forwarded_sender( $sender, $message->{forward_origin} );
 
         my $ts = _timestamp_prefix($message);
 
@@ -477,10 +474,7 @@ sub _reply_context_suffix {
     # TGT-142: the replied-to message can itself be a forward - same
     # gap, same fix, so a reply-context line never attributes a
     # forwarded message to its forwarder either.
-    my $origin_name = _forward_origin_name( $original->{forward_origin} );
-    if ( defined $origin_name ) {
-        $original_sender = _sanitize_for_stdout($origin_name) . " (forwarded by $original_sender)";
-    }
+    $original_sender = _format_forwarded_sender( $original_sender, $original->{forward_origin} );
 
     my $original_message_id = $original->{message_id};
     my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
@@ -615,6 +609,21 @@ sub _forward_origin_name {
     }
 
     return undef;
+}
+
+# TGT-170: extracted after TGT-142 introduced this same four-line
+# formatting logic at two call sites (the main message branch and
+# _reply_context_suffix's replied-to-message handling; only the
+# variable name differed) - matches the established shift_flag_value
+# (TGT-072) / _classify_store_error (TGT-167) precedent for this shape
+# of duplication.
+sub _format_forwarded_sender {
+    my ( $sender, $forward_origin ) = @_;
+
+    my $origin_name = _forward_origin_name($forward_origin);
+    return $sender unless defined $origin_name;
+
+    return _sanitize_for_stdout($origin_name) . " (forwarded by $sender)";
 }
 
 sub _media_kind {
@@ -935,7 +944,13 @@ a live question answered by Michael: "use the origin name instead of
 user id") - i.e. it was forwarded - the sender name additionally names
 the I<original> author via a private C<_forward_origin_name> helper,
 not just the immediate forwarder C<_display_name> already resolves:
-C<"E<lt>original nameE<gt> (forwarded by E<lt>forwarderE<gt>)">.
+C<"E<lt>original nameE<gt> (forwarded by E<lt>forwarderE<gt>)">. Both
+this branch and L</_reply_context_suffix>'s own handling of a
+replied-to forwarded message share this formatting via a private
+C<_format_forwarded_sender> helper (TGT-170, found via a scheduled
+improvement hunt - the two call sites had duplicated the same
+four-line formatting logic, only the variable name differed - a pure
+extraction with no behavior change).
 C<MessageOriginUser> resolves to the original sender's username (their
 first name as a fallback, never their bare numeric id); C<MessageOriginHiddenUser>
 prints exactly the name string Telegram itself supplies (its own privacy

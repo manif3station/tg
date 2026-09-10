@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v1.36).** FEATURE (TGT-169, live
+**Status: early implementation (v1.37).** REFACTOR (TGT-170, found via
+a scheduled improvement hunt): `D2TG::Poller`'s forward-attribution
+formatting (from TGT-142) was the same four-line logic duplicated at
+two call sites (the main message branch and `_reply_context_suffix`'s
+replied-to-message handling - only the variable name differed) -
+extracted into a shared `_format_forwarded_sender` helper, no
+behavioral change (verified via a before/after full-suite diff with no
+behavioral test changes - Files=130, Tests=1254 both times - and 100%
+coverage on `D2TG::Poller.pm`).
+FEATURE (TGT-169, live
 Telegram question from Michael): message EDITS are now detected and
 announced (`NEW TG EDIT`; a text edit's new content also updates
 `d2 tg.history`, a caption/media-only edit is announced but not
