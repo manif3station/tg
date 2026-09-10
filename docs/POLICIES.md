@@ -1821,3 +1821,47 @@ classified strings and each caller's own surrounding STDERR message
 text are completely unchanged, verified via a before/after full-suite
 diff with zero assertion changes rather than new tests, matching
 TGT-158's own precedent for a behavior-preserving refactor.
+
+## Message edits are detected; message deletions cannot be (TGT-169)
+
+Michael asked live via Telegram, msg #246: "is the implementable if
+the user on telegram edit the previous message and that will notify
+the agent about the updated message or notifiy the agent the message
+was deleted by user." The two halves have genuinely different
+answers. EDIT detection is implemented: Telegram's Bot API sends a
+distinct `edited_message` update - the same shape as an ordinary
+`message`, but reflecting the post-edit content - generally when a
+message known to the bot in an allow-listed chat is edited (Telegram's
+own docs note it can be omitted for edits to fields the bot never
+used, so this is not an absolute guarantee for every conceivable
+edit). Unlike `message_reaction` (TGT-143), `edited_message` is not
+itself opt-in - Telegram's own baseline default (before this project
+ever specified `allowed_updates` at all) already includes it; it only
+stopped reaching this project the moment `allowed_updates` was first
+narrowed to a fixed list at all (TGT-143), so it now has to be listed
+explicitly too, for the same reason every relied-on type does once the
+list is specified. That baseline is a historical fact, not a live
+fallback: `getUpdates` retains whichever `allowed_updates` list a bot
+last set rather than reverting to the baseline default if a later call
+omits the parameter, so simply omitting it now would not restore
+`edited_message` delivery. `run_once` recognizes it in a new branch, gated by
+the same `is_allowed` check every other branch uses by chat_id (no
+`add_pending` - an edit isn't a first-contact event, matching
+`message_reaction`'s own precedent), prints a distinct `NEW TG EDIT`
+line, and records a text edit's new content via `record_message` so
+`d2 tg.history` reflects it - deliberately different from
+`message_reaction`'s own detection-only, never-recorded behavior,
+since an edit changes the message's actual content while a reaction
+does not. A caption/media-only edit (no text) is announced but
+deliberately not recorded, to avoid overwriting an already-correct
+history summary with nothing useful (a Codex review finding; recording
+those too is a narrower follow-up, out of this ticket's own scope).
+DELETE detection of an ordinary chat message is not possible at all:
+the Bot API has no update type for that (a separate, business-
+connection-scoped `deleted_business_messages` update exists for an
+unrelated feature this project doesn't use, a Codex review correction
+to an earlier, too-absolute claim) - a hard platform limitation, not a
+gap in this skill's own implementation, and not something any
+client-side workaround can close (a bot can at best infer a deletion
+indirectly, e.g. a later reply-reference to the same message id
+failing, never receive a direct notification).

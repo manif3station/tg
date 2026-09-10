@@ -128,8 +128,25 @@ sub get_updates {
     # observable narrows; deliberately scoped to the ticket's own
     # explicit solution text ("message, at minimum") rather than
     # expanding beyond what was asked.
+    #
+    # TGT-169 (live Telegram question, msg #246, Michael): edited_message
+    # added. Codex review correction: edited_message is NOT itself
+    # opt-in the way message_reaction is - Telegram's baseline default
+    # (before this project ever specified allowed_updates at all)
+    # already included it, only chat_member/message_reaction/
+    # message_reaction_count were excluded from that baseline. It
+    # stopped reaching this project the moment TGT-143 first narrowed
+    # allowed_updates to [message, message_reaction] - this client's
+    # own explicit list, not Telegram's baseline, is what was excluding
+    # it. That baseline is historical, not a live fallback: per
+    # Telegram's own docs, getUpdates retains whichever allowed_updates
+    # list a bot last set rather than reverting to the baseline default
+    # if a later call omits the parameter, so omitting it now would not
+    # restore edited_message - it must be listed explicitly, as done
+    # here. callback_query/channel_post remain deliberately excluded -
+    # still never read anywhere in this project.
     $params->{allowed_updates} = $args{allowed_updates}
-      // [qw(message message_reaction)];
+      // [qw(message edited_message message_reaction)];
 
     my $updates = $self->_call( 'getUpdates', $params );
 
@@ -387,15 +404,26 @@ Long-polls C<getUpdates>. Returns a two-element list: the array of update
 hashes, and the offset to pass on the next call (one past the highest
 C<update_id> seen, or the offset that was passed in if no updates arrived).
 
-C<allowed_updates> defaults to C<[qw(message message_reaction)]> (TGT-143,
-a live Telegram question) - message reactions are opt-in per the Bot
-API, never delivered unless explicitly requested. Telegram's own docs
-warn that specifying C<allowed_updates> at all restricts delivery to
-I<only> the listed types, so this default deliberately preserves every
-update type this project currently relies on (C<message>) alongside the
-new one, rather than adding C<message_reaction> in isolation and
-silently narrowing everything else. A caller may pass its own
-C<allowed_updates> to override this default entirely.
+C<allowed_updates> defaults to C<[qw(message edited_message message_reaction)]>
+(C<message_reaction> - TGT-143; C<edited_message> - TGT-169, both live
+Telegram questions). C<message_reaction> is genuinely opt-in - excluded
+from Telegram's own baseline default set even when C<allowed_updates>
+is omitted on a bot's very first C<getUpdates> call ever.
+C<edited_message> is not - that same baseline default already includes
+it, and it only stopped reaching this project the moment TGT-143 first
+narrowed C<allowed_updates> to a fixed list. This is a historical fact
+about that baseline, not a live fallback: per Telegram's own docs,
+C<getUpdates> retains whatever C<allowed_updates> a bot last explicitly
+set rather than reverting to the baseline default on a later call that
+omits the parameter, so simply omitting it now (after TGT-143's own
+narrowing already took effect) would not restore C<edited_message> -
+it has to be listed explicitly, which is what this default now does.
+Telegram's own docs warn that specifying C<allowed_updates> at
+all restricts delivery to I<only> the listed types, so this default
+deliberately preserves every update type this project currently relies
+on (C<message>) alongside each newly-added one, rather than adding a
+type in isolation and silently narrowing everything else. A caller may
+pass its own C<allowed_updates> to override this default entirely.
 
 C<timeout> defaults to C<DEFAULT_HARD_TIMEOUT - DEFAULT_LONG_POLL_MARGIN>
 (50 - 20 = 30, TGT-067) rather than a bare literal - this keeps the

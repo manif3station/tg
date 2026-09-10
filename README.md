@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.35).** REFACTOR (TGT-167, found via
+**Status: early implementation (v1.36).** FEATURE (TGT-169, live
+Telegram question from Michael): message EDITS are now detected and
+announced (`NEW TG EDIT`; a text edit's new content also updates
+`d2 tg.history`, a caption/media-only edit is announced but not
+recorded) - Telegram sends a distinct `edited_message` update for
+this. Message DELETIONS of an ordinary chat message remain impossible
+to detect - a hard Bot API limitation, not a gap here.
+REFACTOR (TGT-167, found via
 a scheduled improvement hunt): `_record_message_safe` and TGT-166's new
 `persist_offset_safe` duplicated the identical store-error
 classification ternary - extracted into a shared `_classify_store_error`

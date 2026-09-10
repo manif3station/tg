@@ -131,6 +131,66 @@ sub run_once {
             next;
         }
 
+        # TGT-169 (live Telegram question, msg #246, Michael: "is the
+        # implementable if the user on telegram edit the previous
+        # message and that will notify the agent about the updated
+        # message"): Telegram sends a distinct edited_message update
+        # (same shape as an ordinary message, reflecting the post-edit
+        # content) generally when a message known to the bot in an
+        # allow-listed chat is edited - genuinely detectable, unlike
+        # deletion of an ordinary chat message (no such update exists
+        # for that in the Bot API at all; a business-connection-scoped
+        # deleted_business_messages update exists for a different,
+        # unrelated feature this project doesn't use). Gated by the
+        # same is_allowed check every other branch uses (checked by
+        # chat_id, same as every other branch); no add_pending,
+        # matching message_reaction's own precedent above - an edit
+        # isn't a first-contact event, the original message already
+        # established (or failed to establish) contact. A text edit's
+        # new content is recorded via record_message so d2 tg.history
+        # reflects it, consistent with that function's own history-
+        # tracking purpose (unlike a reaction, which changes nothing
+        # about the message's own content) - a caption/media-only edit
+        # (no text) is still announced but not recorded, to avoid
+        # overwriting an already-correct history summary with nothing
+        # useful; recording those too is a narrower follow-up, not
+        # this ticket's own scope.
+        if ( my $edited = $update->{edited_message} ) {
+            my $chat_id = $edited->{chat}{id};
+
+            if ($store) {
+                my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
+                if ($@) {
+                    my $error = $@;
+                    $error =~ s/\n\z//;
+                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                    next;
+                }
+                next unless $allowed;
+            }
+
+            my $sender      = _display_name( $chat_id, $edited->{from}{username} );
+            my $message_id  = $edited->{message_id};
+            my $edited_text = $edited->{text};
+            my $has_text    = defined $edited_text && length $edited_text;
+            my $safe_text   = $has_text ? _sanitize_for_stdout($edited_text) : '(no text)';
+            my $ts = _timestamp_prefix($edited);
+
+            print "$ts NEW TG EDIT [$chat_id] $sender: $safe_text (msg #$message_id, edited)\n";
+
+            # Codex review finding: a caption/media-only edit (no
+            # $edited->{text} at all - a text edit is the only kind
+            # this narrow ticket handles) would otherwise overwrite an
+            # already-correct history summary with the literal string
+            # '(no text)', corrupting it. Only record when there is
+            # real text to record; the edit is still announced either
+            # way, just not (yet) reflected in d2 tg.history when it's
+            # a caption/media change.
+            _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text )
+              if $store && defined $message_id && $has_text;
+            next;
+        }
+
         my $message = $update->{message} or next;
         my $text       = $message->{text};
         my $media_kind = _media_kind($message);
@@ -704,6 +764,32 @@ ticket to keep this fix narrow. Not exercised by this project's own
 C<cli/poller.pl>, which always supplies both callbacks - this closes a
 latent gap in C<run_once>'s
 general-purpose API contract for any caller that legitimately omits one.
+
+An C<edited_message> update (TGT-169, a live Telegram question from
+Michael: "is the implementable if the user on telegram edit the
+previous message and that will notify the agent about the updated
+message") is detected and printed as its own event - Telegram's Bot
+API sends this distinct update, the same shape as an ordinary
+C<message> but reflecting the post-edit content, generally when a
+message known to the bot in an allow-listed chat is edited (Telegram's
+own docs note it can be omitted for edits to fields the bot never used,
+so this is not an absolute guarantee for every possible edit). Gated
+by the same C<is_allowed> check every other branch uses (by chat_id,
+same as every other branch); no C<add_pending> - an edit isn't a
+first-contact event, matching C<message_reaction>'s own precedent
+above. Unlike a reaction, a text edit changes the message's actual
+content, so (deliberately different from C<message_reaction>'s
+detection-only behavior) its new text IS recorded via
+C<record_message>, so C<d2 tg.history> reflects it - a caption/media-
+only edit (no text) is still announced but deliberately NOT recorded,
+to avoid overwriting an already-correct history summary with nothing
+useful; recording those too is a narrower follow-up, out of this
+ticket's own scope. Deletion of an ordinary chat message cannot be
+detected at all - the Bot API has no update for that (a separate,
+business-connection-scoped C<deleted_business_messages> update exists
+for an unrelated feature this project doesn't use) - a hard platform
+limitation with no client-side workaround, not a gap in this
+implementation.
 
 This module prints message content via an unqualified C<print> (Perl's
 currently selected default output handle, ordinarily C<STDOUT>) and
