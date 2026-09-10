@@ -1,5 +1,35 @@
 Revision history for the tg skill
 
+1.34  2026-09-10
+      - BUG FIX (TGT-166, found via a scheduled hourly bug hunt, a
+        direct follow-up sweep after TGT-165 for the same unwrapped-
+        DBI-call pattern): cli/poller.pl's persistent main loop called
+        $store->set_offset(...) directly, with no eval wrapper. Unlike
+        run_once's own is_allowed/add_pending calls (just fixed in
+        TGT-165, both inside run_once_safe's own eval), this call sat
+        at the TOP LEVEL of the persistent poller script's main loop -
+        so a locked/busy SQLite database crashed the ENTIRE poller
+        process outright, not just one poll cycle's batch. Since this
+        process runs indefinitely under Tira's own monitor-job
+        supervision, routine SQLite lock contention (the same risk
+        TGT-129/TGT-132/TGT-165 already established as real and
+        recurring) could silently take the whole poller offline until
+        Tira's monitor-dead/monitor-silent policy noticed and someone
+        restarted it - a strictly worse consequence than the batch-
+        redelivery bug TGT-165 fixed, one call site over. Extracted
+        into D2TG::Poller::persist_offset_safe (a new, directly unit-
+        testable function): catches the error, classifies it into a
+        short fixed reason (TGT-133 precedent - never echoes the raw
+        exception, which can embed the database file's own path), logs
+        it to STDERR, and returns - the poller keeps running and a
+        later poll cycle attempts to persist its own (by then newer)
+        offset again, not a retry of the specific failed value; if the
+        process exits before a later persist succeeds, the previously
+        persisted offset remains on disk and updates since then may be
+        redelivered after a restart.
+        get_offset (called once at startup) is unaffected, correctly
+        still fatal - matches every other setup guard's own convention.
+
 1.33  2026-09-10
       - BUG FIX (TGT-165, found via a scheduled hourly bug hunt):
         D2TG::Poller::run_once's is_allowed/add_pending calls (message_

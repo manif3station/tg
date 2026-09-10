@@ -1770,3 +1770,36 @@ to the alternative this ticket fixes (redelivering and reprinting the
 entire batch, including already-handled updates, on every subsequent
 poll cycle until the lock clears) but does mean the one affected
 update is effectively lost, not merely delayed.
+
+## The main poll loop's own offset persistence no longer crashes the whole process either (TGT-166)
+
+Scheduled hourly bug hunt finding, 2026-09-10 - a direct follow-up
+sweep after TGT-165 checking for the identical unwrapped-DBI-call
+pattern elsewhere: `cli/poller.pl`'s persistent main loop called
+`$store->set_offset(...)` directly, with no `eval` at all. Unlike
+`run_once`'s own `is_allowed`/`add_pending` calls (TGT-165, both
+inside `run_once_safe`'s own `eval`), this call sat at the TOP LEVEL
+of the persistent poller script's main loop - so a locked/busy SQLite
+database crashed the ENTIRE poller process outright, not just one
+poll cycle's batch. Since this process runs indefinitely under Tira's
+own monitor-job supervision, routine SQLite lock contention (the same
+risk TGT-129/TGT-132/TGT-165 already established as real and
+recurring) could silently take the whole poller offline until Tira's
+`monitor-dead`/`monitor-silent` policy noticed and someone restarted
+it - a strictly worse consequence than the batch-redelivery bug
+TGT-165 fixed, one call site over. Extracted into
+`D2TG::Poller::persist_offset_safe`, a new public function
+`cli/poller.pl` now calls instead - directly unit-testable (unlike the
+main loop itself, which would need a live Telegram connection to
+integration-test), matching `t/127`'s own precedent for TGT-165's
+fixed call sites. Catches the error, classifies it the same way
+`_record_message_safe` already does (TGT-133 - never echoes the raw
+exception, which can embed the database file's own path), logs it to
+STDERR, and returns - the poller keeps running and a later poll cycle
+attempts to persist its own (by then newer) offset again, not a retry
+of the specific failed value; if the process exits before a later
+persist succeeds, the previously persisted offset remains on disk and
+updates since then may be redelivered after a restart. `get_offset` (called
+once at startup, outside the loop) is unaffected and correctly still
+fatal - dying there matches the "refuse to start" pattern every other
+setup guard in this script already uses.

@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.33).** BUG FIX (TGT-165, found via
+**Status: early implementation (v1.34).** BUG FIX (TGT-166, found via
+a direct follow-up sweep after TGT-165): `cli/poller.pl`'s persistent
+main loop called `set_offset` unwrapped - a locked database used to
+crash the entire poller process, not just one poll cycle, since this
+call sits outside `run_once_safe`'s own protection. Extracted into a
+new, directly unit-tested `D2TG::Poller::persist_offset_safe` that
+catches the error and keeps the poller running instead.
+BUG FIX (TGT-165, found via
 a scheduled hourly bug hunt): `run_once`'s `is_allowed`/`add_pending`
 calls had no eval wrapper, unlike every `record_message` call site
 (TGT-132) - a locked SQLite database could die there, aborting the

@@ -328,7 +328,7 @@ until ($shutting_down) {
             download_media   => $download_media,
             bot_token        => $pair->{bot_key},
         );
-        $store->set_offset( $pair->{offset}, $pair->{bot_key} ) if defined $pair->{offset};
+        D2TG::Poller::persist_offset_safe( $store, $pair->{offset}, $pair->{bot_key} );
 
         # TGT-116 (Codex review finding): written after EACH pair, not
         # once after the whole for-loop - a single voice transcription

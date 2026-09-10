@@ -345,6 +345,41 @@ sub _record_message_safe {
     return;
 }
 
+sub persist_offset_safe {
+    my ( $store, $offset, $bot_key ) = @_;
+
+    return unless defined $offset;
+
+    # TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up
+    # sweep after TGT-165 for the same unwrapped-DBI-call pattern):
+    # cli/poller.pl's main loop used to call $store->set_offset(...)
+    # directly, with no eval wrapper. Unlike run_once's own calls
+    # (TGT-165), this one sits at the top level of the persistent
+    # poller script's main loop - not inside run_once_safe's own eval -
+    # so a locked/busy SQLite database crashed the ENTIRE poller
+    # process, not just one poll cycle's batch. The poll cycle itself
+    # already completed successfully via run_once_safe by the time this
+    # runs, so losing only this one offset persistence (retried
+    # automatically on the next successful poll cycle) is the right
+    # degradation, matching _record_message_safe's own philosophy.
+    local $@;
+    eval { $store->set_offset( $offset, $bot_key ) };
+    if ($@) {
+
+        # Classify into a short, fixed reason rather than ever echoing
+        # $@ itself (TGT-133 precedent - a DBI/SQLite error can embed
+        # the database file's own path).
+        my $error  = $@;
+        my $reason =
+            $error =~ /database is locked/i ? 'database is locked'
+          : $error =~ /database.*busy/i     ? 'database is busy'
+          : $error =~ /readonly/i           ? 'database is readonly'
+          :                                    'an unexpected error';
+        print STDERR "set_offset failed ($reason) - this poll cycle's offset was not persisted; a later cycle will attempt to persist its own current offset again\n";
+    }
+    return;
+}
+
 sub _display_name {
     my ( $chat_id, $username ) = @_;
 
@@ -674,6 +709,32 @@ responsibility, not this module's - see C<cli/poller.pl>, which does
 this at startup, before option handling and any poller work.
 
 =head1 FUNCTIONS
+
+=head2 persist_offset_safe($store, $offset, $bot_key)
+
+TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up
+sweep after TGT-165 for the same unwrapped-DBI-call pattern):
+C<cli/poller.pl>'s persistent main loop calls this instead of
+C<$store-E<gt>set_offset(...)> directly. Unlike C<run_once>'s own
+C<is_allowed>/C<add_pending> calls (TGT-165, both inside
+C<run_once_safe>'s own C<eval>), the old direct call sat at the TOP
+LEVEL of the persistent poller script's main loop - so a locked/busy
+SQLite database used to crash the ENTIRE poller process outright, not
+just one poll cycle's batch. Does nothing (no call, no error) if
+C<$offset> is undef, matching the caller's own pre-existing "if defined"
+guard. Otherwise C<eval>-wraps C<set_offset>; on error, classifies it
+into a short fixed reason rather than ever echoing the raw exception
+(TGT-133 precedent - a DBI/SQLite error can embed the database file's
+own path), logs it to STDERR, and returns - the poller keeps running,
+and a later poll cycle attempts to persist its own (by then newer)
+offset again; this does not retry the specific failed offset value -
+if the process exits before a later persist succeeds, the previously
+persisted offset remains on disk and updates since then may be
+redelivered after a restart. Extracted as a public function (rather than a private
+C<_>-prefixed one like C<_record_message_safe> below) specifically so
+it is directly unit-testable from outside this module, since the
+caller (a persistent script requiring a live Telegram connection to
+run its main loop at all) cannot practically be integration-tested.
 
 =head2 run_once_safe($telegram, $offset, $store, sleep => \&coderef, %run_once_opts)
 
