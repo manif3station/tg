@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.39).** REFACTOR (TGT-172, found via
+**Status: early implementation (v1.40).** REFACTOR (TGT-173, found via
+a scheduled improvement hunt): `D2TG::Telegram` and `D2TG::Download`
+each independently implemented the identical SIGALRM-based
+`_with_hard_timeout` wrapper - extracted into a shared helper in
+`D2TG::Config`, each call site passing its own exact die-message prefix
+so wording is unchanged. No behavioral change (verified via a
+before/after full-suite diff and 100% statement+subroutine coverage on
+all 3 touched modules).
+REFACTOR (TGT-172, found via
 a scheduled improvement hunt): 11 of the 13 `cli/*.pl` scripts each
 duplicated the same 4-line error-handling block after calling
 `D2TG::Config::resolve_alias_dir` - extracted into a shared

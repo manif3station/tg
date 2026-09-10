@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.40  2026-09-10
+      - REFACTOR (TGT-173, found via a scheduled JOB-004 improvement-hunt
+        fork): D2TG::Telegram (TGT-044) and D2TG::Download (TGT-126)
+        each independently implemented the identical SIGALRM-based
+        _with_hard_timeout wrapper - a deliberate pattern-copy at the
+        time (Download.pm's own POD said so explicitly), never later
+        extracted into one shared implementation. Extracted a shared
+        _with_hard_timeout($seconds, $label, $coderef) into
+        D2TG::Config; both packages now call it, each passing its own
+        exact pre-extraction die-message prefix ("D2TG::Telegram
+        <method>" / "D2TG::Download::download_file") so both call
+        sites' wording is unchanged. Matches the established
+        shift_flag_value (TGT-072) / _classify_store_error (TGT-167) /
+        _format_forwarded_sender (TGT-170) /
+        _validate_reply_to_message_id (TGT-171) /
+        resolve_alias_dir_or_die (TGT-172) precedent, this time
+        cross-package. No behavioral change - verified via a
+        before/after full-suite diff (Files=131, Tests=1259 both
+        times) and 100% statement+subroutine coverage on
+        D2TG::Config.pm, D2TG::Telegram.pm, and D2TG::Download.pm.
+
 1.39  2026-09-10
       - REFACTOR (TGT-172, found via a scheduled JOB-004 improvement-hunt
         fork): 11 of the 13 cli/*.pl scripts (history.pl,

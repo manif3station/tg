@@ -407,6 +407,34 @@ sub _developer_dashboard_paths {
     return Developer::Dashboard::d2()->paths;
 }
 
+# TGT-173: extracted after this exact SIGALRM-based hard-timeout wrapper
+# was found to have identical control flow across D2TG::Telegram and
+# D2TG::Download, differing only in how each caller constructed its own
+# timeout-message prefix - matches the established shift_flag_value
+# (TGT-072) / _classify_store_error (TGT-167) / _format_forwarded_sender
+# (TGT-170) / _validate_reply_to_message_id (TGT-171) /
+# resolve_alias_dir_or_die (TGT-172) precedent for this shape of
+# duplication, this time cross-package. $label is the caller's own
+# already-composed die-message prefix (e.g. "D2TG::Telegram sendMessage"
+# or "D2TG::Download::download_file"), preserved verbatim so each call
+# site's exact die wording is unchanged.
+sub _with_hard_timeout {
+    my ( $seconds, $label, $coderef ) = @_;
+
+    my $result;
+    eval {
+        local $SIG{ALRM} = sub { die "$label: request timed out after ${seconds}s\n" };
+        alarm($seconds);
+        $result = $coderef->();
+        alarm(0);
+    };
+    my $error = $@;
+    alarm(0);
+    die $error if $error;
+
+    return $result;
+}
+
 1;
 
 =head1 NAME
@@ -834,6 +862,24 @@ wording describes a real transient condition that can still succeed on
 a later retry, the same shape as any other C<getFile> failure; labeling
 it unrecoverable would tell an operator to give up on something that
 might well work again.
+
+=head2 _with_hard_timeout($seconds, $label, \&coderef)
+
+TGT-173 (found via a scheduled improvement hunt): a shared
+SIGALRM-based hard-timeout wrapper, extracted after L<D2TG::Telegram>
+(TGT-044) and L<D2TG::Download> (TGT-126) each independently
+implemented the identical control flow - runs C<&coderef> under
+C<alarm($seconds)>, so a C<SIGALRM> forcibly interrupts it (including a
+blocking syscall like C<connect()>) if it hasn't returned within
+C<$seconds>, more reliable than C<LWP::UserAgent>'s own C<timeout>
+across every phase a request can get stuck in. On timeout, dies with
+C<"$label: request timed out after ${seconds}s"> - C<$label> is the
+caller's own already-composed die-message prefix (e.g. C<"D2TG::Telegram
+sendMessage"> or C<"D2TG::Download::download_file">), passed through
+verbatim so each call site's exact pre-extraction die wording is
+preserved. C<alarm(0)> is always called before returning or
+re-throwing, whether the call succeeded, failed, or timed out, so no
+alarm is ever left pending.
 
 =head2 is_transient_error($error)
 

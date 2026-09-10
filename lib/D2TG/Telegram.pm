@@ -6,6 +6,7 @@ use LWP::UserAgent;
 use HTTP::Request;
 use JSON::PP qw(decode_json encode_json);
 use File::Spec;
+use D2TG::Config;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
 use constant DEFAULT_LONG_POLL_MARGIN => 20;
@@ -38,7 +39,7 @@ sub _call {
     $req->content($content);
 
     my $timeout = eval { $self->{ua}->timeout } || DEFAULT_HARD_TIMEOUT;
-    my $res = _with_hard_timeout( $timeout, $method, sub { $self->{ua}->request($req) } );
+    my $res = D2TG::Config::_with_hard_timeout( $timeout, "D2TG::Telegram $method", sub { $self->{ua}->request($req) } );
 
     die "D2TG::Telegram $method: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
       unless $res->is_success;
@@ -51,23 +52,6 @@ sub _call {
       unless $data->{ok};
 
     return $data->{result};
-}
-
-sub _with_hard_timeout {
-    my ( $seconds, $method, $coderef ) = @_;
-
-    my $result;
-    eval {
-        local $SIG{ALRM} = sub { die "D2TG::Telegram $method: request timed out after ${seconds}s\n" };
-        alarm($seconds);
-        $result = $coderef->();
-        alarm(0);
-    };
-    my $error = $@;
-    alarm(0);
-    die $error if $error;
-
-    return $result;
 }
 
 sub _utf16_units {
@@ -526,15 +510,15 @@ boundary the same way - but that pre-existing risk is unaddressed here
 and out of this ticket's scope, relying (as it always has) on the
 per-call boundary being unpredictable.
 
-=head2 _with_hard_timeout($seconds, $method, \&coderef)
-
-Internal helper (TGT-044): runs C<&coderef> under C<alarm($seconds)>, so
-a C<SIGALRM> forcibly interrupts it - including a blocking syscall like
-C<connect()> - if it hasn't returned within C<$seconds>. On timeout,
-dies with C<< D2TG::Telegram <method>: request timed out after
-<seconds>s >>. C<alarm(0)> is always called before returning or
-re-throwing, whether the call succeeded, failed, or timed out, so no
-alarm is ever left pending.
+C<_call> uses L<D2TG::Config/_with_hard_timeout> (TGT-044; extracted
+into D2TG::Config by TGT-173 after being found duplicated
+byte-for-byte in L<D2TG::Download> too) to run the HTTP request under
+C<alarm($timeout)>, so a C<SIGALRM> forcibly interrupts it - including
+a blocking syscall like C<connect()> - if it hasn't returned in time.
+On timeout, dies with C<< D2TG::Telegram <method>: request timed out
+after <seconds>s >>, passing C<"D2TG::Telegram $method"> as the shared
+helper's own die-message prefix, so the complete timeout wording is
+unchanged from before the extraction.
 
 =head2 split_text_utf16($text, $limit = 4000)
 

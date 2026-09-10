@@ -766,8 +766,12 @@ bytes - arguably the higher-risk call, since it transfers full file
 content rather than a small JSON payload, and `D2TG::Poller`'s own
 `eval`-based `_run_non_fatal` catches a `die`, not a hang. `download_file`
 now sets an explicit `LWP::UserAgent` timeout and wraps its `get()` call
-in a private `_with_hard_timeout` helper, matching
-`D2TG::Telegram::_with_hard_timeout`'s exact SIGALRM pattern.
+in the same SIGALRM hard-timeout wrapper `D2TG::Telegram` uses. Both
+had independently implemented that wrapper themselves at the time; it
+was later extracted into one shared `D2TG::Config::_with_hard_timeout`
+(TGT-173, found via a scheduled improvement hunt), with no behavior
+change - each call site's own exact die-message wording is preserved
+via a label it passes in.
 
 A fifth gap in the same family (TGT-127, found via a follow-up ad-hoc
 bug-hunt immediately after TGT-126) targeted a different call shape

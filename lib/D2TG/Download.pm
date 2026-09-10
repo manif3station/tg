@@ -6,6 +6,7 @@ use LWP::UserAgent;
 use File::Temp qw(tempfile);
 use File::Spec;
 use Digest::SHA qw(sha256_hex);
+use D2TG::Config;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
 
@@ -20,7 +21,7 @@ sub download_file {
     my $url = $telegram->file_download_url($file_path);
 
     my $timeout = $args{timeout} || eval { $ua->timeout } || DEFAULT_HARD_TIMEOUT;
-    my $res = _with_hard_timeout( $timeout, sub { $ua->get($url) } );
+    my $res = D2TG::Config::_with_hard_timeout( $timeout, 'D2TG::Download::download_file', sub { $ua->get($url) } );
     die "D2TG::Download::download_file: HTTP request failed (status @{[ $res->code ]} @{[ $res->message ]})\n"
       unless $res->is_success;
 
@@ -50,20 +51,6 @@ sub download_file {
     return $local_path;
 }
 
-sub _with_hard_timeout {
-    my ( $seconds, $coderef ) = @_;
-    my $result;
-    eval {
-        local $SIG{ALRM} = sub { die "D2TG::Download::download_file: request timed out after ${seconds}s\n" };
-        alarm($seconds);
-        $result = $coderef->();
-        alarm(0);
-    };
-    my $error = $@;
-    alarm(0);
-    die $error if $error;
-    return $result;
-}
 
 sub _atomic_write {
     my ( $path, $content, %opts ) = @_;
@@ -212,16 +199,18 @@ exactly that: a truncated file whose real content no longer matched
 its own filename's claimed hash, silently trusted forever after since
 the dedup check only tests C<-e>, never re-hashes.
 
-=head2 _with_hard_timeout($seconds, \&coderef)
-
-TGT-126: runs C<&coderef> under an C<alarm()>/C<SIGALRM>-based hard
-timeout, matching L<D2TG::Telegram>'s own C<_with_hard_timeout> pattern
-exactly - C<alarm()> reliably interrupts any blocking syscall, including
-a stuck C<connect()>, regardless of which phase it's stuck in, unlike
-C<LWP::UserAgent>'s own C<timeout>. Dies with
+C<download_file> uses L<D2TG::Config/_with_hard_timeout> (TGT-126;
+extracted into D2TG::Config by TGT-173 after being found duplicated
+byte-for-byte in L<D2TG::Telegram> too) to run its HTTP GET under an
+C<alarm()>/C<SIGALRM>-based hard timeout - C<alarm()> reliably
+interrupts any blocking syscall, including a stuck C<connect()>,
+regardless of which phase it's stuck in, unlike C<LWP::UserAgent>'s
+own C<timeout>. Dies with
 C<"D2TG::Download::download_file: request timed out after ${seconds}s">
-if the alarm fires; always clears the alarm before returning or
-re-dying, on both the success and timeout paths.
+if the alarm fires, passing that exact string as the shared helper's
+own die-message prefix, so the complete timeout wording is unchanged
+from before the extraction; always clears the alarm before returning
+or re-dying, on both the success and timeout paths.
 
 =head2 _atomic_write($path, $content, after_write => \&coderef)
 
