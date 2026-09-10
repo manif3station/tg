@@ -277,9 +277,30 @@ sub _send_file {
     }
 
     if ( defined $opts{caption} && length $opts{caption} ) {
+
+        # TGT-162 (found via a scheduled hourly bug-hunt): caption sits
+        # in body content, not a quoted header attribute like $filename
+        # above, so it needs no quote/backslash escaping or control-
+        # character stripping - CR/LF here is legitimate caption text,
+        # not a header-injection vector. What it does share with
+        # $filename is the same trust boundary (a user-supplied
+        # cli/send.pl argument) and a real risk of its own: if the
+        # caption happens to embed the literal $boundary string this
+        # call generated in real delimiter syntax (preceded by its own
+        # \r\n--), it would prematurely terminate the multipart body,
+        # letting trailing bytes be reinterpreted as new form fields.
+        # The bare boundary string alone is not itself a delimiter, but
+        # stripping every occurrence of it, delimiter-shaped or not, is
+        # the conservative fix - it can never leave a valid delimiter
+        # behind for the caption to complete accidentally or otherwise.
+        # (The uploaded file's own raw bytes could in principle collide
+        # with the boundary the same way - a separate, pre-existing,
+        # unaddressed risk out of this ticket's scope.)
+        ( my $safe_caption = $opts{caption} ) =~ s/\Q$boundary\E//g;
+
         $body .= "--$boundary\r\n"
           . qq{Content-Disposition: form-data; name="caption"\r\n\r\n}
-          . "$opts{caption}\r\n";
+          . "$safe_caption\r\n";
     }
 
     $body .= "--$boundary\r\n"
@@ -449,6 +470,25 @@ convention, RFC 7578) - the file still uploads correctly either way, only the
 displayed filename is sanitized. C<send_voice>'s own equivalent
 filename (always a C<D2TG::TTS::synthesize>-generated C<File::Temp>
 name, never user-controlled) is deliberately not touched by this fix.
+
+TGT-162 (found via a scheduled hourly bug-hunt): C<caption> shares the
+same trust boundary as C<filename> above (a user-supplied
+C<cli/send.pl> argument) but sits in plain body content rather than a
+quoted header attribute, so none of C<filename>'s escaping applies -
+CR/LF in a caption is legitimate text, not a header-injection vector.
+Its one real risk is narrower: the multipart boundary itself
+(C<'D2TGBoundary' . int(rand(1e9)) . time>, regenerated per call) is
+what separates form-data parts - a real delimiter is C<\r\n--$boundary>
+with valid trailing framing, not the bare value alone - and a caption
+embedding that string in delimiter-shaped syntax could prematurely
+terminate the body, letting trailing bytes be reinterpreted as new form
+fields. Any occurrence of the literal C<$boundary> string, delimiter-
+shaped or not, is conservatively stripped from the caption before
+insertion. Caption is not the only untrusted multipart body content -
+the uploaded file's own raw bytes could in principle collide with the
+boundary the same way - but that pre-existing risk is unaddressed here
+and out of this ticket's scope, relying (as it always has) on the
+per-call boundary being unpredictable.
 
 =head2 _with_hard_timeout($seconds, $method, \&coderef)
 

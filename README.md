@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.29).** BUG FIX (TGT-161, found via a
+**Status: early implementation (v1.30).** SECURITY HARDENING (TGT-162,
+found via a scheduled hourly bug hunt): `D2TG::Telegram::_send_file`'s
+caption field was spliced into the multipart body with no sanitization,
+unlike the adjacent filename field which got hardening for TGT-125 - a
+caption embedding the exact per-call multipart boundary string in
+delimiter syntax could have prematurely terminated the body. The
+boundary substring is now conservatively stripped from the caption
+before insertion, closing that gap.
+BUG FIX (TGT-161, found via a
 scheduled hourly bug hunt): a video message (no plain text, no
 recognized media kind) was previously silently dropped by the poller -
 not printed, not queued pending, not recorded - `_media_kind` now also

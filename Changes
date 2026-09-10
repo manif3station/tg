@@ -1,5 +1,35 @@
 Revision history for the tg skill
 
+1.30  2026-09-10
+      - SECURITY HARDENING (TGT-162, found via scheduled hourly bug hunt
+        JOB-003, second pass): D2TG::Telegram::_send_file's caption
+        field (from cli/send.pl's --caption flag) was spliced into the
+        raw hand-built multipart body with zero sanitization, unlike
+        the adjacent filename field, which was hardened for TGT-125
+        (control-character stripping plus quote/backslash escaping)
+        after a Codex review found the original escaping alone
+        insufficient against header injection. The same trust boundary
+        (a user-supplied cli/send.pl argument) got defense-in-depth on
+        one field and none on the other. Caption sits in body content
+        rather than a quoted header attribute, so its own real risk is
+        narrower: if the caption text happens to embed the literal
+        per-call multipart boundary string ('D2TGBoundary' .
+        int(rand(1e9)) . time, regenerated and not attacker-visible
+        each call) in real delimiter syntax (\r\n--$boundary with valid
+        trailing framing, not the bare value alone), it could
+        prematurely terminate the multipart body, letting trailing
+        bytes be reinterpreted as new form fields (e.g. clobbering
+        chat_id in the same request). _send_file now conservatively
+        strips any occurrence of the literal boundary string from the
+        caption - delimiter-shaped or not - before inserting it into
+        the body. Deliberately does
+        not add filename's own quote/backslash escaping or control-
+        character stripping to caption - those exist to prevent header
+        injection, which does not apply to plain body content where
+        CR/LF is legitimate caption text. send_voice's own multipart
+        construction is untouched (already reviewed, different code
+        path).
+
 1.29  2026-09-10
       - BUG FIX (TGT-161, found via scheduled hourly bug hunt JOB-003):
         D2TG::Poller::_media_kind only recognized photo/document/voice,

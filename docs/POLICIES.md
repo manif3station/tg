@@ -1652,3 +1652,37 @@ photo/document already is. Actual video download support (extending
 scope; `video_note`/`audio`/`animation`/`sticker` are the same failure
 class but are deliberately deferred to a follow-up ticket, to keep this
 fix narrow and reviewable.
+
+## A caption cannot prematurely terminate the outbound multipart body (TGT-162)
+
+Scheduled hourly bug hunt finding (second pass), 2026-09-10:
+`D2TG::Telegram::_send_file`'s `caption` field (reachable via
+`cli/send.pl --caption`) was spliced into the raw hand-built multipart
+body with zero sanitization, unlike the adjacent `filename` field,
+which was hardened with control-character stripping and quote/
+backslash escaping after a Codex review found the original protection
+insufficient against header injection. Both fields share the exact
+same trust boundary - a user-supplied `cli/send.pl` argument - but only
+one had any defense. Caption's own risk is narrower than filename's,
+because it sits in plain body content rather than a quoted header
+attribute: CR/LF there is legitimate caption text, not a header-
+injection vector, so none of filename's escaping applies. The one real
+risk caption does share is boundary collision - the multipart boundary
+(`'D2TGBoundary' . int(rand(1e9)) . time`, regenerated per call and not
+attacker-visible) is what actually separates form-data parts (a real
+delimiter is `\r\n--$boundary` with valid trailing framing, not the
+bare value alone), and a caption embedding that string in delimiter-
+shaped syntax could prematurely terminate the body, letting trailing
+bytes be reinterpreted as new form fields (for example, clobbering
+`chat_id` in the same request). `_send_file` now conservatively strips
+any occurrence of the literal boundary string from the caption -
+delimiter-shaped or not - before inserting it, closing that one gap
+without adding filename's unrelated header-specific hardening to a
+field that doesn't need it.
+`send_voice`'s own multipart construction is untouched - already
+reviewed, a separate code path. Caption is not the only untrusted
+multipart body content in `_send_file` - the uploaded file's own raw
+bytes could in principle collide with the boundary the same way - but
+that is a separate, pre-existing risk, unaddressed here and out of this
+ticket's scope, relying (as it always has) on the per-call boundary
+being unpredictable.
