@@ -133,6 +133,18 @@ sub _probe_duration {
         close $fh;
     }
 
+    # QA-stage Codex review finding: File::Temp's own UNLINK=>1 only
+    # queues removal for Perl's own process exit, not for whenever this
+    # function returns - in a long-running poller, every single probe
+    # (potentially thousands over its lifetime) would leave its own
+    # temp file sitting on disk until the poller process itself
+    # eventually exits, and even that queued cleanup never runs at all
+    # if the process is killed rather than exited normally. Explicit,
+    # best-effort unlink here instead - failure to remove it is not
+    # itself a reason to fail the probe (matches this function's own
+    # policy of never letting probe-adjacent bookkeeping become fatal).
+    unlink $out_path;
+
     # A failed/unparseable/timed-out probe (ffprobe missing, corrupt
     # audio, no output, or a hang killed above) deliberately falls back
     # to 0 seconds, i.e. select_model's 'medium' tier - the same model
@@ -341,8 +353,12 @@ through L<D2TG::Subprocess/fork_in_own_process_group> (never a shell
 string, so the path can never reach a shell) with its own C<stdout>
 capture support (TGT-179), the same process-group-killable subprocess
 launch C<_run> below uses for whisper. Waits under a
-C<waitpid(WNOHANG)> poll loop bounded by C<$PROBE_TIMEOUT> (10s
-default) - not a plain C<alarm()>-around-a-blocking-readline, which
+C<waitpid(WNOHANG)> poll loop, checked every 0.2s, that kills on
+timeout once C<$PROBE_TIMEOUT> (10s default) has elapsed - the actual
+wait can run up to roughly that poll interval past the deadline
+(scheduler delay aside), not an exact cutoff, which is a fine
+trade-off for a probe this short-lived. Not a plain
+C<alarm()>-around-a-blocking-readline, which
 does NOT reliably interrupt a buffered pipe read (PerlIO retries on
 C<EINTR> without giving Perl a chance to run a deferred C<SIGALRM>
 handler mid-read), confirmed directly: an earlier attempt at exactly

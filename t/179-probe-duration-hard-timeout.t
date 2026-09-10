@@ -63,4 +63,34 @@ require D2TG::Transcribe;
         'a normal, fast ffprobe call still works exactly as before under the new hard-timeout wrapper' );
 }
 
+{
+    # QA-stage Codex review finding: File::Temp's own UNLINK=>1 only
+    # queues removal for Perl's process exit, not for whenever
+    # _probe_duration itself returns - in a long-running poller, every
+    # probe would leave its own temp file on disk for the poller's
+    # entire lifetime otherwise. Confirm the probe's own output file
+    # doesn't survive past the call by checking /tmp's own probe-shaped
+    # temp file count doesn't grow across repeated calls.
+    my $bin_dir      = File::Temp::tempdir( CLEANUP => 1 );
+    my $fake_ffprobe = File::Spec->catfile( $bin_dir, 'ffprobe' );
+    open my $fh, '>', $fake_ffprobe or die $!;
+    print {$fh} "#!/bin/sh\necho '10.0'\n";
+    close $fh;
+    chmod 0755, $fake_ffprobe;
+    local $ENV{PATH} = "$bin_dir:$ENV{PATH}";
+
+    # A private, isolated TMPDIR - so this count is never affected by
+    # whatever other tests happen to be doing in the shared system
+    # /tmp under -j4 parallel test runs.
+    my $private_tmpdir = File::Temp::tempdir( CLEANUP => 1 );
+    local $ENV{TMPDIR} = $private_tmpdir;
+
+    D2TG::Transcribe::_probe_duration('/any/path.ogg') for 1 .. 5;
+
+    my @leftover = glob("$private_tmpdir/*");
+
+    is( scalar @leftover, 0,
+        "5 probe calls leave no leftover temp files in an isolated TMPDIR (@leftover) - each call's own temp file is explicitly unlinked, not left for process exit" );
+}
+
 done_testing();
