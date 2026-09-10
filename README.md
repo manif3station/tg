@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.25).** DOC/CONSISTENCY FIX (TGT-157,
+**Status: early implementation (v1.26).** Test refactor (TGT-158, found
+via a scheduled improvement hunt): `D2TG::Reply::send_reply` and
+`resend_voice` no longer duplicate the same synthesize/send/cleanup
+sequence - extracted into a shared `_synthesize_and_send_voice` helper,
+each caller's own distinct post-success ordering left untouched. Zero
+behavior change - the full existing D2TG::Reply behavioral test suite
+passes with no assertion changed. DOC/CONSISTENCY FIX (TGT-157,
 found via a scheduled improvement hunt): `cli/reply.pl`'s own STDERR
 Usage string was missing `--db`/`-d`, `--bot`, and `--voice-only` -
 correctly documented in the same file's own POD SYNOPSIS but drifted

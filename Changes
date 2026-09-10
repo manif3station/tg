@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.26  2026-09-10
+      - TEST REFACTOR (TGT-158, found via scheduled improvement hunt
+        JOB-004): D2TG::Reply::send_reply and resend_voice each
+        independently implemented the same synthesize->send_voice->
+        cleanup sequence - extracted into a shared private helper,
+        _synthesize_and_send_voice. Each caller's own distinct
+        surrounding logic, in particular the record_sent_voice/
+        mark_read call ordering (which genuinely differs between the
+        two), was deliberately left in each caller rather than folded
+        into the helper, so this extraction cannot silently reorder
+        either caller's own post-success side effects. Pure refactor,
+        zero behavior change - the full existing D2TG::Reply behavioral
+        test suite (8 files, 126 tests) passes with no assertion
+        changed (only t/00-scaffold.t's own routine VERSION-string
+        assertion was updated, as it is for every version bump).
+
 1.25  2026-09-10
       - DOC/CONSISTENCY FIX (TGT-157, found via scheduled improvement
         hunt JOB-004): cli/reply.pl's own STDERR Usage string was

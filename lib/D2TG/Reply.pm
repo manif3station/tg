@@ -53,12 +53,14 @@ sub send_reply {
           if defined $text_message_id;
     }
 
-    my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
-
-    my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
-    my $send_voice_error = $@;
-    unlink $voice_path if -e $voice_path;
-    die $send_voice_error if $send_voice_error;
+    my $voice_result = _synthesize_and_send_voice(
+        telegram   => $telegram,
+        chat_id    => $chat_id,
+        text       => $text,
+        synthesize => $synth,
+        tts_args   => $args{tts_args},
+        opts       => \%opts,
+    );
 
     $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} )
       if $args{store} && defined $text_message_id;
@@ -82,12 +84,14 @@ sub resend_voice {
       ? ( reply_to_message_id => $args{reply_to_message_id} )
       : ();
 
-    my $voice_path = $synth->( $text, %{ $args{tts_args} || {} } );
-
-    my $voice_result = eval { $telegram->send_voice( $chat_id, $voice_path, %opts ) };
-    my $send_voice_error = $@;
-    unlink $voice_path if -e $voice_path;
-    die $send_voice_error if $send_voice_error;
+    my $voice_result = _synthesize_and_send_voice(
+        telegram   => $telegram,
+        chat_id    => $chat_id,
+        text       => $text,
+        synthesize => $synth,
+        tts_args   => $args{tts_args},
+        opts       => \%opts,
+    );
 
     # Codex review finding: without this, a successfully-recovered
     # reply (text already sent earlier, voice now resent here) stayed
@@ -105,6 +109,28 @@ sub resend_voice {
       if $args{store} && defined $text_message_id;
 
     return { voice => $voice_result };
+}
+
+# TGT-158 (found via a scheduled improvement hunt): send_reply and
+# resend_voice each independently implemented this exact synthesize/
+# send/cleanup sequence - verified via direct read as genuine
+# duplication, not merely structural similarity. Extracted here
+# unchanged; each caller's own distinct surrounding logic (in
+# particular the record_sent_voice/mark_read ordering, which the two
+# callers genuinely differ on) is deliberately left in each caller,
+# not folded into this helper, so this extraction cannot silently
+# reorder either caller's own post-success side effects.
+sub _synthesize_and_send_voice {
+    my (%args) = @_;
+
+    my $voice_path = $args{synthesize}->( $args{text}, %{ $args{tts_args} || {} } );
+
+    my $voice_result = eval { $args{telegram}->send_voice( $args{chat_id}, $voice_path, %{ $args{opts} || {} } ) };
+    my $send_voice_error = $@;
+    unlink $voice_path if -e $voice_path;
+    die $send_voice_error if $send_voice_error;
+
+    return $voice_result;
 }
 
 sub format_send_error {
