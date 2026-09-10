@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+1.35  2026-09-10
+      - REFACTOR (TGT-167, found via a scheduled improvement hunt):
+        D2TG::Poller::_record_message_safe and the newly-added (TGT-166)
+        persist_offset_safe each independently classified a DBI/SQLite
+        exception into the same four fixed reasons via a byte-for-byte
+        identical 4-line ternary chain. Extracted into a shared private
+        helper, _classify_store_error, called from both - the exact
+        "found it twice, extract it" pattern already established in
+        this project (e.g. shift_flag_value, TGT-072). Pure duplication
+        removal: the four classified strings and each caller's own
+        surrounding STDERR message text are completely unchanged -
+        verified via a before/after full-suite diff (Files=129,
+        Tests=1247 both times, zero assertion changes).
+
 1.34  2026-09-10
       - BUG FIX (TGT-166, found via a scheduled hourly bug hunt, a
         direct follow-up sweep after TGT-165 for the same unwrapped-

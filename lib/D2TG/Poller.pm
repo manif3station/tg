@@ -334,15 +334,27 @@ sub _record_message_safe {
         # which this project has just spent TGT-133 closing off as an
         # information-disclosure surface elsewhere. Classify into a
         # short, fixed reason instead of ever echoing $@ itself.
-        my $error  = $@;
-        my $reason =
-            $error =~ /database is locked/i ? 'database is locked'
-          : $error =~ /database.*busy/i     ? 'database is busy'
-          : $error =~ /readonly/i           ? 'database is readonly'
-          :                                    'an unexpected error';
+        my $reason = _classify_store_error($@);
         print STDERR "record_message failed ($reason) - message was already printed/handled, only its own store record is affected\n";
     }
     return;
+}
+
+sub _classify_store_error {
+    my ($error) = @_;
+
+    # TGT-167 (found via a scheduled improvement hunt): extracted after
+    # this exact 4-line ternary was found duplicated verbatim in both
+    # _record_message_safe above and persist_offset_safe below, matching
+    # this project's own established "found it twice, extract it"
+    # convention (e.g. shift_flag_value, TGT-072). Pure duplication
+    # removal - the four classified strings and every caller's own
+    # surrounding message text are unchanged.
+    return
+        $error =~ /database is locked/i ? 'database is locked'
+      : $error =~ /database.*busy/i     ? 'database is busy'
+      : $error =~ /readonly/i           ? 'database is readonly'
+      :                                    'an unexpected error';
 }
 
 sub persist_offset_safe {
@@ -368,13 +380,9 @@ sub persist_offset_safe {
 
         # Classify into a short, fixed reason rather than ever echoing
         # $@ itself (TGT-133 precedent - a DBI/SQLite error can embed
-        # the database file's own path).
-        my $error  = $@;
-        my $reason =
-            $error =~ /database is locked/i ? 'database is locked'
-          : $error =~ /database.*busy/i     ? 'database is busy'
-          : $error =~ /readonly/i           ? 'database is readonly'
-          :                                    'an unexpected error';
+        # the database file's own path). Shared with _record_message_safe
+        # above via _classify_store_error (TGT-167).
+        my $reason = _classify_store_error($@);
         print STDERR "set_offset failed ($reason) - this poll cycle's offset was not persisted; a later cycle will attempt to persist its own current offset again\n";
     }
     return;

@@ -1803,3 +1803,21 @@ updates since then may be redelivered after a restart. `get_offset` (called
 once at startup, outside the loop) is unaffected and correctly still
 fatal - dying there matches the "refuse to start" pattern every other
 setup guard in this script already uses.
+
+## Store-error classification lives in one place, not two (TGT-167)
+
+Scheduled improvement hunt finding, 2026-09-10 - a direct, deliberate
+check for whether `persist_offset_safe` (just added above, TGT-166)
+duplicated any existing logic in the same file, which it did:
+`_record_message_safe` and `persist_offset_safe` each independently
+classified a DBI/SQLite exception into the same four fixed reasons -
+"database is locked" / "database is busy" / "database is readonly" /
+"an unexpected error" - via a byte-for-byte identical 4-line regex
+ternary chain. Extracted into a shared private helper,
+`_classify_store_error`, called from both - the exact "found it twice,
+extract it" pattern already established in this project (e.g.
+`shift_flag_value`, TGT-072). Pure duplication removal: the four
+classified strings and each caller's own surrounding STDERR message
+text are completely unchanged, verified via a before/after full-suite
+diff with zero assertion changes rather than new tests, matching
+TGT-158's own precedent for a behavior-preserving refactor.

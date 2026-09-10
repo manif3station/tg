@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.34).** BUG FIX (TGT-166, found via
+**Status: early implementation (v1.35).** REFACTOR (TGT-167, found via
+a scheduled improvement hunt): `_record_message_safe` and TGT-166's new
+`persist_offset_safe` duplicated the identical store-error
+classification ternary - extracted into a shared `_classify_store_error`
+helper, no behavior change (verified via a before/after full-suite
+diff with zero assertion changes).
+BUG FIX (TGT-166, found via
 a direct follow-up sweep after TGT-165): `cli/poller.pl`'s persistent
 main loop called `set_offset` unwrapped - a locked database used to
 crash the entire poller process, not just one poll cycle, since this
