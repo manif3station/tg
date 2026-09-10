@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v1.37).** REFACTOR (TGT-170, found via
+**Status: early implementation (v1.38).** REFACTOR (TGT-171, found via
+a scheduled improvement hunt): `D2TG::Telegram`'s `reply_to_message_id`
+numeric-validation block was triplicated across `send_message`,
+`send_voice`, and `_send_file` (only the method name in the die
+message differed) - extracted into a shared
+`_validate_reply_to_message_id` helper, no behavioral change (verified
+via a before/after full-suite diff with no behavioral test changes -
+Files=130, Tests=1254 both times - and 100% statement+subroutine
+coverage on `D2TG::Telegram.pm`).
+REFACTOR (TGT-170, found via
 a scheduled improvement hunt): `D2TG::Poller`'s forward-attribution
 formatting (from TGT-142) was the same four-line logic duplicated at
 two call sites (the main message branch and `_reply_context_suffix`'s

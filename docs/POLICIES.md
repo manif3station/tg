@@ -161,6 +161,10 @@ only as an opaque remote error. `send_message` now validates the same
 way `send_voice` always has - both existing callers (`cli/reply.pl`, the
 poller's own `REPLY WITH` template) already validate upstream, so this
 closes a latent gap rather than changing any live caller's behavior.
+The same validation was subsequently triplicated across `send_message`,
+`send_voice`, and `_send_file` - extracted into one shared
+`_validate_reply_to_message_id` helper (TGT-171, found via a scheduled
+improvement hunt), no behavior change.
 
 ## d2 tg.reply's --reply-to-message-id flag only ever means what it looks like
 

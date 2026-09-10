@@ -172,14 +172,25 @@ sub file_download_url {
     return "https://api.telegram.org/file/bot$self->{token}/$file_path";
 }
 
+# TGT-171: extracted after this exact validation block was found
+# triplicated (send_message, send_voice, _send_file) - matches the
+# established shift_flag_value (TGT-072) / _classify_store_error
+# (TGT-167) / _format_forwarded_sender (TGT-170) precedent for this
+# shape of duplication.
+sub _validate_reply_to_message_id {
+    my ( $method, $reply_to_message_id ) = @_;
+
+    return unless defined $reply_to_message_id;
+    die "D2TG::Telegram $method: reply_to_message_id must be numeric\n"
+      unless $reply_to_message_id =~ /^\d+$/;
+    return;
+}
+
 sub send_message {
     my ( $self, $chat_id, $text, $limit, %opts ) = @_;
 
     my @results;
-    if ( defined $opts{reply_to_message_id} ) {
-        die "D2TG::Telegram sendMessage: reply_to_message_id must be numeric\n"
-          unless $opts{reply_to_message_id} =~ /^\d+$/;
-    }
+    _validate_reply_to_message_id( 'sendMessage', $opts{reply_to_message_id} );
 
     for my $chunk ( split_text_utf16( $text, $limit ) ) {
         my $payload = { chat_id => $chat_id, text => $chunk };
@@ -206,10 +217,8 @@ sub send_voice {
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
       . "$chat_id\r\n";
 
+    _validate_reply_to_message_id( 'sendVoice', $opts{reply_to_message_id} );
     if ( defined $opts{reply_to_message_id} ) {
-        die "D2TG::Telegram sendVoice: reply_to_message_id must be numeric\n"
-          unless $opts{reply_to_message_id} =~ /^\d+$/;
-
         $body .= "--$boundary\r\n"
           . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
           . "$opts{reply_to_message_id}\r\n";
@@ -284,10 +293,8 @@ sub _send_file {
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
       . "$chat_id\r\n";
 
+    _validate_reply_to_message_id( $method, $opts{reply_to_message_id} );
     if ( defined $opts{reply_to_message_id} ) {
-        die "D2TG::Telegram $method: reply_to_message_id must be numeric\n"
-          unless $opts{reply_to_message_id} =~ /^\d+$/;
-
         $body .= "--$boundary\r\n"
           . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
           . "$opts{reply_to_message_id}\r\n";
@@ -451,10 +458,11 @@ multiple calls if it exceeds C<$limit> UTF-16 code units (Telegram's own
 hard cap is 4096; this defaults to 4000 to leave headroom). Returns an
 arrayref of the raw Telegram result for each call made. C<reply_to_message_id>
 (TGT-040) is optional; when given, it must be numeric (dies otherwise,
-TGT-055 - matches C<send_voice>'s own validation below, so both send
-methods enforce the same guarantee uniformly instead of one dying with a
-clear local error and the other forwarding a bad value into Telegram's
-API), and every chunk's C<sendMessage> call carries it, so the message
+TGT-055 - via the shared L</_validate_reply_to_message_id> helper
+(TGT-171), also used by C<send_voice> below, so both send methods
+enforce the same guarantee uniformly instead of one dying with a clear
+local error and the other forwarding a bad value into Telegram's API),
+and every chunk's C<sendMessage> call carries it, so the message
 threads natively under the original message in Telegram's UI. Omitting
 it is unchanged from before this ticket.
 

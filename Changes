@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.38  2026-09-10
+      - REFACTOR (TGT-171, found via a scheduled JOB-004 improvement-hunt
+        fork): D2TG::Telegram had the reply_to_message_id numeric-
+        validation block triplicated across send_message, send_voice,
+        and _send_file (shared by send_photo/send_document) - only the
+        method name in the die message differed between the 3 sites.
+        Extracted a shared private helper,
+        _validate_reply_to_message_id($method, $reply_to_message_id),
+        that all 3 call sites now use instead of the duplicated inline
+        logic - matches the established shift_flag_value (TGT-072) /
+        _classify_store_error (TGT-167) / _format_forwarded_sender
+        (TGT-170) precedent for this shape of duplication. No
+        behavioral change - verified via a before/after full-suite diff
+        (Files=130, Tests=1254 both times, no behavioral test changes)
+        and 100% statement+subroutine coverage on D2TG::Telegram.pm.
+
 1.37  2026-09-10
       - REFACTOR (TGT-170, found via a scheduled JOB-004 improvement-hunt
         fork): D2TG::Poller had the exact forward-attribution formatting
