@@ -87,26 +87,41 @@ sub make_batch {
 }
 
 {
-    # Second poll cycle: the same batch is redelivered (offset was
-    # capped at 501), but this time the store write succeeds for all
-    # of them. Updates 500 (message_id 1) was already recorded last
-    # cycle - it must not be re-announced. 501-503 are genuinely new
-    # to the store this cycle and must be announced normally.
-    my $store = Fake::PartialStore->new;
-    $store->record_message( 999, 1, 'ada', 'msg one' );    # already recorded last cycle
+    # Realistic two-cycle simulation (Codex review finding - a prior
+    # draft of this test replayed the WHOLE batch including update 500
+    # on cycle 2, which Telegram would never actually resend once the
+    # offset was capped at 501; only 501-503 are genuinely redelivered).
+    # ONE store instance spans both cycles, matching real persistence.
+    my $store = Fake::PartialStore->new( fail_ids => [2] );    # message_id 2 (update 501) fails cycle 1 only
 
-    my $tg = Fake::Telegram->new( make_batch() );
-    my ( $updates, $next_offset );
-    my ( $out, $err ) = capture_std( sub {
-        ( $updates, $next_offset ) = D2TG::Poller::run_once( $tg, undef, $store );
+    my $tg = Fake::Telegram->new(
+        make_batch(),                                          # cycle 1: the full original batch, 500-503
+        [ @{ make_batch() }[ 1, 2, 3 ] ],                        # cycle 2: Telegram's own real redelivery - only 501-503, since the offset was capped at 501; 500 is never resent
+    );
+
+    my ( $out1, $err1, $next_offset1 );
+    ( $out1, $err1 ) = capture_std( sub {
+        ( undef, $next_offset1 ) = D2TG::Poller::run_once( $tg, undef, $store );
+    } );
+    is( $next_offset1, 501, 'cycle 1: offset capped at the failing update (501) - message_id 2 never got recorded this cycle' );
+
+    # $store->{fail_ids} still has message_id 2 marked as failing from
+    # construction - simulate the underlying store issue having
+    # cleared by the time Telegram redelivers (a locked/busy database
+    # is, by nature, transient).
+    delete $store->{fail_ids}{2};
+
+    my ( $out2, $err2, $next_offset2 );
+    ( $out2, $err2 ) = capture_std( sub {
+        ( undef, $next_offset2 ) = D2TG::Poller::run_once( $tg, 501, $store );
     } );
 
-    unlike( $out, qr/msg one/, 'the already-recorded update (message_id 1) is NOT re-announced on redelivery - TGT-178 dedupe' );
-    like( $out, qr/msg two/,   'a genuinely new-to-the-store update in the same redelivered batch is still announced' );
-    like( $out, qr/msg three/, '...same for the rest of the batch' );
-    like( $out, qr/msg four/,  '...same for the rest of the batch' );
-    is( $err, '', 'no record_message failure this cycle - nothing on stderr' );
-    is( $next_offset, 504, 'no failure this cycle, so the offset advances past the whole batch as normal - unchanged from pre-TGT-178 behavior' );
+    unlike( $out2, qr/msg one/,   'update 500 (message_id 1) is never even part of the redelivered batch - Telegram itself does not resend it once the offset moved past it' );
+    like( $out2, qr/msg two/,     'message_id 2 (update 501), which failed to record last cycle, is announced now that it genuinely succeeds' );
+    unlike( $out2, qr/msg three/, 'message_id 3 (update 502), already successfully recorded in cycle 1, is NOT re-announced on redelivery - TGT-178 dedupe' );
+    unlike( $out2, qr/msg four/,  'message_id 4 (update 503), already successfully recorded in cycle 1, is NOT re-announced on redelivery either' );
+    is( $err2, '', 'no record_message failure this cycle - nothing on stderr' );
+    is( $next_offset2, 504, 'no failure this cycle, so the offset advances past the redelivered batch as normal' );
 }
 
 {

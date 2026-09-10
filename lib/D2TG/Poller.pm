@@ -205,6 +205,22 @@ sub run_once {
                 my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text );
                 $offset_cap = $update_id if !$recorded && !defined $offset_cap;
             }
+
+            # TGT-178 KNOWN GAP (Codex review finding): this branch
+            # does NOT get the plain-message dedupe check below, so if
+            # a batch-level offset cap (from an EARLIER sibling update
+            # failing to record) causes THIS edit to be redelivered
+            # after it already succeeded, it WILL be re-announced.
+            # Deliberately out of scope: the plain-message dedupe keys
+            # only on (chat_id, message_id), which for an edit would
+            # also suppress a genuinely NEW future edit to the same
+            # message - correctly detecting "this exact edit, not a
+            # later one, was already announced" needs update_id-level
+            # delivery tracking, a larger change than this ticket's
+            # own scope. A follow-up ticket is the right place for
+            # edit-level dedupe if a real duplicate-edit incident
+            # (as opposed to this theoretical redelivery window)
+            # is ever reported.
             next;
         }
 
