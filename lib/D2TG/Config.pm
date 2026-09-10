@@ -603,12 +603,17 @@ instead of needing its own copy.
 
 Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
 (TGT-051), recognized anywhere in the list. Since TGT-177, every
-C<cli/*.pl> script that uses this whole-list scan (10 total - none of
-which take free-form text arguments that could collide with this
-flag's own name, so a whole-list scan is safe for them) goes through
-L</extract_db_flag_or_die> rather than calling this function directly
-- see that function's own POD below for the full list. C<cli/reply.pl>
-does I<not> use this function - it has its own leading-position-only
+C<cli/*.pl> script that uses this whole-list scan (10 total) goes
+through L</extract_db_flag_or_die> rather than calling this function
+directly - see that function's own POD below for the full list. Most
+of those take no free-form text arguments that could collide with this
+flag's own name, so a whole-list scan is unambiguously safe for them;
+C<cli/send.pl> is the one exception (its own C<--caption> is free-form
+text) and accepts a narrow, already-documented ambiguity in its own
+POD/comments as a deliberate trade-off for staying consistent with
+every other script here, rather than getting its own bespoke
+position-aware extraction. C<cli/reply.pl> does I<not> use this
+function - it has its own leading-position-only
 extraction
 instead (see its own POD), for the same reason
 C<D2TG::Reply::parse_cli_args>'s C<--reply-to-message-id> is
