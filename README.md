@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.30).** SECURITY HARDENING (TGT-162,
+**Status: early implementation (v1.31).** TEST COVERAGE (TGT-163,
+found via a scheduled improvement hunt): 9 of the 12 `cli/*.pl` scripts
+with a Usage string had no test guarding it against their own POD SYNOPSIS -
+the same drift class caught 3 times before (TGT-119/157/159). New
+parity tests added for all 9; writing them caught a real drift in
+`cli/history.pl`'s POD (missing the `-d` shorthand), now fixed.
+SECURITY HARDENING (TGT-162,
 found via a scheduled hourly bug hunt): `D2TG::Telegram::_send_file`'s
 caption field was spliced into the multipart body with no sanitization,
 unlike the adjacent filename field which got hardening for TGT-125 - a

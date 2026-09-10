@@ -1686,3 +1686,25 @@ bytes could in principle collide with the boundary the same way - but
 that is a separate, pre-existing risk, unaddressed here and out of this
 ticket's scope, relying (as it always has) on the per-call boundary
 being unpredictable.
+
+## Usage/POD drift is now caught for every cli/*.pl script with a Usage: line, not just 3 of them (TGT-163)
+
+Scheduled improvement hunt finding, 2026-09-10: the same drift class -
+a `cli/*.pl` script's STDERR `Usage:` string and its own POD `SYNOPSIS`
+are two independently hand-maintained copies of the same flag list,
+with nothing enforcing they stay in sync - had already been caught and
+fixed 3 separate times (`poller.pl`, TGT-119; `reply.pl`, TGT-157;
+`approve.pl`, TGT-159), each time by a manual/live check rather than a
+test. Only those 3 scripts had a parity test guarding against a fourth
+occurrence; the other 9 scripts with a `Usage:` line
+(`attachment.pl`, `history.pl`, `retry-download.pl`, `send.pl`,
+`status.pl`, `text-only-replies.pl`, `tts.pl`, `unread.pl`,
+`whoami.pl`) had none. The same flag-set-parity test pattern
+(`t/113`/`t/114`'s own established shape) was added for all 9. Writing
+them caught one more real drift immediately: `history.pl`'s own
+`SYNOPSIS` never showed its `-d <alias>` shorthand, even though its
+`Usage:` string already documented it - fixed by adding the missing
+`SYNOPSIS` line. The other 8 scripts' Usage/POD already matched; their
+new tests pass immediately, serving as the same safety net for future
+drift that `t/88`/`t/113`/`t/114` already provide for their own
+scripts.

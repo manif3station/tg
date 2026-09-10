@@ -95,6 +95,7 @@ history - view past messages by date range, dispatched as C<d2 tg.history>
     d2 tg.history --until 2026-09-07T23:59:59
     d2 tg.history --since 2026-09-01T00:00:00 --until 2026-09-07T23:59:59
     d2 tg.history --db <alias>
+    d2 tg.history -d <alias>
 
 =head1 DESCRIPTION
 

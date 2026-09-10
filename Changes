@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+1.31  2026-09-10
+      - TEST COVERAGE (TGT-163, found via scheduled improvement hunt
+        JOB-004): only 3 of 12 cli/*.pl scripts with a Usage: STDERR
+        line had a regression test guarding it against their own POD
+        SYNOPSIS (t/88 for poller.pl, t/113 for reply.pl, t/114 for
+        approve.pl) - the exact same drift class caught 3 separate
+        times (TGT-119, TGT-157, TGT-159), with no safety net for the
+        remaining 9 scripts. Added the same flag-set-parity test
+        pattern for cli/attachment.pl, cli/history.pl,
+        cli/retry-download.pl, cli/send.pl, cli/status.pl,
+        cli/text-only-replies.pl, cli/tts.pl, cli/unread.pl, and
+        cli/whoami.pl (t/117 through t/125). Writing the new tests
+        found a genuine, real drift in cli/history.pl: its POD
+        SYNOPSIS never showed the -d <alias> shorthand form its own
+        Usage string already documented - fixed by adding
+        "d2 tg.history -d <alias>" to the SYNOPSIS, matching Usage.
+        The other 8 scripts' Usage/POD already matched; those tests
+        pass immediately, serving as a safety net for any future
+        drift rather than fixing an existing one.
+
 1.30  2026-09-10
       - SECURITY HARDENING (TGT-162, found via scheduled hourly bug hunt
         JOB-003, second pass): D2TG::Telegram::_send_file's caption

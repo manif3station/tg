@@ -40,7 +40,14 @@ two independently hand-maintained copies of the same flag list, with a
 test (`t/88-poller-help-pod-parity.t`) now enforcing they name the same
 flags (TGT-119, found via a scheduled improvement hunt reviewing
 TGT-107) - it caught a real drift immediately (`-h` was missing from
-the `SYNOPSIS`), now fixed.
+the `SYNOPSIS`), now fixed. The same drift class was found twice more
+in other `cli/*.pl` scripts (`reply.pl`, TGT-157; `approve.pl`, TGT-159)
+before a systematic sweep (TGT-163) added the identical parity test to
+the remaining 9 scripts that had none - `attachment.pl`, `history.pl`,
+`retry-download.pl`, `send.pl`, `status.pl`, `text-only-replies.pl`,
+`tts.pl`, `unread.pl`, `whoami.pl` - and caught one more real drift in
+the process: `history.pl`'s own `SYNOPSIS` never showed its `-d`
+shorthand, now added.
 
 Immediately after acquiring its own lock, warns on STDERR if it detects
 another live process whose command line looks like a poller instance
