@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+      - INVESTIGATION (TGT-176, no code change this entry - tracked
+        under 1.42 since it's the same incident window): identified a
+        real, confirmed design-level gap (a local record_message write
+        failure lets Telegram's offset advance past an update that was
+        never actually persisted, so it can never be redelivered) as
+        the most plausible - but not conclusively confirmed as the
+        actual - cause of the reported incident; evidence instead
+        points more toward extended downtime from TGT-175's own
+        (then-unfixed) crash bug as the likelier primary cause.
+        Michael's own architectural ruling: stop advancing the offset
+        past a failed write, let Telegram redeliver, dedupe the
+        resulting duplicate. Implementation tracked separately as
+        TGT-178 (not yet shipped). Full write-up in docs/POLICIES.md.
+
 1.42  2026-09-10
       - RELIABILITY FIX (TGT-175, live production incident reported via
         the budget project, Michael's own owner chat): cli/poller.pl's

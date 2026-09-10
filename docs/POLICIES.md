@@ -1915,3 +1915,34 @@ ticket, since the exact mechanism is not yet conclusively established
 and any fix would be a deliberate architectural decision (whether to
 change `_record_message_safe`'s TGT-132 non-fatal-skip philosophy to a
 redeliver-and-dedupe model), not a mechanical bug fix like this one.
+
+**TGT-176's investigation findings** (using a read-only copy of the
+budget project's own `.tira/telegram.messages.db` Michael provided,
+queried inside a `tira:latest` container - no writes, no code
+execution): the local `messages` table has a hard stop at message_id
+4479 (2026-09-10 11:00 UTC), hours before the reported ~20:00 incident,
+even though the snapshot's own job output shows the poller still alive
+and restarting on version bumps well past that point. `allow_list`
+confirms the owner stayed genuinely allow-listed throughout (rules out
+an access-control explanation); `pending`/`failed_downloads` are both
+empty (rules out a queued-but-failing-download explanation). This
+points toward extended downtime from TGT-175's own (then-unfixed)
+crash bug as the likelier primary cause, rather than a single isolated
+`record_message` write failure - though the exact mechanism could not
+be fully confirmed without Telegram's own `update_id` history, which
+this project has no access to.
+
+Michael's own architectural ruling (question Q-011 on TGT-176,
+answered 2026-09-10T22:20:50+0100): change the design so the offset is
+never persisted past an update whose local `record_message` write
+failed - let Telegram redeliver it next cycle, and add dedupe-by-
+message-id to handle the resulting duplicate delivery. The actual code
+change implementing this is tracked separately as **TGT-178** (not yet
+implemented as of this writing) - `record_message`'s own
+`UNIQUE(chat_id, message_id)` upsert already makes a redelivered
+message's store write idempotent (the `messages` table's
+`PRIMARY KEY (chat_id, message_id)`, not a separate `UNIQUE`
+constraint), so TGT-178's remaining work is capping `run_once`'s
+returned offset on a `_record_message_safe` failure and suppressing
+the resulting duplicate `NEW TG` print/re-download/re-transcribe on
+the redelivered pass.
