@@ -202,8 +202,7 @@ sub run_once {
             # way, just not (yet) reflected in d2 tg.history when it's
             # a caption/media change.
             if ( $store && defined $message_id && $has_text ) {
-                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text );
-                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text );
             }
 
             # TGT-178 KNOWN GAP (Codex review finding): this branch
@@ -318,8 +317,7 @@ sub run_once {
             print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
             if ( $store && defined $message_id ) {
-                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_text );
-                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text );
             }
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -343,8 +341,7 @@ sub run_once {
                 print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
                 if ( $store && defined $message_id ) {
-                    my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, $safe_transcript );
-                    $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                    _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript );
                 }
             }
         }
@@ -367,8 +364,7 @@ sub run_once {
                     _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
                     if ( $store && defined $message_id ) {
-                        my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path );
-                        $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                        _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path );
                     }
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
@@ -421,8 +417,7 @@ sub run_once {
             # d2 tg.history/d2 tg.unread afterward even though it was
             # printed to stdout in real time.
             if ( $store && defined $message_id ) {
-                my $recorded = _record_message_safe( $store, $chat_id, $message_id, $sender, "$media_kind$caption_note" );
-                $offset_cap = $update_id if !$recorded && !defined $offset_cap;
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note" );
             }
         }
     }
@@ -466,6 +461,26 @@ sub _record_message_safe {
         return 0;
     }
     return 1;
+}
+
+sub _record_message_and_track_offset {
+    my ( $store, $offset_cap_ref, $update_id, @record_message_safe_args ) = @_;
+
+    # TGT-181 (found via a scheduled improvement hunt): the 2-line
+    # "call _record_message_safe, cap $offset_cap on failure" pattern
+    # TGT-178 introduced appeared identically at all 5 call sites in
+    # run_once - extracted here, matching this project's own
+    # established "found it twice, extract it" convention
+    # (TGT-167/170/171/172/177). $offset_cap_ref is a scalar ref, not a
+    # plain return value, because run_once's own $offset_cap must
+    # persist and combine ACROSS multiple calls to this helper within
+    # one run_once invocation (the first failure across up to 5
+    # separate call sites wins) - a return value alone would make
+    # every call site re-implement the same "cap on first failure"
+    # comparison this helper exists to remove.
+    my $recorded = _record_message_safe( $store, @record_message_safe_args );
+    $$offset_cap_ref = $update_id if !$recorded && !defined $$offset_cap_ref;
+    return $recorded;
 }
 
 sub _classify_store_error {

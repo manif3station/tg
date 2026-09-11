@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.45).** REFACTOR (TGT-177, found via
+**Status: early implementation (v1.46).** REFACTOR (TGT-181, found via
+a scheduled improvement hunt): `run_once`'s 2-line
+`_record_message_safe` + `$offset_cap` bookkeeping pattern (introduced
+by TGT-178) was duplicated identically at all 5 call sites - extracted
+into a new `_record_message_and_track_offset` helper. No behavior
+change - `t/178-offset-cap-on-record-failure.t` and
+`t/100-poller-record-message-eval.t` both pass unchanged.
+REFACTOR (TGT-177, found via
 a scheduled improvement hunt): 10 `cli/*.pl` scripts each duplicated
 the identical `eval { extract_db_flag } / print STDERR $@ / exit 1`
 boilerplate - extracted into `D2TG::Config::extract_db_flag_or_die`,

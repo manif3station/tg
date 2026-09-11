@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+1.46  2026-09-11
+      - REFACTOR (TGT-181, found via a scheduled improvement hunt):
+        run_once's 2-line _record_message_safe + $offset_cap
+        bookkeeping pattern (introduced by TGT-178 earlier tonight)
+        was duplicated identically at all 5 call sites - extracted
+        into a new _record_message_and_track_offset helper, taking
+        $offset_cap by scalar ref since the value must persist and
+        combine across multiple calls within one run_once invocation.
+        No behavior change - t/178-offset-cap-on-record-failure.t and
+        t/100-poller-record-message-eval.t both pass unchanged
+        (verified via a before/after full-suite diff and 100%
+        statement+subroutine coverage on D2TG::Poller.pm).
+
 1.45  2026-09-11
       - REFACTOR (TGT-177, found via a scheduled improvement hunt): 10
         cli/*.pl scripts (approve, attachment, history, poller,
