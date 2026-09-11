@@ -23,10 +23,14 @@ fail), not because it's impossible to test, just not covered by this
 pass. A Codex QA-stage review on this ticket also caught that the
 `heartbeat_path` failure branch exited before releasing the
 just-acquired startup lock file - fixed by releasing it before that
-exit. Two more pre-existing exit paths sharing the same lock-leak gap
-(no-groups-configured, and `D2TG::Store->new`'s own TGT-183 failure
-branch) were found in the same review and filed separately as
-**TGT-185**, not fixed here.
+exit. `D2TG::Store->new`'s own TGT-183 failure branch was found to
+share the same lock-leak gap in the same review, filed separately as
+**TGT-185**, not fixed here (TGT-185, shipped in 1.50, fixed it - see
+above). A third exit path (no `--chat_id`/`--bot` groups configured)
+was suspected of sharing the gap too at the time this entry was
+written, but TGT-185's own investigation found it unreachable dead
+code - it never runs with the lock held, so there was nothing to fix
+there.
 RELIABILITY FIX (TGT-183,
 found via a scheduled hourly bug hunt, reproduced live): `cli/poller.pl`'s
 `D2TG::Store->new(...)` startup call was unwrapped - a storage-open

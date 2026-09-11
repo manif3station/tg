@@ -2007,10 +2007,11 @@ could still make it fail), not because it's impossible to test, just
 not covered by this pass. A Codex QA-stage review on this ticket also
 found that the `heartbeat_path` failure branch exited before releasing
 the startup lock file `lock_path`/`D2TG::Lock::acquire` had just
-acquired above it - fixed by releasing the lock before that exit. Two
-more pre-existing exit paths with the same lock-leak gap (no-groups-
-configured, and `D2TG::Store->new`'s own TGT-183 failure branch) were
-found in the same review and filed separately as **TGT-185**.
+acquired above it - fixed by releasing the lock before that exit.
+`D2TG::Store->new`'s own TGT-183 failure branch was suspected of
+sharing the same lock-leak gap (along with a "no `--chat_id`/`--bot`
+groups configured" exit) and filed separately as **TGT-185** to
+investigate and fix.
 
 **TGT-185**, shipped in 1.50: fixed the `D2TG::Store->new` failure
 exit's own lock leak the same way, releasing the lock before that

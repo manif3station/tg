@@ -35,11 +35,11 @@ Revision history for the tg skill
       - BUG FIX (TGT-184, Codex QA-stage finding): the heartbeat_path
         failure exit above ran before D2TG::Lock::release($lock_path),
         leaking the just-acquired startup lock file on that failure.
-        Fixed by releasing the lock before that exit. Two more
-        pre-existing exit paths sharing the same gap (no-groups-
-        configured, and D2TG::Store->new's own TGT-183 failure branch)
-        were found in the same review and filed separately as TGT-185
-        rather than fixed here (out of this ticket's scope).
+        Fixed by releasing the lock before that exit. D2TG::Store->new's
+        own TGT-183 failure branch was suspected of sharing the same
+        gap (along with a no-groups-configured exit) and filed
+        separately as TGT-185 to investigate and fix, rather than
+        fixed here (out of this ticket's scope).
 
 1.48  2026-09-11
       - RELIABILITY FIX (TGT-183, found via a scheduled hourly bug

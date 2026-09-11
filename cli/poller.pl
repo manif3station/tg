@@ -526,6 +526,10 @@ embed the real db path (matching L<D2TG::Poller/_record_message_safe>'s
 own TGT-133 scrubbing precedent). C<lock_path>/C<heartbeat_path> above
 independently shared the identical unwrapped C<make_path> risk - fixed
 separately as TGT-184 (see their own comments above), the same way.
+This failure exit itself leaked the just-acquired startup lock file
+(a Codex QA-stage review finding on TGT-184) - fixed as TGT-185 by
+releasing the lock before this exit, same as heartbeat_path's own
+exit above.
 
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each
