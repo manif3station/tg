@@ -807,7 +807,11 @@ Upserts on C<(chat_id, message_id)> - Telegram's own at-least-once
 delivery can reprocess the same update, and a second call for the same
 pair refreshes the existing row's C<file_id>/C<sender>/C<media_kind>/
 C<caption_note>/C<error>/timestamp rather than inserting a duplicate (a
-Codex review finding). Returns the row's id (new or existing).
+Codex review finding). Returns the row's id (new or existing). The
+C<UPDATE SET> clause deliberately does not assign C<local_path> (TGT-196)
+- a redelivery of the same failed-download event must not clobber a
+C<local_path> already persisted by L</mark_failed_download_downloaded>
+back to C<NULL>.
 
 =head2 failed_downloads
 
@@ -815,8 +819,20 @@ Returns every queued failed download (TGT-104), ordered by C<id> (not
 C<created_at>, whose second precision isn't a reliable tiebreaker - a
 Codex review finding) - each a hashref of C<id>, C<chat_id>,
 C<message_id>, C<file_id>, C<sender>, C<media_kind>, C<caption_note>,
-C<error>, C<created_at>. C<cli/retry-download.pl> lists and acts on
-this.
+C<error>, C<created_at>, C<local_path> (TGT-196, C<undef> until a
+retry's own C<record_message> fails after a successful download - see
+L</mark_failed_download_downloaded>). C<cli/retry-download.pl> lists
+and acts on this.
+
+=head2 mark_failed_download_downloaded($id, $local_path)
+
+Persists C<$local_path> onto a queued row (TGT-196), without removing
+it from the C<failed_downloads> queue. C<D2TG::Download::retry_failed_download>
+calls this when a retry's download succeeds but the following
+C<record_message> history write still fails - so the next retry attempt
+sees C<local_path> already set and skips C<download_file> entirely,
+retrying only the still-failing history write instead of re-downloading
+an already-fetched file from Telegram on every pass.
 
 =head2 remove_failed_download($id)
 
