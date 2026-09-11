@@ -263,6 +263,13 @@ if ($@) {
     exit 1;
 }
 
+# TGT-185 investigation note: in practice this branch is unreachable
+# given the two earlier guards above (require_chat_id_or_warn, and the
+# has_cli_groups/D2TG_CHAT_ID shape re-check) - every combination that
+# would leave D2TG::Config::bot_groups() returning an empty list is
+# already refused by one of those first. Kept as defense-in-depth
+# rather than removed, since it costs nothing and guards against a
+# future change to the earlier checks silently reopening this gap.
 if ( !@$groups ) {
     print STDERR "No --chat_id/--bot groups configured (neither via CLI nor D2TG_CHAT_ID/D2TG_TOKEN) - refusing to start.\n";
     exit 1;
@@ -291,6 +298,11 @@ my $skill_root = File::Spec->catdir( $Bin, '..' );
 # fixed reason, since it can embed the real db_path. (lock_path and
 # heartbeat_path above shared the identical unwrapped-make_path risk -
 # fixed separately, see TGT-184's own comments above.)
+#
+# TGT-185 (Codex QA-stage review finding on TGT-184): this exit path
+# ran before D2TG::Lock::release($lock_path), leaking the startup lock
+# file acquired above on a storage-open failure. Fixed the same way
+# TGT-184 fixed the identical gap on heartbeat_path's own failure exit.
 my $store = eval {
     D2TG::Store->new(
         db_path => D2TG::Config::state_db_path(
@@ -303,6 +315,7 @@ my $store = eval {
 if ($@) {
     my $reason = D2TG::Poller::_classify_store_error($@);
     print STDERR "Failed to open local storage ($reason) - refusing to start.\n";
+    D2TG::Lock::release($lock_path);
     exit 1;
 }
 

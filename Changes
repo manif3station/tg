@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.50  2026-09-11
+      - BUG FIX (TGT-185, filed from a Codex QA-stage review on
+        TGT-184): cli/poller.pl's D2TG::Store->new failure exit
+        (TGT-183) ran before releasing the startup lock file
+        D2TG::Lock::acquire had already acquired above it, leaking a
+        stale telegram.pid lock on that failure. Fixed by releasing
+        the lock before that exit, matching the same fix TGT-184
+        already applied to heartbeat_path's own identical gap.
+        Investigated the ticket's second originally-scoped scenario
+        (the "no --chat_id/--bot groups configured" exit) and found
+        it unreachable dead code - two earlier startup guards already
+        refuse before that check can ever see an empty groups list -
+        documented in the new test rather than faking a scenario that
+        cannot actually occur.
+
 1.49  2026-09-11
       - RELIABILITY FIX (TGT-184, a follow-up filed while building
         TGT-183): cli/poller.pl's lock_path and heartbeat_path startup

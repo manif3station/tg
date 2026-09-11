@@ -2010,5 +2010,20 @@ the startup lock file `lock_path`/`D2TG::Lock::acquire` had just
 acquired above it - fixed by releasing the lock before that exit. Two
 more pre-existing exit paths with the same lock-leak gap (no-groups-
 configured, and `D2TG::Store->new`'s own TGT-183 failure branch) were
-found in the same review and filed separately as **TGT-185**, not
-fixed here.
+found in the same review and filed separately as **TGT-185**.
+
+**TGT-185**, shipped in 1.50: fixed the `D2TG::Store->new` failure
+exit's own lock leak the same way, releasing the lock before that
+exit. The ticket's other originally-scoped scenario - a "no
+`--chat_id`/`--bot` groups configured" exit also leaking the lock -
+turned out, on inspection while writing the red test, to be
+unreachable dead code: two earlier startup guards
+(`require_chat_id_or_warn`, and the `has_cli_groups`/`D2TG_CHAT_ID`
+shape re-check) already refuse before `D2TG::Config::bot_groups()` can
+ever return an empty list, so that branch can never run with the lock
+already held. Confirmed empirically (the actual refusal for a true
+no-groups run comes from the earlier guard, well before
+`lock_path`/`heartbeat_path`/`D2TG::Lock::acquire` are even reached)
+and documented in `t/185-poller-lock-leak-no-groups-and-store-failure.t`
+rather than faking a scenario that cannot occur; the `!@$groups` check
+itself is left in place as defense-in-depth.

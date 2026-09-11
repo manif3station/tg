@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.49).** RELIABILITY FIX (TGT-184,
+**Status: early implementation (v1.50).** BUG FIX (TGT-185, filed
+from a Codex QA-stage review on TGT-184): `cli/poller.pl`'s
+`D2TG::Store->new` failure exit (TGT-183) ran before releasing the
+startup lock file, leaking it on that failure - fixed by releasing
+the lock first, the same way TGT-184 already fixed the identical gap
+on `heartbeat_path`'s own exit. The ticket's other originally-scoped
+scenario (a "no groups configured" exit leaking the lock) turned out
+to be unreachable dead code - two earlier startup guards already
+refuse before that check can ever see an empty groups list - proven
+and documented in the new test rather than faked.
+RELIABILITY FIX (TGT-184,
 follow-up to TGT-183): `cli/poller.pl`'s `lock_path`/`heartbeat_path`
 startup calls shared the identical unwrapped-`make_path` risk TGT-183
 just fixed for `D2TG::Store->new` - both now wrapped and scrubbed the
