@@ -78,7 +78,8 @@ package main;
         );
     } );
 
-    like( $err, qr/STORE ERROR \[999\]: record_sent_text failed/, 'a record_sent_text failure is logged non-fatally, classified' );
+    is( $err, "STORE ERROR [999]: record_sent_text failed - database is locked\n",
+        'a record_sent_text failure is logged non-fatally with the exact classified reason text (D2TG::Poller::_classify_store_error\'s own fixed output, not arbitrary raw error text)' );
     unlike( $err, qr/at \S+\.pm line \d+/, 'the raw exception is never echoed as an uncaught Perl trace - only the classified reason (TGT-133 precedent)' );
     ok( defined $result, 'send_reply does not die - it returns normally despite the store write failure' );
     ok( $result->{text},  'the return value still reports the text send (send_message genuinely succeeded)' );
@@ -151,6 +152,78 @@ package main;
 
     is( $err, '', 'nothing is printed to STDERR when every store write succeeds' );
     is( scalar @{ $store->{calls} }, 3, 'record_sent_text, record_sent_voice, and mark_read are each called exactly once' );
+}
+
+# TGT-192 (a Codex QA-stage review finding): the blocks above only
+# exercise send_reply's own 3 call sites - resend_voice's own
+# mark_read/record_sent_voice calls (2 of the 5 sites this fix
+# touches) had no coverage at all. resend_voice never calls
+# send_message, so its own return shape is just { voice => ... } -
+# these blocks confirm both of its store writes are independently
+# non-fatal too, matching send_reply's own guarantee.
+{
+    my $telegram = Fake::ReplyTelegram->new;
+    my $store    = Fake::Store::DyingWrite->new( dies_on => { mark_read => 1 } );
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => 999,
+            text                 => 'hello',
+            store                => $store,
+            synthesize           => sub { return '/tmp/fake-voice.ogg' },
+            reply_to_message_id  => 42,
+            text_message_id      => 501,
+        );
+    } );
+
+    is( $err, "STORE ERROR [999]: mark_read failed - database is locked\n",
+        'resend_voice: a mark_read failure is logged non-fatally with the exact classified reason text' );
+    ok( defined $result && $result->{voice}, 'resend_voice does not die on a mark_read failure - it still returns the voice result' );
+    ok( ( grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ), 'record_sent_voice is still attempted even after mark_read failed' );
+}
+
+{
+    my $telegram = Fake::ReplyTelegram->new;
+    my $store    = Fake::Store::DyingWrite->new( dies_on => { record_sent_voice => 1 } );
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => 999,
+            text                 => 'hello',
+            store                => $store,
+            synthesize           => sub { return '/tmp/fake-voice.ogg' },
+            reply_to_message_id  => 42,
+            text_message_id      => 501,
+        );
+    } );
+
+    is( $err, "STORE ERROR [999]: record_sent_voice failed - database is locked\n",
+        'resend_voice: a record_sent_voice failure is logged non-fatally with the exact classified reason text' );
+    ok( defined $result && $result->{voice}, 'resend_voice does not die on a record_sent_voice failure either' );
+}
+
+{
+    # Regression: resend_voice's own fully-successful path is
+    # completely unaffected too.
+    my $telegram = Fake::ReplyTelegram->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => 999,
+            text                 => 'hello',
+            store                => $store,
+            synthesize           => sub { return '/tmp/fake-voice.ogg' },
+            reply_to_message_id  => 42,
+            text_message_id      => 501,
+        );
+    } );
+
+    is( $err, '', 'resend_voice: nothing is printed to STDERR when every store write succeeds' );
+    is( scalar @{ $store->{calls} }, 2, 'resend_voice: mark_read and record_sent_voice are each called exactly once' );
 }
 
 done_testing();

@@ -14,8 +14,11 @@ delivery. All 5 call sites now go through a shared `_store_write_safe`
 helper - `eval`-wrapped, classified via
 `D2TG::Poller::_classify_store_error`, logged non-fatally. Voice
 synthesis/send naturally still runs afterward (the die no longer
-aborts the sub), and `send_reply` returns normally whenever
-`send_message` itself succeeded.
+aborts the sub), and a store-write failure specifically can no longer
+turn an otherwise-successful `send_reply` call into a reported hard
+failure - synthesis/`send_voice` themselves still fail loudly exactly
+as before (TGT-083's own text-first tradeoff is unchanged; only the
+local audit-trail write's own failure is now non-fatal).
 RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its

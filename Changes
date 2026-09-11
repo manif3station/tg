@@ -18,11 +18,14 @@ Revision history for the tg skill
         through a shared _store_write_safe helper - eval-wrapped,
         classified, logged non-fatally. Since the die no longer aborts
         the sub, voice synthesis/send naturally still runs afterward,
-        and send_reply returns normally (never a hard failure) when
-        send_message itself succeeded. New test
-        t/192-store-write-failures-non-fatal.t (13 assertions),
-        confirmed genuinely red against the pre-fix code (the whole
-        test script crashed with an uncaught die).
+        and a store-write failure specifically can no longer turn an
+        otherwise-successful send_reply call into a reported hard
+        failure - synthesis/send_voice themselves still fail loudly
+        exactly as before (TGT-083's own tradeoff unchanged). New test
+        t/192-store-write-failures-non-fatal.t (20 assertions,
+        covering both send_reply and resend_voice), confirmed
+        genuinely red against the pre-fix code (the whole test script
+        crashed with an uncaught die).
 
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the

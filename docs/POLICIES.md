@@ -2236,17 +2236,27 @@ All 5 call sites (`send_reply`'s `record_sent_text`/
 helper - `eval`-wrapped, classified, logged non-fatally to STDERR as
 `STORE ERROR [chat_id]: ... failed - REASON`. Since the die no longer
 aborts the sub, voice synthesis/send naturally still runs afterward,
-and `send_reply` returns normally (never reported as a hard failure)
-whenever `send_message` itself succeeded - both acceptance criteria
-fall out of the same fix, without needing separate logic for either.
+and a store-write failure specifically can no longer turn an
+otherwise-successful `send_reply` call into a reported hard failure -
+both acceptance criteria fall out of the same fix, without needing
+separate logic for either. Synthesis/`send_voice` themselves still
+fail loudly exactly as before this ticket (a Codex documentation-
+stage review finding: an earlier draft's "returns normally whenever
+`send_message` succeeded" wording overclaimed past that still-intact
+TGT-083 tradeoff) - only the local audit-trail write's own failure is
+now non-fatal.
 
-New test `t/192-store-write-failures-non-fatal.t` (13 assertions):
-each of the 3 failure modes is non-fatal and classified (never the
-raw exception, matching TGT-133's own scrubbing precedent), voice is
-genuinely still sent after a `record_sent_text` failure (checked via
-the fake Telegram double's own `call_order`), and the fully-
-successful path is completely unaffected (no STDERR output, all 3
-store calls made exactly once). Confirmed genuinely red against the
+New test `t/192-store-write-failures-non-fatal.t`: each of the 3
+failure modes is non-fatal and classified (never the raw exception,
+matching TGT-133's own scrubbing precedent), voice is genuinely still
+sent after a `record_sent_text` failure (checked via the fake
+Telegram double's own `call_order`), the fully-successful path is
+completely unaffected (no STDERR output, all 3 `send_reply` store
+calls made exactly once), and `resend_voice`'s own `mark_read`/
+`record_sent_voice` failures are independently proven non-fatal too
+(a Codex QA-stage review finding: an earlier draft only exercised
+`send_reply`, leaving 2 of the 5 fixed call sites completely
+untested). Confirmed genuinely red against the
 pre-fix code - the whole test script crashed with an uncaught die
 (no TAP plan produced at all) rather than merely failing an
 assertion, since the raw exception propagated straight out of
