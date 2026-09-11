@@ -51,8 +51,12 @@ for my $file (@affected_files) {
 
     like(
         $src,
-        qr/use Test::CaptureStdio\b.*run_capturing_stderr/s,
-        "$file imports run_capturing_stderr from the shared module"
+        qr/Test::CaptureStdio\b.*run_capturing_stderr/s,
+        "$file imports run_capturing_stderr from the shared module "
+          . "(either 'use Test::CaptureStdio qw(...)' directly, or "
+          . "t/59's own require-by-path + explicit ->import, needed "
+          . "there to avoid polluting \@INC for its own unrelated "
+          . "Developer::Dashboard availability SKIP-gate check)"
     );
 }
 
