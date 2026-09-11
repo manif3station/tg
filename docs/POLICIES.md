@@ -2132,15 +2132,24 @@ gap instead: `changes_summary`'s env-var-priority code path
 test in `t/90-changes-summary.t` closes it. The silent-`undef`-on-any-
 mismatch fragility itself was filed separately as **TGT-190**.
 
-**TGT-190**, shipped in 1.53: a version-match miss now prints a
-non-fatal STDERR diagnostic naming both the requested version and the
-`Changes` file's own actual top header line, before returning `undef`
-unchanged - matching this project's established non-fatal-degradation
-pattern (`skill_version_check_safe`/`persist_offset_safe`). A
-genuinely missing/unreadable `Changes` file still returns `undef`
-silently with no diagnostic - only a version-string mismatch against
-a file that opened successfully is covered (out of scope: the match
-logic itself, e.g. fuzzy/version-normalized matching). New tests in
-`t/90-changes-summary.t`: the miss case now asserts a diagnostic
-naming both values fires; a new happy-path case confirms a real match
-still prints nothing to STDERR.
+**TGT-190**, shipped in 1.53: this branch (reached whenever no entry
+can be matched for the requested version - not only a genuine
+wrong-version mismatch, but also a header line whose version matches
+but whose own shape is malformed, a Codex QA-stage review finding)
+now prints a non-fatal STDERR diagnostic naming both the requested
+version and a recognizable header found elsewhere in the file (the
+first strictly-shaped header anywhere, which can skip a malformed
+earlier one - not necessarily "the" file's own literal top header),
+before returning `undef` unchanged - matching this project's
+established non-fatal-degradation pattern
+(`skill_version_check_safe`/`persist_offset_safe`). A genuinely
+missing/unreadable `Changes` file still returns `undef` silently with
+no diagnostic - only a readable file with no matching entry is
+covered (out of scope: the match logic itself, e.g. fuzzy/version-
+normalized matching). New tests in `t/90-changes-summary.t`: the miss
+case now asserts a diagnostic naming both the requested version and
+the exact, full recognizable header line fires (a Codex QA-stage
+review finding: an earlier draft only checked for the version
+substring, which would still pass even if the diagnostic dropped the
+header's own date); a new happy-path case confirms a real match still
+prints nothing to STDERR.

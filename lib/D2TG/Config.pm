@@ -101,19 +101,32 @@ sub changes_summary {
     # "(?=\n\S|\z)" would truncate the entry early if it ever contained
     # an unindented continuation/prose line, potentially missing a real
     # bullet further down.
-    # TGT-190 (found while investigating TGT-187): a version-match miss
-    # here used to return undef with zero diagnostic anywhere - a
-    # genuine future .env/Changes drift (a manual edit, a version-bump
-    # script bug, a merge that updates one but not the other) would
-    # silently degrade the version-change restart notice with nothing
-    # in the log to say why. Non-fatal STDERR diagnostic only - the
-    # return value (undef) is unchanged, matching this project's
-    # established non-fatal-degradation pattern (e.g.
-    # skill_version_check_safe/persist_offset_safe).
+    # TGT-190 (found while investigating TGT-187): this branch used to
+    # return undef with zero diagnostic anywhere - a genuine future
+    # .env/Changes drift (a manual edit, a version-bump script bug, a
+    # merge that updates one but not the other) would silently degrade
+    # the version-change restart notice with nothing in the log to say
+    # why. Non-fatal STDERR diagnostic only - the return value (undef)
+    # is unchanged, matching this project's established non-fatal-
+    # degradation pattern (e.g. skill_version_check_safe/
+    # persist_offset_safe).
+    #
+    # A Codex QA-stage review finding: this branch is reached not only
+    # by a genuine version-string mismatch, but also by a header line
+    # whose version DOES match but is followed by neither whitespace
+    # nor any token before the newline (a malformed header, not a
+    # wrong version) - so the diagnostic below deliberately does not
+    # claim "version mismatch" specifically, only that no entry could
+    # be matched for the requested version. Likewise, the second regex
+    # below finds the first line ANYWHERE in the file that satisfies
+    # the full strict header shape (version + ISO date) - if an
+    # earlier, malformed header line precedes it, that earlier line is
+    # silently skipped, so the diagnostic names it as "a" recognizable
+    # header, not authoritatively "the" file's own top header.
     unless ( $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=^\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2}[ \t]*$|\z)/ms ) {
         my ($actual_header) = $changes =~ /^(\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2})[ \t]*$/m;
-        $actual_header //= 'no version header found at all';
-        print STDERR "D2TG::Config::changes_summary: no Changes entry found for version '$version' (Changes file's own top header: $actual_header)\n";
+        $actual_header //= 'no recognizable version header found in the file at all';
+        print STDERR "D2TG::Config::changes_summary: no entry matched for version '$version' (a recognizable header found in the file: $actual_header)\n";
         return undef;
     }
     my $block = $1;

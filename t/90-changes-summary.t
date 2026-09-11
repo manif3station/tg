@@ -143,9 +143,13 @@ CHANGES
 # .env/Changes drift (not just the already-investigated TGT-187
 # incident) would leave the restart notice's missing summary
 # unexplained in the log. Now logs a distinguishable STDERR diagnostic
-# naming both the requested version and what was actually found as the
-# Changes file's own first header line - the happy path (a real match)
-# stays completely silent, unchanged.
+# naming both the requested version and a recognizable header found in
+# the file - the happy path (a real match) stays completely silent,
+# unchanged. A Codex QA-stage review finding: an earlier draft of this
+# assertion only checked for the version substring '0.05', which would
+# still have passed even if the diagnostic dropped the header's own
+# date - now checks for the exact, full header line '0.05  2026-09-07'
+# to genuinely prove the whole header is named, not just its version.
 {
     my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
 Revision history for the tg skill
@@ -165,8 +169,8 @@ CHANGES
     is( $result, undef, 'changes_summary still returns undef on a version-match miss - unchanged behavior' );
     like(
         $stderr,
-        qr/\bD2TG::Config::changes_summary\b.*\b9\.99\b.*\b0\.05\b/s,
-        'a version-match miss logs a STDERR diagnostic naming both the requested version (9.99) and what was actually found (0.05)'
+        qr/\bD2TG::Config::changes_summary\b.*\b9\.99\b.*\Q0.05  2026-09-07\E/s,
+        'a version-match miss logs a STDERR diagnostic naming both the requested version (9.99) and the full recognizable header found (0.05  2026-09-07), not just its version number'
     );
 }
 

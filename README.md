@@ -2,15 +2,21 @@
 
 **Status: early implementation (v1.53).** RELIABILITY FIX (TGT-190,
 filed from TGT-187's own investigation): `D2TG::Config::changes_summary`
-silently returned `undef` with zero diagnostic on ANY version-string
-mismatch against an otherwise-readable `Changes` file. Now prints a
-non-fatal STDERR diagnostic naming both the requested version and the
-file's own actual top header line before returning `undef` unchanged
-- matching this project's established non-fatal-degradation pattern
-(`skill_version_check_safe`/`persist_offset_safe`). A genuinely
-missing/unreadable `Changes` file still returns `undef` silently, with
-no diagnostic - only a version-string mismatch against a file that
-opened successfully is covered.
+silently returned `undef` with zero diagnostic whenever no entry could
+be matched for the requested version against an otherwise-readable
+`Changes` file - not only a genuine wrong-version mismatch, but also a
+header line whose version matches but whose own shape is malformed.
+Now prints a non-fatal STDERR diagnostic naming both the requested
+version and a recognizable header found elsewhere in the file (a
+Codex QA-stage review finding: an earlier draft of this diagnostic
+searches for the first strictly-shaped header anywhere in the file,
+so it can skip a malformed earlier one and isn't necessarily "the"
+file's own literal top header - worded accordingly) before returning
+`undef` unchanged - matching this project's established non-fatal-
+degradation pattern (`skill_version_check_safe`/`persist_offset_safe`).
+A genuinely missing/unreadable `Changes` file still returns `undef`
+silently, with no diagnostic - only a readable file with no matching
+entry is covered.
 INVESTIGATE (TGT-187): a
 live user report (budget project) observed a version-bump restart
 notice missing TGT-112's own Changes-line summary. Traced
