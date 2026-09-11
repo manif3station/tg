@@ -48,10 +48,15 @@ Revision history for the tg skill
         instead of ever propagating as a failure (worse than the round
         2 misclassification, not better). Fixed by checking
         ref($voice_result) eq 'HASH' explicitly in both send_reply and
-        resend_voice: a non-hashref result now dies for real (matching
-        TGT-083's "voice failures are loud, never silent" tradeoff, and
-        the pre-TGT-192 behavior for the cases that genuinely did die
-        back then), while a present-but-incomplete hashref (e.g.
+        resend_voice: a non-hashref result now dies for real, but only
+        when a store was actually given and the text send produced a
+        usable message id (the store write's own pre-existing gating -
+        a caller that never passes store, or whose send_message result
+        carried no usable id, is unaffected either way, same as before
+        this ticket) - matching TGT-083's "voice failures are loud,
+        never silent" tradeoff, and the pre-TGT-192 behavior for the
+        cases that genuinely did die back then. A present-but-incomplete
+        hashref (e.g.
         Fake::ReplyTelegram's own 'shapeless' option) still quietly
         skips just the store write, exactly as before. New regression
         blocks cover both shapes independently.

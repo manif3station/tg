@@ -2267,9 +2267,13 @@ silently produced `undef`, and a malformed `send_voice` result (e.g.
 ever propagating as a failure - worse than round 2's misclassification,
 not better. Fixed by checking `ref($voice_result) eq 'HASH'` explicitly
 in both `send_reply` and `resend_voice`: a non-hashref result now dies
-for real (matching TGT-083's "voice failures are loud, never silent"
-tradeoff, and the genuine pre-TGT-192 behavior for the cases that
-actually did die back then), while a present-but-incomplete hashref -
+for real - but only when a `store` was actually given and the text
+send produced a usable message id (the store write's own pre-existing
+gating; a caller that never passes `store`, or whose `send_message`
+result carried no usable id, is unaffected either way, same as before
+this ticket) - matching TGT-083's "voice failures are loud, never
+silent" tradeoff, and the genuine pre-TGT-192 behavior for the cases
+that actually did die back then. A present-but-incomplete hashref -
 e.g. `Fake::ReplyTelegram`'s own `shapeless` option, `{ ok => 1 }` -
 still quietly skips just the store write with no error, exactly as
 before.
@@ -2286,10 +2290,15 @@ calls made exactly once), `resend_voice`'s own `mark_read`/
 `send_reply`, leaving 2 of the 5 fixed call sites completely
 untested), a malformed `send_voice` result (a
 `Fake::Telegram::MalformedVoiceResult` double returning `undef`) is
-proven to make `send_reply` die for real - never misclassified as a
-`STORE ERROR`, and never silently reported as success either (the
-round-3 finding above) - and a `shapeless`-but-present hashref (via
-`Fake::ReplyTelegram`) is separately proven to still succeed silently,
+proven to make `send_reply` (and, per a round-4 QA-stage finding that
+the first draft covered only `send_reply` for this shape too,
+`resend_voice`) die for real - never misclassified as a `STORE ERROR`,
+never silently reported as success either (the round-3 finding above),
+and correctly left the message genuinely unread (`mark_read` never
+attempted, another round-4 finding: this state must survive for a
+later retry/recovery path to still find it pending) - and a
+`shapeless`-but-present hashref (via `Fake::ReplyTelegram`) is
+separately proven to still succeed silently for both functions,
 confirming the two shapes are genuinely distinguished. Confirmed
 genuinely red against the pre-fix code - the whole test script crashed
 with an uncaught die (no TAP plan produced at all) rather than merely

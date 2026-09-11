@@ -268,11 +268,12 @@ package main;
     my ( $err, $result ) = capture_stderr( sub {
         return eval {
             D2TG::Reply::send_reply(
-                telegram   => $telegram,
-                chat_id    => 999,
-                text       => 'hello',
-                store      => $store,
-                synthesize => sub { return '/tmp/fake-voice.ogg' },
+                telegram             => $telegram,
+                chat_id              => 999,
+                text                 => 'hello',
+                store                => $store,
+                synthesize           => sub { return '/tmp/fake-voice.ogg' },
+                reply_to_message_id  => 42,
             );
         };
     } );
@@ -283,6 +284,14 @@ package main;
     unlike( $err, qr/STORE ERROR/, 'this failure is never misreported as a STORE ERROR - it is not a store-write problem at all' );
     is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
         'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result' );
+    # A Codex QA-stage review finding (round 4): this state - text
+    # already sent, voice result malformed - must leave the message
+    # genuinely unread, so a later retry/recovery path (resend_voice,
+    # or a human noticing) still finds it pending. mark_read is only
+    # ever reached after this block's own die already unwound the
+    # call, so it must never have run.
+    is_deeply( [ grep { $_->[0] eq 'mark_read' } @{ $store->{calls} } ], [],
+        'mark_read is never attempted either - the message is correctly left unread after a malformed voice result, not falsely marked handled' );
 }
 
 {
@@ -309,6 +318,61 @@ package main;
 
     is( $err, '', 'a shapeless-but-present voice result does not die and does not log a STORE ERROR' );
     ok( defined $result, 'send_reply returns normally for a shapeless (present hashref, no message_id) voice result' );
+    is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
+        'record_sent_voice is not attempted when the voice result carries no message_id, but this is not an error' );
+}
+
+# A Codex QA-stage review finding (round 4): the malformed/shapeless
+# ref()-check fix above only had coverage for send_reply - resend_voice
+# was changed identically but left completely untested for these two
+# shapes, the exact same "duplicate call site left uncovered" mistake
+# this ticket's own history already made once (see the send_reply-only
+# coverage gap fixed earlier in this file). Both blocks mirror
+# send_reply's own two blocks above.
+{
+    my $telegram = Fake::Telegram::MalformedVoiceResult->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return eval {
+            D2TG::Reply::resend_voice(
+                telegram             => $telegram,
+                chat_id              => 999,
+                text                 => 'hello',
+                store                => $store,
+                synthesize           => sub { return '/tmp/fake-voice.ogg' },
+                reply_to_message_id  => 42,
+                text_message_id      => 501,
+            );
+        };
+    } );
+
+    my $eval_error = $@;
+    ok( !defined $result, 'resend_voice dies (returns nothing) on a malformed send_voice result - it is not silently reported as success' );
+    like( $eval_error, qr/unexpected result/, 'the die names the actual problem - an unexpected (non-hashref) send_voice result' );
+    unlike( $err, qr/STORE ERROR/, 'this failure is never misreported as a STORE ERROR - it is not a store-write problem at all' );
+    is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
+        'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result' );
+}
+
+{
+    my $telegram = Fake::ReplyTelegram->new( shapeless => 1 );
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return D2TG::Reply::resend_voice(
+            telegram             => $telegram,
+            chat_id              => 999,
+            text                 => 'hello',
+            store                => $store,
+            synthesize           => sub { return '/tmp/fake-voice.ogg' },
+            reply_to_message_id  => 42,
+            text_message_id      => 501,
+        );
+    } );
+
+    is( $err, '', 'resend_voice: a shapeless-but-present voice result does not die and does not log a STORE ERROR' );
+    ok( defined $result, 'resend_voice returns normally for a shapeless (present hashref, no message_id) voice result' );
     is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
         'record_sent_voice is not attempted when the voice result carries no message_id, but this is not an error' );
 }

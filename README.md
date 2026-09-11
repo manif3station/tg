@@ -21,14 +21,17 @@ as before (TGT-083's own text-first tradeoff is unchanged; only the
 local audit-trail write's own failure is now non-fatal). A malformed
 voice-send result (not a hashref - e.g. `send_voice` returning `undef`)
 is never misclassified as a store-write failure: `ref($voice_result) eq
-'HASH'` is checked explicitly and a non-hashref result dies for real,
-matching what a malformed shape deserves. A well-formed hashref simply
-missing a `message_id` key (a legitimate shape some callers'
-`telegram` doubles use) still quietly skips just the store write, with
-no error at all - two Codex QA-stage review rounds were needed to land
-on this: an `eval`-guarded dereference alone can't tell the two shapes
-apart, since dereferencing a hash key off `undef` never actually raises
-an exception in Perl.
+'HASH'` is checked explicitly, and a non-hashref result dies for real -
+but only when a `store` was actually given and the text send produced a
+usable message id (the same gating the store write itself has always
+had); a caller that never passes `store`, or whose `send_message`
+result carried no usable id, is unaffected either way, same as before
+this ticket. A well-formed hashref simply missing a `message_id` key (a
+legitimate shape some callers' `telegram` doubles use) still quietly
+skips just the store write, with no error at all - two Codex QA-stage
+review rounds were needed to land on this: an `eval`-guarded
+dereference alone can't tell the two shapes apart, since dereferencing
+a hash key off `undef` never actually raises an exception in Perl.
 RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its
