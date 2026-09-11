@@ -2130,5 +2130,17 @@ gap instead: `changes_summary`'s env-var-priority code path
 (`state_db_path`'s identical priority order was already tested in
 `t/10-state-path.t`) had no test coverage at all - new regression
 test in `t/90-changes-summary.t` closes it. The silent-`undef`-on-any-
-mismatch fragility itself was filed separately as **TGT-190** to add
-a diagnostic, not fixed here.
+mismatch fragility itself was filed separately as **TGT-190**.
+
+**TGT-190**, shipped in 1.53: a version-match miss now prints a
+non-fatal STDERR diagnostic naming both the requested version and the
+`Changes` file's own actual top header line, before returning `undef`
+unchanged - matching this project's established non-fatal-degradation
+pattern (`skill_version_check_safe`/`persist_offset_safe`). A
+genuinely missing/unreadable `Changes` file still returns `undef`
+silently with no diagnostic - only a version-string mismatch against
+a file that opened successfully is covered (out of scope: the match
+logic itself, e.g. fuzzy/version-normalized matching). New tests in
+`t/90-changes-summary.t`: the miss case now asserts a diagnostic
+naming both values fires; a new happy-path case confirms a real match
+still prints nothing to STDERR.

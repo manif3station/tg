@@ -185,11 +185,17 @@ container and on this host's own real installed poller) that the
 mechanism works correctly via a real `d2 tg.poller` dispatch when
 `.env`'s `VERSION` and the `Changes` header are in sync; not
 reproducible against the current codebase for the original report's
-own specific incident (many versions behind). `changes_summary` does
-silently omit with no diagnostic on ANY version-string mismatch
-(including a trivial format difference), a known fragility - not
-independently confirmed as the original incident's actual cause,
-filed separately as **TGT-190** to add a diagnostic on that miss.
+own specific incident (many versions behind). `changes_summary` used
+to silently omit with no diagnostic on ANY version-string mismatch
+(including a trivial format difference) - not independently confirmed
+as the original TGT-187 incident's actual cause, but a real, separate
+fragility, fixed as **TGT-190**: a version-match miss now prints a
+non-fatal STDERR diagnostic naming both the requested version and the
+`Changes` file's own actual top header line, before returning `undef`
+unchanged (the return value itself is not affected). A genuinely
+missing/unreadable `Changes` file still returns `undef` silently, with
+no diagnostic - only a version-string mismatch against a file that
+opened successfully is covered.
 
 Events printed:
 

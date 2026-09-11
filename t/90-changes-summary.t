@@ -138,6 +138,60 @@ CHANGES
     );
 }
 
+# TGT-190 (filed from TGT-187's own investigation): a version-match
+# miss silently returned undef with zero diagnostic - a genuine future
+# .env/Changes drift (not just the already-investigated TGT-187
+# incident) would leave the restart notice's missing summary
+# unexplained in the log. Now logs a distinguishable STDERR diagnostic
+# naming both the requested version and what was actually found as the
+# Changes file's own first header line - the happy path (a real match)
+# stays completely silent, unchanged.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+0.05  2026-09-07
+      - Only entry in this file.
+CHANGES
+
+    my $stderr = '';
+    open my $stderr_fh, '>', \$stderr or die $!;
+    local *STDERR = $stderr_fh;
+
+    my $result = D2TG::Config::changes_summary( version => '9.99', default_root => $skill_root );
+
+    close $stderr_fh;
+
+    is( $result, undef, 'changes_summary still returns undef on a version-match miss - unchanged behavior' );
+    like(
+        $stderr,
+        qr/\bD2TG::Config::changes_summary\b.*\b9\.99\b.*\b0\.05\b/s,
+        'a version-match miss logs a STDERR diagnostic naming both the requested version (9.99) and what was actually found (0.05)'
+    );
+}
+
+# The happy path (a real match) must NOT print anything to STDERR -
+# the diagnostic above is only for the miss case.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+0.11  2026-09-08
+      - Matches fine (TGT-011).
+CHANGES
+
+    my $stderr = '';
+    open my $stderr_fh, '>', \$stderr or die $!;
+    my $result = do {
+        local *STDERR = $stderr_fh;
+        D2TG::Config::changes_summary( version => '0.11', default_root => $skill_root );
+    };
+    close $stderr_fh;
+
+    is( $result, 'Matches fine (TGT-011).', 'changes_summary still returns the summary correctly on a real match' );
+    is( $stderr, '', 'no diagnostic is printed on the happy path - the miss-only diagnostic does not fire here' );
+}
+
 # TGT-187 (investigating a live user report that this feature's own
 # restart notice wasn't appearing in a real installed/dispatched
 # poller): every scenario above only ever exercises the default_root

@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.52).** INVESTIGATE (TGT-187): a
+**Status: early implementation (v1.53).** RELIABILITY FIX (TGT-190,
+filed from TGT-187's own investigation): `D2TG::Config::changes_summary`
+silently returned `undef` with zero diagnostic on ANY version-string
+mismatch against an otherwise-readable `Changes` file. Now prints a
+non-fatal STDERR diagnostic naming both the requested version and the
+file's own actual top header line before returning `undef` unchanged
+- matching this project's established non-fatal-degradation pattern
+(`skill_version_check_safe`/`persist_offset_safe`). A genuinely
+missing/unreadable `Changes` file still returns `undef` silently, with
+no diagnostic - only a version-string mismatch against a file that
+opened successfully is covered.
+INVESTIGATE (TGT-187): a
 live user report (budget project) observed a version-bump restart
 notice missing TGT-112's own Changes-line summary. Traced
 `Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/

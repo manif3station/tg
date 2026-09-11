@@ -101,8 +101,21 @@ sub changes_summary {
     # "(?=\n\S|\z)" would truncate the entry early if it ever contained
     # an unindented continuation/prose line, potentially missing a real
     # bullet further down.
-    return undef
-      unless $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=^\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2}[ \t]*$|\z)/ms;
+    # TGT-190 (found while investigating TGT-187): a version-match miss
+    # here used to return undef with zero diagnostic anywhere - a
+    # genuine future .env/Changes drift (a manual edit, a version-bump
+    # script bug, a merge that updates one but not the other) would
+    # silently degrade the version-change restart notice with nothing
+    # in the log to say why. Non-fatal STDERR diagnostic only - the
+    # return value (undef) is unchanged, matching this project's
+    # established non-fatal-degradation pattern (e.g.
+    # skill_version_check_safe/persist_offset_safe).
+    unless ( $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=^\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2}[ \t]*$|\z)/ms ) {
+        my ($actual_header) = $changes =~ /^(\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2})[ \t]*$/m;
+        $actual_header //= 'no version header found at all';
+        print STDERR "D2TG::Config::changes_summary: no Changes entry found for version '$version' (Changes file's own top header: $actual_header)\n";
+        return undef;
+    }
     my $block = $1;
 
     my ($first_bullet_line) = $block =~ /^\s*-\s*(.+?)\s*$/m;
@@ -812,6 +825,19 @@ old/new version numbers but not what actually changed). A multi-line
 bullet is truncated to its first physical line only - a short summary,
 not a full reflow. C<cli/poller.pl>'s version-change restart notice
 uses this to make itself self-describing without a separate lookup.
+
+TGT-190 (found while investigating TGT-187, a live user report of
+this notice going missing): when C<$version> has no matching entry in
+an otherwise-readable C<Changes> file, this now also prints a
+non-fatal C<STDERR> diagnostic naming both the requested version and
+the file's own actual top header line, before returning C<undef> -
+matching this project's established non-fatal-degradation pattern
+(e.g. L<D2TG::Poller/skill_version_check_safe>/
+L<D2TG::Poller/persist_offset_safe>).
+The return value is unchanged; a genuinely missing/unreadable
+C<Changes> file still returns C<undef> silently, with no diagnostic -
+this only covers a version-string mismatch against a file that opened
+successfully.
 
 =head2 resolve_self_exec_path(bin_dir => $dir, basename => $name, fallback => $path)
 
