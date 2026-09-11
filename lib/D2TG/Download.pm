@@ -89,12 +89,27 @@ sub _atomic_write {
 sub retry_failed_download {
     my ( $telegram, $store, $row, $dir, %args ) = @_;
 
-    my $local_path = eval { download_file( $telegram, $row->{file_id}, dir => $dir, ua => $args{ua} ) };
+    # TGT-196 (Michael's own design choice, Q-013, closing a Codex
+    # documentation-stage review finding on TGT-194's own fix): a
+    # persistently-failing record_message used to re-download the same
+    # already-fetched file on every retry pass, forever, with no escape
+    # hatch. A row whose own local_path is already set (persisted by a
+    # PRIOR retry that downloaded successfully but then failed on
+    # record_message - see below) means the download half is already
+    # done; skip it entirely and go straight to retrying only the
+    # record_message write against that already-downloaded file.
+    my $local_path;
+    if ( defined $row->{local_path} ) {
+        $local_path = $row->{local_path};
+    }
+    else {
+        $local_path = eval { download_file( $telegram, $row->{file_id}, dir => $dir, ua => $args{ua} ) };
 
-    if ($@) {
-        my $error = $@;
-        $error =~ s/\n\z//;
-        return ( 0, $error );
+        if ($@) {
+            my $error = $@;
+            $error =~ s/\n\z//;
+            return ( 0, $error );
+        }
     }
 
     # TGT-104, Codex review finding: a retry success used to only
@@ -162,8 +177,18 @@ sub retry_failed_download {
         }
     }
     else {
+        # TGT-196: persist the already-downloaded path on the row (a
+        # no-op if a prior retry already did this for the same row) so
+        # the NEXT retry attempt sees it via $row->{local_path} above
+        # and skips download_file entirely - only the still-failing
+        # record_message write is retried, not the whole download.
+        eval { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) };
+        if ($@) {
+            my $reason = D2TG::Poller::_classify_store_error($@);
+            print STDERR "STORE ERROR [$row->{chat_id}]: mark_failed_download_downloaded failed - $reason\n";
+        }
         print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
-          . "a future retry can still restore history for this message\n";
+          . "a future retry can still restore history for this message, without re-downloading\n";
     }
 
     return ( 1, $local_path );
@@ -317,17 +342,16 @@ removing the queue row unconditionally on a C<record_message> failure
 would leave a message with neither a queue row nor a history record,
 worse than the pre-fix crash (which at least left the row queued).
 
-B<Known limitation> (a Codex documentation-stage review finding,
-tracked as TGT-196, not yet fixed): a queue row retained this way has
-no bounded-retry or dead-letter escape hatch - if C<record_message>
-fails for a persistent, non-transient reason (a schema mismatch, a
-permissions problem), the row retries forever, re-downloading the
-already-successfully-fetched file on every pass and reporting apparent
-success each time, with no signal distinguishing "still retrying
-normally" from "stuck, needs manual attention." Not a regression from
-this fix - the pre-fix crash-on-failure behavior had the same absence
-of an escape hatch, it simply failed loudly every time instead of
-silently.
+TGT-196 (Michael's own design choice, Q-013, answering the Codex
+documentation-stage review finding above that first flagged this as a
+known limitation): a C<record_message> failure now persists the
+already-downloaded C<local_path> on the row via
+L<D2TG::Store/mark_failed_download_downloaded>, instead of leaving the
+row in its ordinary not-yet-downloaded state. A future retry checks
+C<$row-E<gt>{local_path}> first - if set, C<download_file> is skipped
+entirely and only the still-failing C<record_message> write is
+retried, so a persistently-failing C<record_message> no longer
+re-downloads the same file from Telegram on every pass.
 
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 

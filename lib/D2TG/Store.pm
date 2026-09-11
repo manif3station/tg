@@ -122,6 +122,22 @@ sub _ensure_schema {
          )'
     );
 
+    # TGT-196 (Michael's own design choice, Q-013, answering a Codex
+    # documentation-stage review finding on TGT-194): a persistently-
+    # failing record_message used to re-download the same already-
+    # fetched file on every retry pass, wasting bandwidth and Telegram
+    # API calls forever with no escape hatch. NULL here means "not yet
+    # downloaded" (today's ordinary queued state); once download_file
+    # succeeds but the bookkeeping record_message write then fails,
+    # retry_failed_download persists the path here - a future retry
+    # sees it, skips download_file entirely, and retries only the
+    # record_message write against the already-downloaded file.
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE failed_downloads ADD COLUMN local_path TEXT') };
+    }
+    die $@ if $@ && $@ !~ /duplicate column name/;
+
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
     # send_voice failure after that point can leave a reply text-only,
@@ -464,7 +480,7 @@ sub failed_downloads {
     my ($self) = @_;
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, message_id, file_id, sender, media_kind, caption_note, error, created_at
+        'SELECT id, chat_id, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
          FROM failed_downloads ORDER BY id',
         { Slice => {} }
     );
@@ -474,6 +490,20 @@ sub remove_failed_download {
     my ( $self, $id ) = @_;
 
     $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
+
+    return;
+}
+
+# TGT-196: persists a queued row's own successfully-downloaded local
+# path once download_file has already succeeded, so a future retry
+# (D2TG::Download::retry_failed_download) can see it via failed_downloads
+# and skip download_file entirely - retrying only the record_message
+# write that's actually still failing, instead of re-fetching the same
+# file from Telegram on every pass.
+sub mark_failed_download_downloaded {
+    my ( $self, $id, $local_path ) = @_;
+
+    $self->{dbh}->do( 'UPDATE failed_downloads SET local_path = ? WHERE id = ?', undef, $local_path, $id );
 
     return;
 }
