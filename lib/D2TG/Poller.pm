@@ -4,8 +4,40 @@ use strict;
 use warnings;
 use POSIX qw(strftime);
 use D2TG::Config;
+use D2TG::Store;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
+
+# TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live
+# against cli/history.pl): 7 cli/*.pl scripts (attachment, text-only-
+# replies, approve, retry-download, history, reply, unread) each
+# construct D2TG::Store->new unwrapped, sharing the identical raw-crash/
+# db-path-leak risk TGT-183 already fixed for cli/poller.pl's own call.
+# All 7 (plus poller.pl's own pre-TGT-183 shape) built the exact same
+# db_path/admin_chat_id args, so this is a shared helper rather than 7
+# separate eval-wraps, matching this project's own TGT-167/170/171/172/
+# 177 precedent for exactly this class of duplication. Returns the open
+# store on success; on failure, prints the identical scrubbed refusal
+# TGT-183 established and exits 1 - never returns in that case.
+sub open_store_or_die {
+    my (%args) = @_;
+
+    my $store = eval {
+        D2TG::Store->new(
+            db_path => D2TG::Config::state_db_path(
+                default_root => $args{skill_root},
+                base_dir     => $args{base_dir},
+            ),
+            admin_chat_id => $args{admin_chat_id},
+        );
+    };
+    if ($@) {
+        my $reason = _classify_store_error($@);
+        print STDERR "Failed to open local storage ($reason) - refusing to start.\n";
+        exit 1;
+    }
+    return $store;
+}
 
 sub run_once_safe {
     my ( $telegram, $offset, $store, %opts ) = @_;

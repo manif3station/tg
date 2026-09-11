@@ -7,6 +7,7 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Poller;
 use D2TG::Telegram;
 use D2TG::Reply;
 use D2TG::Store;
@@ -74,11 +75,16 @@ if ( !defined $chat_id
 
 my $telegram = D2TG::Telegram->new( token => $bot_token // D2TG::Config::token() );
 
-my $store = D2TG::Store->new(
-    db_path => D2TG::Config::state_db_path(
-        default_root => File::Spec->catdir( $Bin, '..' ),
-        base_dir      => $base_dir,
-    ),
+# TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
+# this call was unwrapped, the same raw-crash/db-path-leak risk TGT-183
+# already fixed for cli/poller.pl's own identical call. Now goes through
+# the shared D2TG::Poller::open_store_or_die helper (TGT-186) - prints a
+# clean, scrubbed refusal and exits 1 on a storage-open failure instead
+# of letting the raw Perl/DBI exception (which can embed the real db
+# path) propagate.
+my $store = D2TG::Poller::open_store_or_die(
+    skill_root    => File::Spec->catdir( $Bin, '..' ),
+    base_dir      => $base_dir,
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
