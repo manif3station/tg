@@ -126,27 +126,12 @@ sub run_once {
             # same failure class TGT-132 already fixed once for
             # record_message. Skip this update non-fatally on error.
             if ($store) {
-                my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
-                if ($@) {
-                    # TGT-193 (found via a scheduled JOB-004 improvement
-                    # hunt): this call site predates _classify_store_error
-                    # (TGT-165, before TGT-167 extracted the shared
-                    # helper) and was never revisited - it echoed the raw
-                    # exception text verbatim, unlike every other
-                    # D2TG::Store error path in this module (is_allowed
-                    # is a read, not a write, but is still classified the
-                    # same way) - see _record_message_safe/
-                    # persist_offset_safe above. D2TG::Reply's own
-                    # _store_write_safe (TGT-192) has the equivalent
-                    # pattern in a separate module; D2TG::Download's
-                    # retry_failed_download has the identical gap this
-                    # fix closes here, tracked separately as TGT-194,
-                    # not yet fixed. A raw DBI/SQLite error can embed
-                    # the database file's own real path.
-                    my $reason = _classify_store_error($@);
-                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
-                    next;
-                }
+                # TGT-198: promoted to the shared store_write_safe
+                # helper - see its own comment for why is_allowed/
+                # add_pending need the (\$ok, \$value) return shape.
+                my ( $ok, $allowed ) =
+                  store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+                next unless $ok;
                 next unless $allowed;
             }
 
@@ -224,27 +209,12 @@ sub run_once {
             my $chat_id = $edited->{chat}{id};
 
             if ($store) {
-                my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
-                if ($@) {
-                    # TGT-193 (found via a scheduled JOB-004 improvement
-                    # hunt): this call site predates _classify_store_error
-                    # (TGT-165, before TGT-167 extracted the shared
-                    # helper) and was never revisited - it echoed the raw
-                    # exception text verbatim, unlike every other
-                    # D2TG::Store error path in this module (is_allowed
-                    # is a read, not a write, but is still classified the
-                    # same way) - see _record_message_safe/
-                    # persist_offset_safe above. D2TG::Reply's own
-                    # _store_write_safe (TGT-192) has the equivalent
-                    # pattern in a separate module; D2TG::Download's
-                    # retry_failed_download has the identical gap this
-                    # fix closes here, tracked separately as TGT-194,
-                    # not yet fixed. A raw DBI/SQLite error can embed
-                    # the database file's own real path.
-                    my $reason = _classify_store_error($@);
-                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
-                    next;
-                }
+                # TGT-198: promoted to the shared store_write_safe
+                # helper - see its own comment for why is_allowed/
+                # add_pending need the (\$ok, \$value) return shape.
+                my ( $ok, $allowed ) =
+                  store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+                next unless $ok;
                 next unless $allowed;
             }
 
@@ -320,23 +290,17 @@ sub run_once {
             # redelivered and reprinted next cycle - the same failure
             # class TGT-132 already fixed once for record_message. Skip
             # this update non-fatally on either call's error.
-            my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
-            if ($@) {
-                # TGT-193: see the same fix's comment on the
-                # message_reaction/edited_message branches above.
-                my $reason = _classify_store_error($@);
-                print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
-                next;
-            }
+            # TGT-198: promoted to the shared store_write_safe helper -
+            # see its own comment for why is_allowed/add_pending need
+            # the (\$ok, \$value) return shape.
+            my ( $ok, $allowed ) =
+              store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+            next unless $ok;
 
             unless ($allowed) {
-                my $added = eval { $store->add_pending( $chat_id, $bot_token ) };
-                if ($@) {
-                    # TGT-193: same fix as is_allowed above.
-                    my $reason = _classify_store_error($@);
-                    print STDERR "STORE ERROR [$chat_id]: add_pending failed - $reason\n";
-                    next;
-                }
+                my ( $add_ok, $added ) =
+                  store_write_safe( $chat_id, 'add_pending', sub { $store->add_pending( $chat_id, $bot_token ) } );
+                next unless $add_ok;
                 if ($added) {
                     print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
                 }
@@ -563,6 +527,44 @@ sub _classify_store_error {
       : $error =~ /database.*busy/i     ? 'database is busy'
       : $error =~ /readonly/i           ? 'database is readonly'
       :                                    'an unexpected error';
+}
+
+# TGT-198 (found via a scheduled JOB-004 improvement hunt): the
+# eval + _classify_store_error + print STDERR "STORE ERROR [chat_id]:
+# DESC failed - REASON" pattern was hand-duplicated across 7 call
+# sites (is_allowed x3 and add_pending here, plus record_message/
+# remove_failed_download/mark_failed_download_downloaded in
+# D2TG::Download.pm) - this is the promoted, public version of
+# D2TG::Reply's own private _store_write_safe (TGT-192), which stays
+# where it is since its own call sites never need the coderef's return
+# value (see D2TG::Reply.pm's own comment for why it wasn't migrated
+# to this instead).
+#
+# Unlike D2TG::Reply's fire-and-forget version, some callers here
+# (is_allowed, add_pending) need the coderef's own return value - and
+# that value can legitimately be false (0) on success, so a bare
+# undef-on-failure return can't distinguish "the write failed" from
+# "the write succeeded and returned a false value". Returns a
+# two-element (\$ok, \$value) list instead (matching this codebase's
+# own (1, $result)/(0, $error) convention, e.g.
+# D2TG::Download::retry_failed_download) - \$ok is true only when the
+# coderef ran without dying; \$value is its own return value (or undef
+# on failure, after the error has already been classified and
+# printed). Two record_message/set_offset call sites
+# (_record_message_safe, persist_offset_safe) were deliberately left
+# unmigrated - see this ticket's own card comment: their printed
+# message text and 0/1 return-boolean contract differ from this
+# helper's own, and forcing them through it would either change
+# observable output or complicate the contract for two outliers.
+sub store_write_safe {
+    my ( $chat_id, $description, $code ) = @_;
+    my $value = eval { $code->() };
+    if ($@) {
+        my $reason = _classify_store_error($@);
+        print STDERR "STORE ERROR [$chat_id]: $description failed - $reason\n";
+        return ( 0, undef );
+    }
+    return ( 1, $value );
 }
 
 sub persist_offset_safe {

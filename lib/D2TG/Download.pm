@@ -155,26 +155,24 @@ sub retry_failed_download {
     # 'video') or undef, never ''. No other code path ever writes this
     # column, so an empty-string media_kind is unreachable through this
     # codebase's own actual data flow, not merely untested.
+    # TGT-198: all 3 of this function's own eval/classify/print
+    # blocks are promoted to the shared D2TG::Poller::store_write_safe
+    # helper - none of these call sites need the coderef's own return
+    # value, so only the \$ok half of the (\$ok, \$value) pair is used.
     my $record_ok = 1;
     if ( defined $row->{media_kind} ) {
         # TGT-133: the summary text (shown verbatim by cli/history.pl and
         # cli/unread.pl) must never contain the real local path - only
         # local_path (a separate, narrow-accessor-only column) does.
         my $summary = "$row->{media_kind}" . ( $row->{caption_note} // '' );
-        eval { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path ) };
-        if ($@) {
-            $record_ok = 0;
-            my $reason = D2TG::Poller::_classify_store_error($@);
-            print STDERR "STORE ERROR [$row->{chat_id}]: record_message failed - $reason\n";
-        }
+        ($record_ok) = D2TG::Poller::store_write_safe(
+            $row->{chat_id}, 'record_message',
+            sub { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path ) }
+        );
     }
 
     if ($record_ok) {
-        eval { $store->remove_failed_download( $row->{id} ) };
-        if ($@) {
-            my $reason = D2TG::Poller::_classify_store_error($@);
-            print STDERR "STORE ERROR [$row->{chat_id}]: remove_failed_download failed - $reason\n";
-        }
+        D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
     }
     else {
         # TGT-196: persist the already-downloaded path on the row (a
@@ -182,11 +180,7 @@ sub retry_failed_download {
         # the NEXT retry attempt sees it via $row->{local_path} above
         # and skips download_file entirely - only the still-failing
         # record_message write is retried, not the whole download.
-        eval { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) };
-        if ($@) {
-            my $reason = D2TG::Poller::_classify_store_error($@);
-            print STDERR "STORE ERROR [$row->{chat_id}]: mark_failed_download_downloaded failed - $reason\n";
-        }
+        D2TG::Poller::store_write_safe( $row->{chat_id}, 'mark_failed_download_downloaded', sub { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) } );
         print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
           . "a future retry can still restore history for this message, without re-downloading\n";
     }

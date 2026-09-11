@@ -21,8 +21,16 @@ use File::Spec;
 my $poller_path   = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller.pm' );
 my $download_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Download.pm' );
 
-my $poller_src   = _slurp($poller_path);
-my $download_src = _slurp($download_path);
+my $poller_src   = _code_only( _slurp($poller_path) );
+my $download_src = _code_only( _slurp($download_path) );
+
+# The scan for remaining inline duplicates below must not flag
+# store_write_safe's own canonical definition (which legitimately
+# contains exactly this eval/classify/print shape) as itself a
+# leftover duplicate - excise it before scanning, matching from its
+# own "sub store_write_safe {" line up to the next top-level "sub ".
+( my $poller_src_excluding_helper = $poller_src ) =~
+  s/^sub store_write_safe \{.*?(?=^sub )//ms;
 
 # The shared, PUBLIC helper must exist in D2TG::Poller.pm (the module
 # every other caller already imports _classify_store_error from).
@@ -48,9 +56,9 @@ my $inline_block_re = qr/
 /msx;
 
 unlike(
-    $poller_src,
+    $poller_src_excluding_helper,
     $inline_block_re,
-    'D2TG::Poller.pm has zero remaining inline eval/classify/"STORE ERROR" blocks'
+    'D2TG::Poller.pm has zero remaining inline eval/classify/"STORE ERROR" blocks (outside store_write_safe itself)'
 );
 
 unlike(
@@ -80,4 +88,17 @@ sub _slurp {
     open my $fh, '<', $path or die "can't open $path: $!";
     local $/;
     return <$fh>;
+}
+
+# Strips POD blocks and whole-line comments so the structural regex
+# below only ever sees real code - without this, prose in a comment or
+# POD block mentioning "eval", "_classify_store_error($@)" and
+# "print STDERR ... STORE ERROR" close together (exactly the kind of
+# prose this ticket's own commit messages/POD legitimately contain)
+# would false-positive as a still-duplicated inline block.
+sub _code_only {
+    my ($src) = @_;
+    $src =~ s/^=\w+.*?^=cut\s*$//msg;
+    my @lines = grep { !/^\s*#/ } split /\n/, $src;
+    return join( "\n", @lines );
 }
