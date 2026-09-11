@@ -2208,3 +2208,46 @@ literally any point after `run_once_safe` returns is equally safe:
 the offset that ever reaches `getUpdates` is always exactly the one
 already safely on disk, whether the process keeps running, crashes,
 or is restarted.
+
+**TGT-192**, shipped in 1.55, found via a scheduled JOB-003 hourly
+bug hunt while checking whether TGT-191's own "external system
+confirmed before durable local state" pattern exists elsewhere - the
+outbound-reply analogue. `D2TG::Reply::send_reply`/`resend_voice`'s
+own `record_sent_text`/`record_sent_voice`/`mark_read` calls were the
+one `D2TG::Store` write call site in this codebase never wrapped in
+`eval` - every sibling (`record_message` via `_record_message_safe`
+TGT-132, `set_offset` via `persist_offset_safe` TGT-166/191,
+`is_allowed`/`add_pending` TGT-165, `record_failed_download`'s own
+`eval` TGT-104) already classifies a failure via
+`D2TG::Poller::_classify_store_error` rather than letting the raw
+exception (which can embed the real `db_path`) propagate.
+`record_sent_text` runs against a `RaiseError=>1` handle, so a
+locked/busy database there died raw AFTER `send_message` had already
+succeeded - aborting the rest of `send_reply` entirely (skipping
+voice synthesis, which runs unconditionally afterward) and reporting
+a hard failure to the caller that could even suggest retrying (for a
+DBI error text matching `is_transient_error`), risking a duplicate
+text delivery since TGT-114's own dedup check depends on the very row
+that failed to write.
+
+All 5 call sites (`send_reply`'s `record_sent_text`/
+`record_sent_voice`/`mark_read`, `resend_voice`'s own `mark_read`/
+`record_sent_voice`) now go through a shared `_store_write_safe`
+helper - `eval`-wrapped, classified, logged non-fatally to STDERR as
+`STORE ERROR [chat_id]: ... failed - REASON`. Since the die no longer
+aborts the sub, voice synthesis/send naturally still runs afterward,
+and `send_reply` returns normally (never reported as a hard failure)
+whenever `send_message` itself succeeded - both acceptance criteria
+fall out of the same fix, without needing separate logic for either.
+
+New test `t/192-store-write-failures-non-fatal.t` (13 assertions):
+each of the 3 failure modes is non-fatal and classified (never the
+raw exception, matching TGT-133's own scrubbing precedent), voice is
+genuinely still sent after a `record_sent_text` failure (checked via
+the fake Telegram double's own `call_order`), and the fully-
+successful path is completely unaffected (no STDERR output, all 3
+store calls made exactly once). Confirmed genuinely red against the
+pre-fix code - the whole test script crashed with an uncaught die
+(no TAP plan produced at all) rather than merely failing an
+assertion, since the raw exception propagated straight out of
+`send_reply` with nothing to catch it.

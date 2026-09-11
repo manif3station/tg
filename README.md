@@ -1,6 +1,22 @@
 # tg
 
-**Status: early implementation (v1.54).** RELIABILITY FIX (TGT-191,
+**Status: early implementation (v1.55).** RELIABILITY FIX (TGT-192,
+found via a scheduled JOB-003 hourly bug hunt, the same class of
+issue TGT-191 just fixed): `D2TG::Reply::send_reply`/`resend_voice`'s
+own `record_sent_text`/`record_sent_voice`/`mark_read` calls were the
+one `D2TG::Store` write call site in this codebase never wrapped in
+`eval`. `record_sent_text` runs against a `RaiseError=>1` handle, so a
+locked/busy database died raw AFTER `send_message` had already
+succeeded - aborting the rest of `send_reply` entirely (skipping voice
+synthesis, which runs unconditionally afterward) and reporting a hard
+failure that could even suggest retrying, risking a duplicate text
+delivery. All 5 call sites now go through a shared `_store_write_safe`
+helper - `eval`-wrapped, classified via
+`D2TG::Poller::_classify_store_error`, logged non-fatally. Voice
+synthesis/send naturally still runs afterward (the die no longer
+aborts the sub), and `send_reply` returns normally whenever
+`send_message` itself succeeded.
+RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its
 in-memory poll offset unconditionally after each cycle, regardless of

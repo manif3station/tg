@@ -1,5 +1,29 @@
 Revision history for the tg skill
 
+1.55  2026-09-11
+      - RELIABILITY FIX (TGT-192, found via a scheduled JOB-003 hourly
+        bug hunt, the same class of issue TGT-191 just fixed):
+        D2TG::Reply::send_reply/resend_voice's own record_sent_text/
+        record_sent_voice/mark_read calls were the one D2TG::Store
+        write call site in this codebase never wrapped in eval - every
+        sibling already classifies a failure via
+        D2TG::Poller::_classify_store_error rather than letting the
+        raw exception (which can embed the real db_path) propagate.
+        record_sent_text runs against a RaiseError=>1 handle, so a
+        locked/busy database died raw AFTER send_message had already
+        succeeded - aborting the rest of send_reply entirely (skipping
+        voice synthesis, which runs unconditionally afterward) and
+        reporting a hard failure that could even suggest retrying,
+        risking a duplicate text delivery. All 5 call sites now go
+        through a shared _store_write_safe helper - eval-wrapped,
+        classified, logged non-fatally. Since the die no longer aborts
+        the sub, voice synthesis/send naturally still runs afterward,
+        and send_reply returns normally (never a hard failure) when
+        send_message itself succeeded. New test
+        t/192-store-write-failures-non-fatal.t (13 assertions),
+        confirmed genuinely red against the pre-fix code (the whole
+        test script crashed with an uncaught die).
+
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the
         budget project: 2 real Telegram messages permanently lost):
