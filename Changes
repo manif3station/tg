@@ -1,5 +1,29 @@
 Revision history for the tg skill
 
+1.54  2026-09-11
+      - RELIABILITY FIX (TGT-191, live production incident via the
+        budget project: 2 real Telegram messages permanently lost):
+        cli/poller.pl's main loop advanced its in-memory poll offset
+        unconditionally after each cycle, regardless of whether
+        D2TG::Poller::persist_offset_safe actually durably saved it.
+        Telegram's own getUpdates offset parameter is a confirmation
+        mechanism, not just a cursor - it forgets/never redelivers an
+        update once a LATER offset is sent. A still-running process
+        would use the advanced-but-unpersisted offset on its own next
+        getUpdates call, confirming that batch to Telegram; a crash
+        for any reason before a later persist caught up then lost that
+        batch forever - structurally identical to the live incident.
+        persist_offset_safe now returns a true/false success flag
+        (previously always void); the main loop only advances the
+        in-memory offset on a true return, so a failed persist reuses
+        the same offset next cycle and Telegram redelivers the batch
+        instead of discarding it (deduplicated locally via
+        record_message's own upsert and run_once's own already-
+        recorded check, TGT-178). New test
+        t/191-offset-not-advanced-on-persist-failure.t simulates a
+        persist-fails-then-succeeds scenario, confirmed genuinely red
+        against the pre-fix unconditional-advance behavior.
+
 1.53  2026-09-11
       - RELIABILITY FIX (TGT-190, filed from TGT-187's own
         investigation): D2TG::Config::changes_summary silently

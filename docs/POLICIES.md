@@ -2156,3 +2156,55 @@ review finding: an earlier draft only checked for the version
 substring, which would still pass even if the diagnostic dropped the
 header's own date); a new happy-path case confirms a real match still
 prints nothing to STDERR.
+
+**TGT-191**, shipped in 1.54, live production incident (budget
+project): 2 real Telegram messages permanently lost. Root cause: a
+genuine offset-advance-vs-persist race. `cli/poller.pl`'s main loop
+advanced its in-memory poll offset unconditionally after each cycle,
+regardless of whether `D2TG::Poller::persist_offset_safe` actually
+durably saved it. Telegram's own `getUpdates` `offset` parameter is a
+confirmation mechanism, not just a cursor - an update is considered
+confirmed, and Telegram may forget/never redeliver it, as soon as
+`getUpdates` is called with an offset higher than that update's own
+id. A still-running process would use the advanced-but-unpersisted
+offset on its own NEXT `getUpdates` call, confirming that batch to
+Telegram even though it was never durably saved locally; if the
+process then crashed for any reason before a later persist caught up,
+the gap between the stale on-disk offset and the already-confirmed
+one was gone forever - structurally identical to what the live
+incident describes, and distinct from TGT-176/TGT-178 (which fixed
+offset-capping on a `record_message` WRITE failure caught inside
+`run_once`'s own `eval` - not a process-level crash/restart).
+
+`persist_offset_safe` now returns a true/false success flag
+(previously always void - see its own updated POD and the
+`docs/commands.md` `D2TG::Poller` row above). `cli/poller.pl`'s main
+loop only advances the in-memory offset when this returns true; on a
+failed persist, the offset stays at the last durably-persisted value,
+so the next `getUpdates` call (in the same still-running process, or
+after a restart reading the same stale on-disk value) reuses the
+SAME, still-unconfirmed-to-Telegram offset - Telegram redelivers the
+batch instead of discarding it, deduplicated locally via
+`record_message`'s own `PRIMARY KEY` upsert and `run_once`'s own
+already-recorded check (TGT-178).
+
+New test `t/191-offset-not-advanced-on-persist-failure.t` simulates 2
+poll cycles (persist fails, then succeeds) with a fake Telegram/store
+pair, proving: the in-memory offset is not advanced after the failed
+cycle; both `getUpdates` calls use the identical offset (the batch
+cycle 1 fetched but never durably confirmed is re-requested, not a
+batch further ahead); and the offset only advances once persist
+actually succeeds. Confirmed genuinely red against the pre-fix
+unconditional-advance behavior (temporarily reverting
+`persist_offset_safe`'s return-value change) before being fixed.
+`t/128-poller-persist-offset-safe.t` extended with the new return-
+value contract (success, failure, and undef-input-is-success, since
+"nothing to persist" is not itself a failure).
+
+This is structurally a stronger guarantee than "detect and recover
+from a process crash" - since the in-memory offset is never advanced
+without a confirmed durable write in the first place, a real crash at
+literally any point after `run_once_safe` returns is equally safe:
+the offset that ever reaches `getUpdates` is always exactly the one
+already safely on disk, whether the process keeps running, crashes,
+or is restarted.
