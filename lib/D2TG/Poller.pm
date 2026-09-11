@@ -539,7 +539,22 @@ sub _classify_store_error {
 sub persist_offset_safe {
     my ( $store, $offset, $bot_key ) = @_;
 
-    return unless defined $offset;
+    # TGT-191 (live production incident, reported via the budget
+    # project: 2 real messages permanently lost): this now returns a
+    # true/false success flag (previously void, always) - cli/poller.pl's
+    # main loop uses it to decide whether it is safe to advance the
+    # in-memory offset that will be sent to Telegram on the NEXT
+    # getUpdates call. Telegram forgets/never redelivers an update once
+    # a LATER offset has been sent to it - so advancing the in-memory
+    # offset unconditionally (the pre-TGT-191 behavior) let the next
+    # getUpdates call confirm receipt of a batch to Telegram even when
+    # that batch was never durably persisted locally; if the process
+    # then crashed (for any reason) before persist_offset_safe next
+    # succeeded, the gap between the stale on-disk offset and the
+    # already-confirmed-to-Telegram one was permanently unrecoverable.
+    # Undefined-offset (nothing to persist) is not a failure - returns
+    # true so the caller's own no-op guard still behaves as before.
+    return 1 unless defined $offset;
 
     # TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up
     # sweep after TGT-165 for the same unwrapped-DBI-call pattern):
@@ -551,10 +566,18 @@ sub persist_offset_safe {
     # process, not just one poll cycle's batch. The poll cycle itself
     # already completed successfully via run_once_safe by the time this
     # runs, so losing only this one offset persistence is the right
-    # degradation, matching _record_message_safe's own philosophy - not
-    # a retry of this specific failed value, but a later poll cycle
-    # attempting to persist its own (by then newer) offset again, per
-    # this function's own POD below.
+    # degradation, matching _record_message_safe's own philosophy.
+    #
+    # TGT-191 update: the comment here previously said a later poll
+    # cycle would persist its own "by then newer" offset instead of
+    # retrying this exact value - that was only true because the
+    # caller used to advance its in-memory offset unconditionally.
+    # Since TGT-191 makes the caller hold the in-memory offset back on
+    # a false return here, a later cycle now retries persisting THIS
+    # SAME offset (or an even earlier one), not a newer one - and the
+    # corresponding getUpdates call is correspondingly re-issued with
+    # the same, still-unconfirmed-to-Telegram offset, so nothing in
+    # that retried batch is lost even if persistence keeps failing.
     local $@;
     eval { $store->set_offset( $offset, $bot_key ) };
     if ($@) {
@@ -564,9 +587,10 @@ sub persist_offset_safe {
         # the database file's own path). Shared with _record_message_safe
         # above via _classify_store_error (TGT-167).
         my $reason = _classify_store_error($@);
-        print STDERR "set_offset failed ($reason) - this poll cycle's offset was not persisted; a later cycle will attempt to persist its own current offset again\n";
+        print STDERR "set_offset failed ($reason) - this poll cycle's offset was not persisted; the in-memory offset is not advanced, so a later cycle retries this same offset (TGT-191)\n";
+        return 0;
     }
-    return;
+    return 1;
 }
 
 # TGT-175 (live production incident, reported via the budget project):
@@ -1003,17 +1027,29 @@ C<is_allowed>/C<add_pending> calls (TGT-165, both inside
 C<run_once_safe>'s own C<eval>), the old direct call sat at the TOP
 LEVEL of the persistent poller script's main loop - so a locked/busy
 SQLite database used to crash the ENTIRE poller process outright, not
-just one poll cycle's batch. Does nothing (no call, no error) if
+just one poll cycle's batch. Returns a true/false success flag
+(TGT-191, changed from always-void): true and does nothing else if
 C<$offset> is undef, matching the caller's own pre-existing "if defined"
-guard. Otherwise C<eval>-wraps C<set_offset>; on error, classifies it
-into a short fixed reason rather than ever echoing the raw exception
-(TGT-133 precedent - a DBI/SQLite error can embed the database file's
-own path), logs it to STDERR, and returns - the poller keeps running,
-and a later poll cycle attempts to persist its own (by then newer)
-offset again; this does not retry the specific failed offset value -
-if the process exits before a later persist succeeds, the previously
-persisted offset remains on disk and updates since then may be
-redelivered after a restart. Extracted as a public function (rather than a private
+guard - nothing to persist is not a failure. Otherwise C<eval>-wraps
+C<set_offset>; on error, classifies it into a short fixed reason rather
+than ever echoing the raw exception (TGT-133 precedent - a DBI/SQLite
+error can embed the database file's own path), logs it to STDERR, and
+returns false; on success, returns true.
+
+C<cli/poller.pl>'s own main loop (TGT-191, a live production incident:
+2 real messages permanently lost) only advances its in-memory offset
+when this returns true - Telegram forgets/never redelivers an update
+once a LATER offset has been sent to it, so advancing the in-memory
+offset on a failed persist would let the next C<getUpdates> call
+confirm a batch to Telegram that was never durably saved locally; if
+the process then crashed before a later persist succeeded, that gap
+was permanently unrecoverable. With the offset held back instead, a
+later poll cycle retries persisting THIS SAME offset (not a newer
+one), and the corresponding C<getUpdates> call is re-issued with the
+same still-unconfirmed offset too, so Telegram redelivers the batch
+rather than discarding it - deduplicated locally via C<record_message>'s
+own upsert and C<run_once>'s own already-recorded check (TGT-178).
+Extracted as a public function (rather than a private
 C<_>-prefixed one like C<_record_message_safe> below) specifically so
 it is directly unit-testable from outside this module, since the
 caller (a persistent script requiring a live Telegram connection to

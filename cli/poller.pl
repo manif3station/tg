@@ -417,13 +417,26 @@ until ($shutting_down) {
     for my $pair (@pairs) {
         last if $shutting_down;
 
-        $pair->{offset} = D2TG::Poller::run_once_safe(
+        # TGT-191 (live production incident: 2 real messages
+        # permanently lost): $pair->{offset} used to be advanced
+        # unconditionally, regardless of whether persist_offset_safe
+        # actually succeeded - a still-running process would then use
+        # the advanced (but not yet durable) offset on its own NEXT
+        # getUpdates call, confirming that batch to Telegram (which
+        # never redelivers an update once a later offset is sent), so
+        # a crash before the next persist succeeded lost it forever.
+        # Only advance now when persist_offset_safe itself confirms
+        # the write actually landed - see its own POD for the full
+        # redelivery/dedup argument.
+        my $new_offset = D2TG::Poller::run_once_safe(
             $pair->{telegram}, $pair->{offset}, $store,
             transcribe_voice => $transcribe_voice,
             download_media   => $download_media,
             bot_token        => $pair->{bot_key},
         );
-        D2TG::Poller::persist_offset_safe( $store, $pair->{offset}, $pair->{bot_key} );
+        $pair->{offset} = $new_offset
+          if defined $new_offset
+          && D2TG::Poller::persist_offset_safe( $store, $new_offset, $pair->{bot_key} );
 
         # TGT-116 (Codex review finding): written after EACH pair, not
         # once after the whole for-loop - a single voice transcription
@@ -599,8 +612,12 @@ original one-line format verbatim), opens a L<D2TG::Store> (auto-
 seeding every declared chat id as allowed), resumes each pair's own
 persisted poll offset if any, and runs L<D2TG::Poller>'s long-poll loop
 for every pair in turn - gated by that shared store, saving each pair's
-own offset back after its own iteration - until C<SIGTERM> or C<SIGINT>
-is received. An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
+own offset back after its own iteration (TGT-191: only once
+L<D2TG::Poller/persist_offset_safe> confirms the save actually
+succeeded - never advancing the in-memory offset used for the next
+C<getUpdates> call on an unconfirmed write, since Telegram would then
+never redeliver a batch this skill failed to durably persist) - until
+C<SIGTERM> or C<SIGINT> is received. An allow-listed sender's voice message is downloaded (L<D2TG::Download>)
 and transcribed via a local Whisper install (L<D2TG::Transcribe>); the
 downloaded temp file is removed either way. A photo or document message
 is downloaded via L<D2TG::Download> and its local path printed (kept,

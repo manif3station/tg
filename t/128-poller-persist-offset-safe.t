@@ -53,14 +53,24 @@ package main;
     my $store = Fake::Store::DyingSetOffset->new( dies => 1 );
 
     my $err;
+    my $result;
     my $lived = eval {
-        $err = capture_stderr( sub { D2TG::Poller::persist_offset_safe( $store, 42, 'sometoken' ) } );
+        $err = capture_stderr( sub { $result = D2TG::Poller::persist_offset_safe( $store, 42, 'sometoken' ) } );
         1;
     };
 
     ok( $lived, 'persist_offset_safe does not propagate a set_offset death - the caller survives' );
     like( $err, qr/set_offset/, 'an error mentioning set_offset is logged to STDERR' );
     is_deeply( $store->{calls}, [ [ 42, 'sometoken' ] ], 'set_offset was still called with the correct arguments before it died' );
+
+    # TGT-191 (live production incident: 2 real messages permanently
+    # lost): persist_offset_safe used to be void always - the caller
+    # had no way to tell a failed persist from a successful one, so it
+    # advanced its own in-memory offset unconditionally, which could
+    # let a subsequent getUpdates call confirm an unpersisted batch to
+    # Telegram (never redelivered again) before a crash. Now returns a
+    # false value on failure so the caller can hold the offset back.
+    ok( !$result, 'persist_offset_safe returns a false value when set_offset fails (TGT-191)' );
 }
 
 {
@@ -68,10 +78,12 @@ package main;
     # called once, with the right arguments, nothing printed.
     my $store = Fake::Store::DyingSetOffset->new( dies => 0 );
 
-    my $err = capture_stderr( sub { D2TG::Poller::persist_offset_safe( $store, 99, 'othertoken' ) } );
+    my $result;
+    my $err = capture_stderr( sub { $result = D2TG::Poller::persist_offset_safe( $store, 99, 'othertoken' ) } );
 
     is( $err, '', 'nothing is printed to STDERR when set_offset succeeds' );
     is_deeply( $store->{calls}, [ [ 99, 'othertoken' ] ], 'set_offset is called exactly once with the correct arguments' );
+    ok( $result, 'persist_offset_safe returns a true value when set_offset succeeds (TGT-191)' );
 }
 
 {
@@ -79,9 +91,10 @@ package main;
     # guard: an undef offset must not call set_offset at all.
     my $store = Fake::Store::DyingSetOffset->new( dies => 0 );
 
-    D2TG::Poller::persist_offset_safe( $store, undef, 'sometoken' );
+    my $result = D2TG::Poller::persist_offset_safe( $store, undef, 'sometoken' );
 
     is_deeply( $store->{calls}, [], 'set_offset is never called when the offset is undef' );
+    ok( $result, 'an undef offset (nothing to persist) is reported as success, not failure (TGT-191)' );
 }
 
 done_testing();
