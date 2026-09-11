@@ -7,8 +7,10 @@ Revision history for the tg skill
         message branches; add_pending x1 - plain message branch) each
         printed the raw DBI/SQLite exception text verbatim to STDERR,
         instead of classifying it via the already-established shared
-        _classify_store_error helper - every other D2TG::Store-write
-        error path in this codebase already does this
+        _classify_store_error helper - every other D2TG::Store error
+        path in this codebase already does this (is_allowed is a read,
+        not a write, but is still a D2TG::Store call whose failure this
+        pattern classifies)
         (_record_message_safe TGT-132/133, persist_offset_safe
         TGT-166/191, D2TG::Reply's _store_write_safe TGT-192). These 4
         call sites predate _classify_store_error (TGT-165, before

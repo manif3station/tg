@@ -133,7 +133,9 @@ sub run_once {
                     # (TGT-165, before TGT-167 extracted the shared
                     # helper) and was never revisited - it echoed the raw
                     # exception text verbatim, unlike every other
-                    # D2TG::Store-write error path in this codebase
+                    # D2TG::Store error path in this codebase (is_allowed
+                    # is a read, not a write, but is still classified the
+                    # same way)
                     # (_record_message_safe, persist_offset_safe,
                     # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
                     # error can embed the database file's own real path.
@@ -225,7 +227,9 @@ sub run_once {
                     # (TGT-165, before TGT-167 extracted the shared
                     # helper) and was never revisited - it echoed the raw
                     # exception text verbatim, unlike every other
-                    # D2TG::Store-write error path in this codebase
+                    # D2TG::Store error path in this codebase (is_allowed
+                    # is a read, not a write, but is still classified the
+                    # same way)
                     # (_record_message_safe, persist_offset_safe,
                     # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
                     # error can embed the database file's own real path.
@@ -1399,8 +1403,9 @@ The 4 C<STORE ERROR> lines for C<is_allowed>/C<add_pending> failures
 the exception via C<_classify_store_error> instead of echoing the raw
 C<$@> text verbatim - these 4 call sites predated C<_classify_store_error>
 (TGT-165, before TGT-167 extracted the shared helper) and were never
-revisited to match the pattern every other C<D2TG::Store>-write error
-path in this module already uses (C<_record_message_safe>,
+revisited to match the pattern every other C<D2TG::Store> error path
+in this module already uses (C<is_allowed> is a read, not a write, but
+is still classified the same way) (C<_record_message_safe>,
 C<persist_offset_safe>). A raw DBI/SQLite exception can embed the
 database file's own real path - the same disclosure risk TGT-133
 established as this project's standard to avoid.

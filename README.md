@@ -5,8 +5,10 @@ found via a scheduled JOB-004 improvement hunt): `D2TG::Poller::run_once`'s
 4 STORE ERROR print blocks (`is_allowed` x3, `add_pending` x1) printed
 the raw DBI/SQLite exception text verbatim to STDERR, instead of
 classifying it via the already-established shared `_classify_store_error`
-helper - every other `D2TG::Store`-write error path in this codebase
-already does this. These 4 call sites predate `_classify_store_error`
+helper - every other `D2TG::Store` error path in this codebase already
+does this (`is_allowed` is a read, not a write, but is still a
+`D2TG::Store` call this classification pattern applies to). These 4
+call sites predate `_classify_store_error`
 (TGT-165, before TGT-167 extracted the shared helper) and were simply
 never revisited. A raw DBI/SQLite error can embed the database file's
 own real path - the same disclosure risk TGT-133 established as this
