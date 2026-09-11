@@ -129,6 +129,17 @@ sub retry_failed_download {
     # attempted (no media_kind); when it failed, the row stays queued
     # so a future retry can still restore history, and remove_failed_download
     # is deliberately not attempted at all this cycle.
+    # A Codex QA-stage review finding: this pre-existing (unchanged by
+    # TGT-194) `defined` guard - rather than a non-empty check - relies
+    # on media_kind never being an empty string, only a real kind or
+    # undef. Confirmed true: the only real caller populating this field
+    # is D2TG::Poller::run_once, via record_failed_download's own
+    # media_kind argument, which is always _media_kind($message)'s own
+    # return value - that function's own contract (see its POD) returns
+    # either a real non-empty kind string ('photo'/'document'/'voice'/
+    # 'video') or undef, never ''. No other code path ever writes this
+    # column, so an empty-string media_kind is unreachable through this
+    # codebase's own actual data flow, not merely untested.
     my $record_ok = 1;
     if ( defined $row->{media_kind} ) {
         # TGT-133: the summary text (shown verbatim by cli/history.pl and

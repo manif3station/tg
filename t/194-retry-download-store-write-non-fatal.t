@@ -173,6 +173,36 @@ package main;
         'remove_failed_download failure still logged non-fatally' );
 }
 
+{
+    # A Codex QA-stage review finding: the `defined $row->{media_kind}`
+    # guard (pre-existing, unchanged by this ticket) relies on
+    # media_kind never being an empty string - only a real kind or
+    # undef, per D2TG::Poller::_media_kind's own contract (the only
+    # real caller that ever populates this field). This block locks in
+    # that documented behavior for a defined-but-empty-string value:
+    # record_message IS still attempted (matching `defined`, not a
+    # non-empty check) - proving the current guard's actual behavior
+    # explicitly, even though this exact shape is unreachable through
+    # this codebase's own real data flow.
+    my $dir      = tempdir( CLEANUP => 1 );
+    my $telegram = Fake::DownloadTelegram->new( file_path => 'documents/file_4.pdf' );
+    my $response = HTTP::Response->new( 200, 'OK' );
+    $response->content('recovered file bytes');
+    my $ua    = Fake::UA->new( responses => [$response] );
+    my $store = Fake::Store::DyingRecordMessage->new;
+    my $row   = { id => 4, chat_id => 999, message_id => 58, file_id => 'AABBqueued4', sender => 'ada', media_kind => '', caption_note => '' };
+
+    my ( $err, $ok, $result ) = capture_stderr( sub {
+        return D2TG::Download::retry_failed_download( $telegram, $store, $row, $dir, ua => $ua );
+    } );
+
+    ok( $ok, 'retry_failed_download still reports success for an empty-string media_kind' );
+    ok( ( grep { $_->[0] eq 'record_message' } @{ $store->{calls} } ),
+        'record_message IS attempted for an empty-string media_kind - defined(), not non-empty, is the actual guard' );
+    is_deeply( [ grep { $_->[0] eq 'remove_failed_download' } @{ $store->{calls} } ], [],
+        'remove_failed_download still correctly skipped since record_message failed, same as the undef-media_kind case' );
+}
+
 # Per-row batch isolation: two consecutive calls on the ACTUAL SAME
 # store instance (matching cli/retry-download.pl's own for-loop
 # reusing one $store across every queued row) - the first row's
