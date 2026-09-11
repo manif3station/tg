@@ -20,10 +20,14 @@ Revision history for the tg skill
         exec()-restart-failure die. Rather than patching a fourth
         site individually, added a single END block right after
         D2TG::Lock::acquire that releases the lock on every
-        Perl-managed exit/uncaught die past that point (not SIGKILL
-        or a pre-handler-installation signal, which D2TG::Lock's own
-        staleness/eviction logic already covers) - a structural fix
-        for the whole bug class. Idempotent and PID-scoped, safe
+        Perl-managed exit/uncaught die past that point, including a
+        graceful SIGTERM/SIGINT shutdown - not SIGKILL (always
+        untrappable) or any other signal this script never traps
+        (SIGHUP, SIGQUIT), which bypass it unconditionally;
+        D2TG::Lock's own staleness/eviction logic recovers a lock left
+        behind that way on the next poller start, not automatically -
+        a structural fix for the whole bug class. Idempotent and
+        PID-scoped, safe
         alongside the existing explicit release() calls.
 
 1.49  2026-09-11

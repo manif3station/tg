@@ -2045,14 +2045,22 @@ idempotent and PID-scoped (only unlinks a lock file this exact
 process still owns), so it is safe to run alongside the existing
 explicit `release()` calls, and does not fire on a successful
 `exec()` (the process image is replaced, not exited - the same PID
-correctly keeps holding the same lock). It does NOT cover abrupt
-termination Perl itself can't trap - `SIGKILL` always bypasses `END`,
-and `SIGHUP`/`SIGQUIT` would too in the brief window before the
-`$SIG{TERM}`/`$SIG{INT}` handlers are installed further down (a third
-Codex QA-stage review round correctly rejected an earlier "any exit"
-overclaim on this point) - that gap is exactly what `D2TG::Lock`'s
-own staleness/eviction logic (TGT-084/TGT-113) already exists to
-recover from, unrelated to and not narrowed by this fix. The
+correctly keeps holding the same lock). `$SIG{TERM}`/`$SIG{INT}`
+(installed further down) ARE covered - they set a flag for graceful
+shutdown rather than killing the process immediately, so the script
+always still reaches either this `END` block or the normal post-loop
+`release()` call. NOT covered: `SIGKILL` (always untrappable), and
+any other signal this script never installs a handler for (e.g.
+`SIGHUP`, `SIGQUIT`) whose default action terminates the process -
+those bypass `END` unconditionally, not just in some narrow startup
+window (a third Codex QA-stage review round correctly rejected an
+earlier "any exit" overclaim on this point, and a fourth round
+correctly rejected a narrower-but-still-wrong "brief window" framing
+of the same gap). `D2TG::Lock`'s own staleness/eviction logic
+(TGT-084/TGT-113) is what recovers a lock left behind that way - not
+automatic eviction, but detected and reclaimed the next time a poller
+attempts to acquire the same lock - unrelated to and not narrowed by
+this fix. The
 no-bot-tokens scenario is covered by a new test case (confirmed red
 without the `END` block, green with it); the `exec()`-failure `die`
 is not independently tested (a deterministic reproduction would need
