@@ -105,4 +105,15 @@ bug-hunt) - matching every sibling command in this same family
 C<cli/text-only-replies.pl>), all of which already refused rather than
 silently ignoring one.
 
+After the unread message list (TGT-204, a real live-reported
+incident: a queued failed download was previously invisible to this
+command entirely, only discoverable by reading the poller's own raw
+output or running C<d2 tg.retry-download --all> speculatively), also
+lists any currently-queued failed media downloads via
+L<D2TG::Store/failed_downloads>, naming the exact recovery command. A
+queued failed download is not itself an unread message (it was never
+recorded into message history, TGT-104's own design) but is exactly
+the kind of "needs your attention" state this command exists to
+surface.
+
 =cut

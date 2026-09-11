@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.64  2026-09-11
+      - RELIABILITY FIX (TGT-204, a real live-reported incident from
+        the budget project's own agent): a queued failed media
+        download previously produced no proactive signal at all - the
+        MEDIA DOWNLOAD ERROR line went to STDERR only, which never
+        reaches the monitor job's own stdout-fed tira.policy.bridge
+        notification stream. 4 real photo messages sat queued for
+        over an hour before the owner noticed by asking directly.
+        D2TG::Poller::run_once now also prints a NEW TG MEDIA FAILED
+        stdout line naming the exact recovery command
+        (d2 tg.retry-download --all) whenever the queue write itself
+        succeeds. d2 tg.unread also now lists any currently-queued
+        failed downloads after the unread message list. Automatic
+        background retry (a separate, larger design decision) was
+        deliberately excluded from this fix's own scope. New test
+        t/204-failed-download-visibility.t, confirmed genuinely red
+        against the pre-fix code.
+
 1.63  2026-09-11
       - TEST INFRA (TGT-203, found via a scheduled JOB-004 improvement
         hunt): the identical run_capturing_stderr(@cmd) test helper

@@ -1359,6 +1359,16 @@ itself wrapped in its own C<eval> and reported on STDERR if it fails (a
 Codex review finding: a locked/full SQLite database must not turn an
 already-non-fatal download error into a poll-cycle failure).
 
+When the queue write itself succeeds, a C<NEW TG MEDIA FAILED
+[chat_id] sender: media_kind - queued for retry, RETRY WITH: d2
+tg.retry-download --all> line is also printed to STDOUT (TGT-204, a
+real live-reported incident: 4 photo messages sat queued for over an
+hour with no proactive signal, since C<MEDIA DOWNLOAD ERROR> above only
+ever reaches STDERR - never the monitor job's own stdout-fed
+C<tira.policy.bridge> notification stream) - naming the exact recovery
+command so a queued failure is no longer invisible until a human/agent
+happens to check C<d2 tg.retry-download> speculatively.
+
 If the message carries a caption (TGT-092, a live production incident:
 a caption was silently dropped entirely before this fix, causing a real
 miscommunication - C<$message->{caption}> is a field the Bot API

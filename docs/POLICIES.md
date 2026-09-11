@@ -2718,3 +2718,52 @@ own established precedent (`t/104`, `t/88`, `t/195`, `t/198`, `t/201`,
 `t/202`) - confirmed genuinely red against the pre-fix code (14/15
 subtests failed). Full suite (sequential and `-j4` parallel) both PASS
 with every existing assertion in all 6 migrated files unmodified.
+
+## TGT-204: queued failed media downloads had no proactive visibility
+
+A real, live incident report from the budget project's own agent
+(filed to `/tmp/ask-for-more-from-d2tg/`, per the standing
+`report-tira-faults-upstream.md` pattern): 4 photo messages (chat_id
+398296603, msg_ids 4484/4485/4494/4495) failed to download around
+19:22-19:23 on 2026-09-11 (HTTP 500/timeout) - `TGT-104`'s own
+`failed_downloads` queue caught them correctly, but `d2 tg.unread`/
+`d2 tg.history` both read as "nothing happened" for over an hour. The
+poller's own `MEDIA DOWNLOAD ERROR` line was printed, but only to
+STDERR - which never reaches the monitor job's own stdout-fed
+`tira.policy.bridge` notification stream (per this project's own
+architecture decision, [[tg-skill-design]]: "ordinary/event output →
+stdout; errors/transient failures → stderr", and only stdout is what
+the monitor-job feeder reads as notification-worthy). The only way to
+discover a queued failure was to read the poller's own raw output
+directly or run `d2 tg.retry-download --all` speculatively with no
+prompt to do so - which is exactly what recovered all 4 cleanly once
+the owner directly asked whether any errors had occurred.
+
+Fixed with two changes, deliberately scoped to visibility only (an
+automatic background retry with backoff was raised in the same
+incident report but excluded here as a separate, larger design
+decision about retry cadence and whether it belongs in the poller's
+own main loop):
+
+1. `D2TG::Poller::run_once` now also prints a `NEW TG MEDIA FAILED
+   [chat_id] sender: media_kind - queued for retry, RETRY WITH: d2
+   tg.retry-download --all` STDOUT line whenever a media download
+   fails AND the failure is successfully queued via
+   `record_failed_download` - the existing `MEDIA DOWNLOAD ERROR`
+   STDERR line is unchanged, and a failure to queue (the database
+   itself unavailable) keeps its own existing STDERR-only report,
+   unchanged, rather than claiming a queue that didn't actually
+   happen.
+2. `cli/unread.pl` now also lists any currently-queued failed
+   downloads (via `D2TG::Store::failed_downloads`) after the unread
+   message list - a queued failure isn't technically an "unread
+   message" (it was never recorded into message history at all,
+   TGT-104's own design), but is exactly the kind of "needs your
+   attention" state this command exists to surface.
+
+New test `t/204-failed-download-visibility.t`: confirmed genuinely red
+against the pre-fix code via `git stash` of the fix (2/7 subtests
+failed - no STDOUT event, no recovery command named), confirmed green
+with the fix restored, and includes an explicit regression check that
+a successful download's own existing `NEW TG MEDIA` line and STDERR
+silence are completely unaffected.

@@ -1,6 +1,13 @@
 # tg
 
-**Status: early implementation (v1.63).** TEST INFRA (TGT-203, found
+**Status: early implementation (v1.64).** RELIABILITY FIX (TGT-204, a
+real live-reported incident): a queued failed media download used to
+produce no proactive signal at all - the poller now also prints a
+`NEW TG MEDIA FAILED` stdout line naming the recovery command
+(`d2 tg.retry-download --all`), and `d2 tg.unread` now lists any
+currently-queued failed downloads too.
+
+TEST INFRA (TGT-203, found
 via a scheduled JOB-004 improvement hunt): `run_capturing_stderr` was
 duplicated identically across 6 test files - extracted into
 `t/lib/Test/CaptureStdio.pm`. No user-facing behavior change; every
