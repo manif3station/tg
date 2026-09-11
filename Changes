@@ -77,6 +77,17 @@ Revision history for the tg skill
         result shape is confirmed usable. Confirmed red against the
         pre-fix ordering first.
 
+        A sixth round found the reordered check was still gated on
+        store+text_message_id, while mark_read is gated on the
+        strictly broader store+reply_to_message_id - so a caller
+        giving store and reply_to_message_id but not text_message_id
+        could still slip a malformed voice result past the check
+        entirely and have it marked read anyway (present identically
+        in both send_reply and resend_voice). Fixed by checking the
+        result shape whenever store is given at all, independent of
+        text_message_id. New tests prove the die still fires with
+        text_message_id omitted, for both functions.
+
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the
         budget project: 2 real Telegram messages permanently lost):

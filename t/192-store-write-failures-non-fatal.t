@@ -385,4 +385,63 @@ package main;
         'record_sent_voice is not attempted when the voice result carries no message_id, but this is not an error' );
 }
 
+# A Codex QA-stage review finding (round 6): the malformed-result check
+# above was gated on `store && defined $text_message_id`, but mark_read
+# is gated on the strictly BROADER `store && defined reply_to_message_id`
+# - so a caller giving store and reply_to_message_id but NOT
+# text_message_id could still slip a malformed voice result past the
+# check entirely and have it marked read anyway. Both send_reply and
+# resend_voice now check the result shape whenever store is given at
+# all, independent of text_message_id. These blocks prove it for
+# exactly that gap: store + reply_to_message_id given, text_message_id
+# omitted.
+{
+    my $telegram = Fake::Telegram::MalformedVoiceResult->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return eval {
+            D2TG::Reply::send_reply(
+                telegram             => $telegram,
+                chat_id              => 999,
+                text                 => 'hello',
+                store                => $store,
+                synthesize           => sub { return '/tmp/fake-voice.ogg' },
+                reply_to_message_id  => 42,
+            );
+        };
+    } );
+
+    my $eval_error = $@;
+    ok( !defined $result, 'send_reply: a malformed voice result still dies even when text_message_id could not be extracted, as long as reply_to_message_id is given' );
+    like( $eval_error, qr/unexpected result/, 'the die names the actual problem' );
+    is_deeply( [ grep { $_->[0] eq 'mark_read' } @{ $store->{calls} } ], [],
+        'mark_read is never attempted - the round-6 gap is closed: a malformed result cannot slip past the check just because text_message_id is undefined' );
+}
+
+{
+    my $telegram = Fake::Telegram::MalformedVoiceResult->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return eval {
+            D2TG::Reply::resend_voice(
+                telegram             => $telegram,
+                chat_id              => 999,
+                text                 => 'hello',
+                store                => $store,
+                synthesize           => sub { return '/tmp/fake-voice.ogg' },
+                reply_to_message_id  => 42,
+                # text_message_id deliberately omitted
+            );
+        };
+    } );
+
+    my $eval_error = $@;
+    ok( !defined $result, 'resend_voice: a malformed voice result still dies even when text_message_id is omitted, as long as reply_to_message_id is given' );
+    like( $eval_error, qr/unexpected result/, 'the die names the actual problem' );
+    is_deeply( [ grep { $_->[0] eq 'mark_read' } @{ $store->{calls} } ], [],
+        'mark_read is never attempted - the round-6 gap is closed for resend_voice too' );
+}
+
 done_testing();

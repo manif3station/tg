@@ -22,16 +22,22 @@ local audit-trail write's own failure is now non-fatal). A malformed
 voice-send result (not a hashref - e.g. `send_voice` returning `undef`)
 is never misclassified as a store-write failure: `ref($voice_result) eq
 'HASH'` is checked explicitly, and a non-hashref result dies for real -
-but only when a `store` was actually given and the text send produced a
-usable message id (the same gating the store write itself has always
-had); a caller that never passes `store`, or whose `send_message`
-result carried no usable id, is unaffected either way, same as before
-this ticket. A well-formed hashref simply missing a `message_id` key (a
-legitimate shape some callers' `telegram` doubles use) still quietly
-skips just the store write, with no error at all - two Codex QA-stage
+but only when a `store` was actually given (a caller that never passes
+`store` is unaffected either way, same as before this ticket). A
+well-formed hashref simply missing a `message_id` key (a legitimate
+shape some callers' `telegram` doubles use) still quietly skips just
+the store write, with no error at all - four further Codex QA-stage
 review rounds were needed to land on this: an `eval`-guarded
 dereference alone can't tell the two shapes apart, since dereferencing
-a hash key off `undef` never actually raises an exception in Perl.
+a hash key off `undef` never actually raises an exception in Perl
+(round 3); `resend_voice`'s own `mark_read` originally ran BEFORE this
+check, so a malformed result died only after the message was already
+marked read, defeating the retry/recovery state `resend_voice` exists
+to preserve (round 5); and the check itself was originally gated on
+`store && text_message_id` while `mark_read` is gated on the broader
+`store && reply_to_message_id`, letting a malformed result slip past
+whenever `text_message_id` was omitted (round 6, fixed in both
+functions by checking whenever `store` is given at all).
 RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its

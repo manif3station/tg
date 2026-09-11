@@ -2312,12 +2312,29 @@ shape is confirmed usable (mirroring the order the result-shape check
 and the store write it guards already had); the test above now asserts
 `mark_read` was never attempted for `resend_voice`'s own malformed case
 too, and was confirmed genuinely red against the pre-fix ordering
-first. Confirmed genuinely red against the pre-fix code - the whole
-test script crashed with an uncaught die (no TAP plan produced at all)
+first.
+
+A round-6 finding on that reordering: the check itself was still gated
+on `store && defined $text_message_id`, while `mark_read` is gated on
+the strictly BROADER `store && defined reply_to_message_id` - so a
+caller giving `store` and `reply_to_message_id` but *not*
+`text_message_id` could still slip a malformed voice result past the
+check entirely and have it marked read anyway (this gap existed in
+both `send_reply` and `resend_voice` identically, even though only
+`resend_voice` was flagged by name). Fixed by checking the result
+shape whenever `store` is given at all, independent of
+`text_message_id` - the broadest condition under which anything below
+reads this result, so a caller that never passes `store` remains
+entirely unaffected. Two new test blocks (one per function) prove the
+die still fires, and `mark_read` is never attempted, when
+`text_message_id` is omitted but `reply_to_message_id` is given.
+
+Confirmed genuinely red against the pre-fix code - the whole test
+script crashed with an uncaught die (no TAP plan produced at all)
 rather than merely failing an assertion, since the raw exception
-propagated straight out
-of `send_reply` with nothing to catch it; the malformed-result
-regression block was separately confirmed red against the round-2
-(`eval`-guarded dereference) code before landing on the `ref()`-check
-version - the round-2 code returned success silently instead of dying,
-which is exactly the failure this block exists to catch.
+propagated straight out of `send_reply` with nothing to catch it; the
+malformed-result regression block was separately confirmed red against
+the round-2 (`eval`-guarded dereference) code before landing on the
+`ref()`-check version - the round-2 code returned success silently
+instead of dying, which is exactly the failure this block exists to
+catch.

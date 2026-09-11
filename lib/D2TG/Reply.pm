@@ -112,15 +112,28 @@ sub send_reply {
     # malformed shape deserves per TGT-083's own "voice failures are
     # loud, never silent" tradeoff - while a present-but-incomplete
     # hashref still quietly skips just the store write, same as
-    # always. Only checked when a store write was actually going to be
-    # attempted (matches the original code's own gating), so a caller
-    # that never passes store is entirely unaffected by this check.
-    my $voice_message_id;
-    if ( $args{store} && defined $text_message_id ) {
+    # always.
+    #
+    # Round 6: this check must run whenever ANY store-dependent
+    # behavior below depends on the voice result being trustworthy -
+    # not only when $text_message_id happens to be defined too. mark_read
+    # (below) is gated on store+reply_to_message_id alone, a strictly
+    # broader condition than store+text_message_id; gating this check
+    # on the narrower condition let a malformed result bypass it
+    # entirely (and still get marked read) whenever a caller gave
+    # store and reply_to_message_id but not text_message_id. Checked
+    # whenever store is given at all - the broadest condition under
+    # which anything below reads this result - so a caller that never
+    # passes store remains entirely unaffected by this check, exactly
+    # as before.
+    if ( $args{store} ) {
         die "D2TG::Reply::send_reply: send_voice returned an unexpected result "
           . "(not a hashref) - cannot confirm the voice reply was actually sent\n"
           unless ref($voice_result) eq 'HASH';
+    }
 
+    my $voice_message_id;
+    if ( $args{store} && defined $text_message_id ) {
         $voice_message_id = $voice_result->{message_id};
         _store_write_safe( $chat_id, 'record_sent_voice', sub {
             $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
@@ -170,18 +183,28 @@ sub resend_voice {
     #
     # A round-5 Codex finding: this check - and the die it can raise -
     # must run BEFORE mark_read, not after. The original ordering ran
-    # mark_read first (see its own comment, still true, just relocated
-    # below), so a malformed voice result died AFTER the message had
-    # already been marked read - defeating the exact retry/recovery
-    # state this whole function exists to preserve on a genuine
-    # failure. Now nothing marks the message read until send_voice's
-    # result shape is actually confirmed usable.
-    my $voice_message_id;
-    if ( $args{store} && defined $text_message_id ) {
+    # mark_read first, so a malformed voice result died AFTER the
+    # message had already been marked read - defeating the exact
+    # retry/recovery state this whole function exists to preserve on a
+    # genuine failure. mark_read (below) now only runs after this
+    # check.
+    #
+    # Round 6: this check must run whenever mark_read is even reachable
+    # below, not only when $text_message_id happens to be defined too -
+    # gating it on the narrower store+text_message_id condition (mark_read
+    # is gated on the strictly broader store+reply_to_message_id) let a
+    # malformed result bypass this check entirely, and still get marked
+    # read, whenever a caller gave store and reply_to_message_id but not
+    # text_message_id. Checked whenever store is given at all, so a
+    # caller that never passes store remains entirely unaffected.
+    if ( $args{store} ) {
         die "D2TG::Reply::resend_voice: send_voice returned an unexpected result "
           . "(not a hashref) - cannot confirm the voice reply was actually sent\n"
           unless ref($voice_result) eq 'HASH';
+    }
 
+    my $voice_message_id;
+    if ( $args{store} && defined $text_message_id ) {
         $voice_message_id = $voice_result->{message_id};
         _store_write_safe( $chat_id, 'record_sent_voice', sub {
             $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
