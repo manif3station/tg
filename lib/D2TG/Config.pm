@@ -125,8 +125,19 @@ sub changes_summary {
     # header, not authoritatively "the" file's own top header.
     unless ( $changes =~ /^\Q$version\E\s+\S+\n(.*?)(?=^\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2}[ \t]*$|\z)/ms ) {
         my ($actual_header) = $changes =~ /^(\d+\.\d+[ \t]+\d{4}-\d{2}-\d{2})[ \t]*$/m;
-        $actual_header //= 'no recognizable version header found in the file at all';
-        print STDERR "D2TG::Config::changes_summary: no entry matched for version '$version' (a recognizable header found in the file: $actual_header)\n";
+
+        # A Codex QA-stage review finding: the previous single-string
+        # template embedded the "no header found" fallback text
+        # directly after the phrase "a recognizable header found in
+        # the file:", producing a self-contradictory message
+        # ("...found in the file: no recognizable ... found ... at
+        # all") whenever $actual_header was the fallback. Branch the
+        # wording instead of interpolating a fallback value into
+        # phrasing that assumes success.
+        my $found_text = defined $actual_header
+          ? "a recognizable header found in the file: $actual_header"
+          : 'no recognizable version header found in the file at all';
+        print STDERR "D2TG::Config::changes_summary: no entry matched for version '$version' ($found_text)\n";
         return undef;
     }
     my $block = $1;
@@ -840,17 +851,22 @@ not a full reflow. C<cli/poller.pl>'s version-change restart notice
 uses this to make itself self-describing without a separate lookup.
 
 TGT-190 (found while investigating TGT-187, a live user report of
-this notice going missing): when C<$version> has no matching entry in
-an otherwise-readable C<Changes> file, this now also prints a
-non-fatal C<STDERR> diagnostic naming both the requested version and
-the file's own actual top header line, before returning C<undef> -
-matching this project's established non-fatal-degradation pattern
-(e.g. L<D2TG::Poller/skill_version_check_safe>/
+this notice going missing): when no entry can be matched for
+C<$version> in an otherwise-readable C<Changes> file - not only a
+genuine wrong-version mismatch, but also a header line whose version
+matches but whose own shape is malformed - this now also prints a
+non-fatal C<STDERR> diagnostic naming the requested version and, if
+the file has one, a recognizable header found elsewhere in it (the
+first strictly-shaped header anywhere in the file, which can skip a
+malformed earlier one - not necessarily "the" file's own literal top
+header), or says explicitly that none was found, if it doesn't -
+before returning C<undef>, matching this project's established
+non-fatal-degradation pattern (e.g.
+L<D2TG::Poller/skill_version_check_safe>/
 L<D2TG::Poller/persist_offset_safe>).
 The return value is unchanged; a genuinely missing/unreadable
 C<Changes> file still returns C<undef> silently, with no diagnostic -
-this only covers a version-string mismatch against a file that opened
-successfully.
+this only covers a readable file with no matching entry.
 
 =head2 resolve_self_exec_path(bin_dir => $dir, basename => $name, fallback => $path)
 

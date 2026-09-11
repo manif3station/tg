@@ -174,6 +174,46 @@ CHANGES
     );
 }
 
+# TGT-190 (a Codex QA-stage review finding): the block above only
+# exercises the "a recognizable header WAS found elsewhere" half of
+# the diagnostic's own two-branch wording - a readable Changes file
+# with NO line anywhere matching the strict header shape at all (e.g.
+# every header-looking line has a malformed date) takes the other
+# branch, and must say so explicitly rather than naming a header that
+# doesn't exist. A first draft's single string template embedded the
+# fallback text directly after "a recognizable header found in the
+# file:", producing a self-contradictory message in exactly this case
+# - this test is what would have caught that.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+0.12  not-a-valid-date
+      - This header's date is malformed, so no line in this file
+        matches the strict version+ISO-date header shape at all.
+CHANGES
+
+    my $stderr = '';
+    open my $stderr_fh, '>', \$stderr or die $!;
+    local *STDERR = $stderr_fh;
+
+    my $result = D2TG::Config::changes_summary( version => '9.99', default_root => $skill_root );
+
+    close $stderr_fh;
+
+    is( $result, undef, 'changes_summary still returns undef when no header at all can be recognized' );
+    like(
+        $stderr,
+        qr/\bD2TG::Config::changes_summary\b.*\b9\.99\b.*no recognizable version header found in the file at all/s,
+        'the diagnostic explicitly says no recognizable header was found, rather than naming one that does not exist'
+    );
+    unlike(
+        $stderr,
+        qr/a recognizable header found in the file: no recognizable/,
+        'the diagnostic is not self-contradictory - it never says "a recognizable header found" immediately followed by "no recognizable ... found"'
+    );
+}
+
 # The happy path (a real match) must NOT print anything to STDERR -
 # the diagnostic above is only for the miss case.
 {
