@@ -4,7 +4,35 @@ use strict;
 use warnings;
 use D2TG::TTS;
 use D2TG::Config;
+use D2TG::Poller;
 use Encode qw(decode);
+
+# TGT-192 (found via a scheduled JOB-003 hourly bug hunt, the same
+# class of issue TGT-191 just fixed - an external system told "done"
+# before the corresponding local write is safely handled): every
+# other D2TG::Store write call site in this codebase already wraps its
+# call in eval and classifies a failure via
+# D2TG::Poller::_classify_store_error (record_message via
+# _record_message_safe TGT-132, set_offset via persist_offset_safe
+# TGT-166/191, is_allowed/add_pending TGT-165, record_failed_download's
+# own eval TGT-104) - send_reply/resend_voice's own record_sent_text/
+# record_sent_voice/mark_read calls were the one exception. A locked/
+# busy database there died raw (potentially leaking the real db_path)
+# AFTER send_message had already succeeded, aborting the rest of
+# send_reply (skipping voice synthesis entirely) and reporting a hard
+# failure that could even suggest retrying - risking a duplicate text
+# delivery, since TGT-114's own dedup check depends on the very row
+# that failed to write. Shared here so all 5 call sites use identical
+# wrapping/classification/message shape.
+sub _store_write_safe {
+    my ( $chat_id, $description, $code ) = @_;
+    eval { $code->() };
+    if ($@) {
+        my $reason = D2TG::Poller::_classify_store_error($@);
+        print STDERR "STORE ERROR [$chat_id]: $description failed - $reason\n";
+    }
+    return;
+}
 
 sub send_reply {
     my (%args) = @_;
@@ -49,8 +77,9 @@ sub send_reply {
     my $text_message_id;
     if ( $args{store} ) {
         $text_message_id = eval { $text_result->[-1]{message_id} };
-        $args{store}->record_sent_text( $chat_id, $text_message_id, bot_key => $args{bot_key}, text => $text )
-          if defined $text_message_id;
+        _store_write_safe( $chat_id, 'record_sent_text', sub {
+            $args{store}->record_sent_text( $chat_id, $text_message_id, bot_key => $args{bot_key}, text => $text );
+        } ) if defined $text_message_id;
     }
 
     my $voice_result = _synthesize_and_send_voice(
@@ -62,11 +91,13 @@ sub send_reply {
         opts       => \%opts,
     );
 
-    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} )
-      if $args{store} && defined $text_message_id;
+    _store_write_safe( $chat_id, 'record_sent_voice', sub {
+        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} );
+    } ) if $args{store} && defined $text_message_id;
 
-    $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
-      if $args{store} && defined $args{reply_to_message_id};
+    _store_write_safe( $chat_id, 'mark_read', sub {
+        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
+    } ) if $args{store} && defined $args{reply_to_message_id};
 
     return { text => $text_result, voice => $voice_result };
 }
@@ -100,13 +131,15 @@ sub resend_voice {
     # path. Same guard as send_reply's own: only when both store and
     # reply_to_message_id are given, and only after send_voice has
     # actually succeeded.
-    $args{store}->mark_read( $chat_id, $args{reply_to_message_id} )
-      if $args{store} && defined $args{reply_to_message_id};
+    _store_write_safe( $chat_id, 'mark_read', sub {
+        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
+    } ) if $args{store} && defined $args{reply_to_message_id};
 
     # TGT-105: this is exactly what clears a send_reply-recorded
     # text-only flag once the missing voice half is actually recovered.
-    $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} )
-      if $args{store} && defined $text_message_id;
+    _store_write_safe( $chat_id, 'record_sent_voice', sub {
+        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} );
+    } ) if $args{store} && defined $text_message_id;
 
     return { voice => $voice_result };
 }
