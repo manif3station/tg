@@ -2098,3 +2098,31 @@ corrected everywhere to name the actual scalar-vs-arrayref difference.
 test only exercises it via real subprocesses, invisible to
 Devel::Cover) - closed by a second test,
 `t/186-open-store-or-die-coverage.t`, calling it directly in-process.
+
+**TGT-187**: investigated a live user report (budget project,
+2026-09-09) of 3 consecutive version-bump restart notices missing
+TGT-112's own Changes-line summary. Reproduced the real dispatch
+condition in a `developer-dashboard:latest` container (`d2 skills
+install tg` for real, `d2 tg.<command>` dispatch, not a direct `perl
+cli/poller.pl` invocation) and confirmed
+`$ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}` resolves correctly to the
+installed skill root (traced through
+`Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
+`exec_command` - both dispatch paths set it via `local %ENV = (%ENV,
+%env)` before launching the skill command, so it persists for the
+whole child process's lifetime including a later `exec()`-based
+self-restart, which inherits the parent's environment by default).
+`changes_summary` correctly returned the summary when `.env`'s
+`VERSION` and the `Changes` file's own header entry matched exactly -
+also independently confirmed live on this host's own real, running
+installed poller (its 1.43->1.49 restart notice included the summary
+correctly). `changes_summary` DOES silently return `undef` with zero
+diagnostic on ANY mismatch (a missing entry, or even a trivial format
+difference like a trailing `.0`) - a real, confirmable fragility, but
+not independently reproducible against the current codebase for the
+original report's own specific incident (version range 0.70-1.03 is
+many versions and fixes behind). Closed a real, independently-found
+gap instead: `changes_summary`'s env-var-priority code path
+(`state_db_path`'s identical priority order was already tested in
+`t/10-state-path.t`) had no test coverage at all - new regression
+test in `t/90-changes-summary.t` closes it.

@@ -1,6 +1,27 @@
 # tg
 
-**Status: early implementation (v1.51).** BUG FIX (TGT-186, found via
+**Status: early implementation (v1.52).** INVESTIGATE (TGT-187): a
+live user report (budget project) observed a version-bump restart
+notice missing TGT-112's own Changes-line summary. Traced
+`Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
+`exec_command` (a real `d2 tg.<command>` dispatch sets
+`DEVELOPER_DASHBOARD_SKILL_ROOT` via `local %ENV = (%ENV, %env)`
+before launching the skill command, persisting for the whole child
+process's lifetime including a later `exec()`-based self-restart,
+which inherits the parent's environment by default) and confirmed
+`changes_summary` correctly returns the summary when `.env`'s
+`VERSION` and the `Changes` file's own header entry match exactly -
+also independently confirmed live on this host's own real, running
+installed poller (its 1.43->1.49 restart notice included the summary
+correctly). `changes_summary` DOES silently return `undef` with zero
+diagnostic on any mismatch (a missing entry, or even a trivial format
+difference like a trailing `.0`) - a real, confirmable fragility, but
+not independently reproducible against the current codebase for the
+original report's own specific incident (version range 0.70-1.03 is
+many versions and fixes behind). Closed a real, independently-found
+test gap instead - `changes_summary`'s env-var-priority code path
+had no test coverage at all until now.
+BUG FIX (TGT-186, found via
 a scheduled JOB-003 hourly bug hunt, reproduced live against
 `cli/history.pl`): 7 more `cli/*.pl` scripts (`attachment`,
 `text-only-replies`, `approve`, `retry-download`, `history`, `reply`,

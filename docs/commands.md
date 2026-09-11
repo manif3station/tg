@@ -178,7 +178,17 @@ cli/poller.pl now refuses on any unrecognized flag` - so an operator
 watching the log doesn't have to go look up `Changes` separately to
 find out what actually changed. Reads `Changes` at restart time via
 `D2TG::Config::changes_summary`; omitted entirely if that version has
-no `Changes` entry or the file can't be read.
+no `Changes` entry or the file can't be read. TGT-187 investigated a
+live report that this omission happened unexpectedly on a real
+installed poller - confirmed live (both in a `developer-dashboard:latest`
+container and on this host's own real installed poller) that the
+mechanism works correctly via a real `d2 tg.poller` dispatch when
+`.env`'s `VERSION` and the `Changes` header are in sync; not
+reproducible against the current codebase for the original report's
+own specific incident (many versions behind). `changes_summary` does
+silently omit with no diagnostic on ANY version-string mismatch
+(including a trivial format difference), a known fragility - not
+independently confirmed as the original incident's actual cause.
 
 Events printed:
 
