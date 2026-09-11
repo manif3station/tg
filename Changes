@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+1.49  2026-09-11
+      - RELIABILITY FIX (TGT-184, a follow-up filed while building
+        TGT-183): cli/poller.pl's lock_path and heartbeat_path startup
+        calls each internally call D2TG::Config's own
+        make_path($vault_dir) unless -d $vault_dir on the same .tira
+        directory - the identical unwrapped-die risk TGT-183 just
+        fixed for D2TG::Store->new. Both now eval-wrapped and
+        classified via the identical D2TG::Poller::_classify_store_error
+        helper, refusing cleanly with "Failed to prepare storage
+        location (REASON) - refusing to start." lock_path's own
+        failure is reproduced live and covered by a new regression
+        test; heartbeat_path is wrapped identically as belt-and-braces
+        - its own failure isn't exercised by the current test's static
+        filesystem setup (it always succeeds once lock_path has
+        already created .tira), not because it's impossible to test,
+        just not covered by this pass.
+
 1.48  2026-09-11
       - RELIABILITY FIX (TGT-183, found via a scheduled hourly bug
         hunt, reproduced live in the perl-test Docker container):

@@ -133,10 +133,26 @@ if ($@) {
 # compete with this one for the same bot's getUpdates slot. TGT-087: the
 # lock lives at .tira/telegram.pid under the resolved vault, matching
 # TGT-081's own nesting of the other vault-resident files.
-my $lock_path = D2TG::Config::lock_path(
-    default_root => File::Spec->catdir( $Bin, '..' ),
-    base_dir     => $base_dir,
-);
+#
+# TGT-184 (found while building TGT-183's own D2TG::Store->new fix):
+# lock_path's own internal make_path($vault_dir) unless -d $vault_dir
+# (D2TG::Config) was unwrapped here - a .tira-creation failure (e.g. a
+# file already sitting at that path) died raw with an uncaught Perl
+# exception that could embed the real base_dir path, instead of the
+# same clean refusal require_existing_base_dir above already gives its
+# own failure. Now eval-wrapped and scrubbed via the identical
+# classification D2TG::Store->new's own TGT-183 fix uses.
+my $lock_path = eval {
+    D2TG::Config::lock_path(
+        default_root => File::Spec->catdir( $Bin, '..' ),
+        base_dir     => $base_dir,
+    );
+};
+if ($@) {
+    my $reason = D2TG::Poller::_classify_store_error($@);
+    print STDERR "Failed to prepare storage location ($reason) - refusing to start.\n";
+    exit 1;
+}
 eval { D2TG::Lock::acquire($lock_path) };
 if ($@) {
     print STDERR $@;
@@ -222,10 +238,25 @@ if (@other_pollers) {
 # wedged" (a real, confirmed message-loss incident this session: a
 # poller stayed alive and holding its lock for 80+ minutes while doing
 # nothing at all).
-my $heartbeat_path = D2TG::Config::heartbeat_path(
-    default_root => File::Spec->catdir( $Bin, '..' ),
-    base_dir     => $base_dir,
-);
+#
+# TGT-184: heartbeat_path's own internal make_path shares the identical
+# unwrapped-die risk lock_path had above - wrapped the same way. In
+# practice this call is very unlikely to ever fail on its own here
+# (lock_path above already succeeded, meaning .tira already exists, so
+# heartbeat_path's own make_path is a no-op) - wrapped anyway as
+# belt-and-braces, matching the fix's own stated scope rather than
+# leaving one of the two known call sites unaddressed.
+my $heartbeat_path = eval {
+    D2TG::Config::heartbeat_path(
+        default_root => File::Spec->catdir( $Bin, '..' ),
+        base_dir     => $base_dir,
+    );
+};
+if ($@) {
+    my $reason = D2TG::Poller::_classify_store_error($@);
+    print STDERR "Failed to prepare storage location ($reason) - refusing to start.\n";
+    exit 1;
+}
 
 if ( !@$groups ) {
     print STDERR "No --chat_id/--bot groups configured (neither via CLI nor D2TG_CHAT_ID/D2TG_TOKEN) - refusing to start.\n";
@@ -253,8 +284,8 @@ my $skill_root = File::Spec->catdir( $Bin, '..' );
 # SQLite error, via the identical classification
 # D2TG::Poller::_record_message_safe already uses) - only a short,
 # fixed reason, since it can embed the real db_path. (lock_path and
-# heartbeat_path above share the identical unwrapped-make_path risk
-# and are NOT fixed by this wrap - tracked separately as TGT-184.)
+# heartbeat_path above shared the identical unwrapped-make_path risk -
+# fixed separately, see TGT-184's own comments above.)
 my $store = eval {
     D2TG::Store->new(
         db_path => D2TG::Config::state_db_path(
@@ -475,8 +506,8 @@ with C<Failed to open local storage (REASON) - refusing to start.>
 rather than crashing with a raw, uncaught Perl exception that could
 embed the real db path (matching L<D2TG::Poller/_record_message_safe>'s
 own TGT-133 scrubbing precedent). C<lock_path>/C<heartbeat_path> above
-independently share the identical unwrapped C<make_path> risk and are
-NOT covered by this fix - tracked separately as TGT-184.
+independently shared the identical unwrapped C<make_path> risk - fixed
+separately as TGT-184 (see their own comments above), the same way.
 
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each

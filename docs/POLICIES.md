@@ -1994,4 +1994,13 @@ building this fix, a related but distinct finding surfaced: `lock_path`
 and `heartbeat_path` (both called earlier in the same startup
 sequence, both unwrapped) independently call `make_path` on the same
 `.tira` directory and can die the identical raw way if it cannot be
-created - tracked separately as **TGT-184**, not fixed by this entry.
+created - fixed separately as **TGT-184**, shipped in 1.49: both now
+`eval`-wrapped and classified via the identical
+`D2TG::Poller::_classify_store_error` helper, refusing cleanly with
+`Failed to prepare storage location (REASON) - refusing to start.`
+`lock_path`'s own failure is reproduced live and covered by a new
+regression test; `heartbeat_path` is wrapped identically as belt-and-
+braces - its own failure isn't exercised by the current test's static
+filesystem setup (it always succeeds once `lock_path` has already
+created `.tira`), not because it's impossible to test, just not
+covered by this pass.

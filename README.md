@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v1.48).** RELIABILITY FIX (TGT-183,
+**Status: early implementation (v1.49).** RELIABILITY FIX (TGT-184,
+follow-up to TGT-183): `cli/poller.pl`'s `lock_path`/`heartbeat_path`
+startup calls shared the identical unwrapped-`make_path` risk TGT-183
+just fixed for `D2TG::Store->new` - both now wrapped and scrubbed the
+same way. `lock_path`'s own failure is reproduced live and tested;
+`heartbeat_path` is wrapped identically as belt-and-braces - its own
+failure isn't exercised by the current test's static filesystem setup
+(it always succeeds once `lock_path` has already created `.tira`), not
+because it's impossible to test, just not covered by this pass.
+RELIABILITY FIX (TGT-183,
 found via a scheduled hourly bug hunt, reproduced live): `cli/poller.pl`'s
 `D2TG::Store->new(...)` startup call was unwrapped - a storage-open
 failure at that specific step (e.g. a colliding db-file path, a
@@ -9,9 +18,9 @@ exception that could embed the real db path, instead of the clean,
 scrubbed refusal `require_existing_base_dir`/`D2TG::Lock::acquire`
 already produce for their own failures. Now wrapped and classified,
 matching TGT-133's own established scrubbing precedent. Two earlier
-startup steps (`lock_path`/`heartbeat_path`) share the same unwrapped-
-`make_path` risk and are tracked separately as TGT-184, not fixed
-here.
+startup steps (`lock_path`/`heartbeat_path`) shared the same unwrapped-
+`make_path` risk - fixed subsequently as TGT-184 (see above), not
+fixed by this entry itself.
 REFACTOR (TGT-182, found via
 a scheduled improvement hunt): `send_voice` and `_send_file` (backing
 `send_photo`/`send_document`) duplicated the identical 5-line multipart
