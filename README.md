@@ -5,10 +5,18 @@ follow-up to TGT-183): `cli/poller.pl`'s `lock_path`/`heartbeat_path`
 startup calls shared the identical unwrapped-`make_path` risk TGT-183
 just fixed for `D2TG::Store->new` - both now wrapped and scrubbed the
 same way. `lock_path`'s own failure is reproduced live and tested;
-`heartbeat_path` is wrapped identically as belt-and-braces - its own
-failure isn't exercised by the current test's static filesystem setup
-(it always succeeds once `lock_path` has already created `.tira`), not
-because it's impossible to test, just not covered by this pass.
+`heartbeat_path` is wrapped identically - its own failure isn't
+independently exercised by the current test's static filesystem setup
+(it succeeds once `lock_path` has already created `.tira`, though an
+external filesystem change between the two calls could still make it
+fail), not because it's impossible to test, just not covered by this
+pass. A Codex QA-stage review on this ticket also caught that the
+`heartbeat_path` failure branch exited before releasing the
+just-acquired startup lock file - fixed by releasing it before that
+exit. Two more pre-existing exit paths sharing the same lock-leak gap
+(no-groups-configured, and `D2TG::Store->new`'s own TGT-183 failure
+branch) were found in the same review and filed separately as
+**TGT-185**, not fixed here.
 RELIABILITY FIX (TGT-183,
 found via a scheduled hourly bug hunt, reproduced live): `cli/poller.pl`'s
 `D2TG::Store->new(...)` startup call was unwrapped - a storage-open

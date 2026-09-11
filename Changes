@@ -11,11 +11,20 @@ Revision history for the tg skill
         helper, refusing cleanly with "Failed to prepare storage
         location (REASON) - refusing to start." lock_path's own
         failure is reproduced live and covered by a new regression
-        test; heartbeat_path is wrapped identically as belt-and-braces
-        - its own failure isn't exercised by the current test's static
-        filesystem setup (it always succeeds once lock_path has
-        already created .tira), not because it's impossible to test,
-        just not covered by this pass.
+        test; heartbeat_path is wrapped identically - its own failure
+        isn't independently exercised by the current test's static
+        filesystem setup (it succeeds once lock_path has already
+        created .tira, though an external filesystem change between
+        the two calls could still make it fail), not because it's
+        impossible to test, just not covered by this pass.
+      - BUG FIX (TGT-184, Codex QA-stage finding): the heartbeat_path
+        failure exit above ran before D2TG::Lock::release($lock_path),
+        leaking the just-acquired startup lock file on that failure.
+        Fixed by releasing the lock before that exit. Two more
+        pre-existing exit paths sharing the same gap (no-groups-
+        configured, and D2TG::Store->new's own TGT-183 failure branch)
+        were found in the same review and filed separately as TGT-185
+        rather than fixed here (out of this ticket's scope).
 
 1.48  2026-09-11
       - RELIABILITY FIX (TGT-183, found via a scheduled hourly bug

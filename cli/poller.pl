@@ -240,12 +240,16 @@ if (@other_pollers) {
 # nothing at all).
 #
 # TGT-184: heartbeat_path's own internal make_path shares the identical
-# unwrapped-die risk lock_path had above - wrapped the same way. In
-# practice this call is very unlikely to ever fail on its own here
-# (lock_path above already succeeded, meaning .tira already exists, so
-# heartbeat_path's own make_path is a no-op) - wrapped anyway as
-# belt-and-braces, matching the fix's own stated scope rather than
-# leaving one of the two known call sites unaddressed.
+# unwrapped-die risk lock_path had above - wrapped the same way. Not
+# provably unreachable (an external filesystem change between the
+# lock_path and heartbeat_path calls above could still make .tira's
+# make_path fail here even though lock_path's own make_path just
+# succeeded) - a Codex QA-stage review correctly rejected an earlier
+# draft's "this call cannot fail here" framing on that basis, and also
+# caught that this exit path ran before D2TG::Lock::release($lock_path),
+# leaking the just-acquired lock file on this failure. Both fixed: the
+# wording no longer claims unreachability, and the lock is released
+# before exiting.
 my $heartbeat_path = eval {
     D2TG::Config::heartbeat_path(
         default_root => File::Spec->catdir( $Bin, '..' ),
@@ -255,6 +259,7 @@ my $heartbeat_path = eval {
 if ($@) {
     my $reason = D2TG::Poller::_classify_store_error($@);
     print STDERR "Failed to prepare storage location ($reason) - refusing to start.\n";
+    D2TG::Lock::release($lock_path);
     exit 1;
 }
 

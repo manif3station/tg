@@ -1999,8 +1999,16 @@ created - fixed separately as **TGT-184**, shipped in 1.49: both now
 `D2TG::Poller::_classify_store_error` helper, refusing cleanly with
 `Failed to prepare storage location (REASON) - refusing to start.`
 `lock_path`'s own failure is reproduced live and covered by a new
-regression test; `heartbeat_path` is wrapped identically as belt-and-
-braces - its own failure isn't exercised by the current test's static
-filesystem setup (it always succeeds once `lock_path` has already
-created `.tira`), not because it's impossible to test, just not
-covered by this pass.
+regression test; `heartbeat_path` is wrapped identically - its own
+failure isn't independently exercised by the current test's static
+filesystem setup (it succeeds once `lock_path` has already created
+`.tira`, though an external filesystem change between the two calls
+could still make it fail), not because it's impossible to test, just
+not covered by this pass. A Codex QA-stage review on this ticket also
+found that the `heartbeat_path` failure branch exited before releasing
+the startup lock file `lock_path`/`D2TG::Lock::acquire` had just
+acquired above it - fixed by releasing the lock before that exit. Two
+more pre-existing exit paths with the same lock-leak gap (no-groups-
+configured, and `D2TG::Store->new`'s own TGT-183 failure branch) were
+found in the same review and filed separately as **TGT-185**, not
+fixed here.

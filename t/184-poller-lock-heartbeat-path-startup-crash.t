@@ -28,6 +28,16 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # sabotage .tira again right after it succeeds, or accept a genuine
 # filesystem race, neither of which this pass implements. Both call
 # sites are wrapped identically in the actual code either way.
+#
+# A second Codex QA-stage review finding on this same ticket: the
+# heartbeat_path failure branch ran before D2TG::Lock::release($lock_path)
+# - since heartbeat_path's own eval only runs after D2TG::Lock::acquire
+# already succeeded above it, that exit path leaked the just-acquired
+# lock file. Fixed directly in cli/poller.pl (the release call now runs
+# before that branch's exit 1) - not independently exercised by a test
+# in this file for the same reachability reason as above, but the fix
+# mirrors the exact release-before-exit pattern already used elsewhere
+# in the same script.
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
