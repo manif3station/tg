@@ -165,14 +165,22 @@ if ($@) {
 # below, then a "no bot tokens configured" exit and an exec()-restart-
 # failure die were found to share the identical gap - this END block
 # is a single backstop that releases the lock on every current AND
-# future exit path past this point, without each one needing to be
-# individually found and fixed again. D2TG::Lock::release is
-# idempotent and PID-scoped (only ever unlinks a lock file this exact
-# process still owns), so it is safe to run here even after an
-# explicit release() call elsewhere has already run, or if a different
-# process has since reclaimed the lock file. Does not run on a
-# successful exec() (the process image is replaced, not exited - the
-# same PID keeps holding the same, still-valid lock, correctly).
+# future Perl-managed C<exit>/uncaught C<die> path past this point,
+# without each one needing to be individually found and fixed again.
+# D2TG::Lock::release is idempotent and PID-scoped (only ever unlinks
+# a lock file this exact process still owns), so it is safe to run
+# here even after an explicit release() call elsewhere has already
+# run, or if a different process has since reclaimed the lock file.
+# Does not run on a successful exec() (the process image is replaced,
+# not exited - the same PID keeps holding the same, still-valid lock,
+# correctly). Does NOT cover abrupt termination Perl itself can't
+# trap - SIGKILL always bypasses END, and SIGHUP/SIGQUIT would too in
+# the brief window before the $SIG{TERM}/$SIG{INT} handlers are
+# installed further below (a Codex QA-stage review, third round,
+# correctly rejected an earlier "any exit" overclaim on this point).
+# That gap is exactly what D2TG::Lock's own staleness/eviction logic
+# (TGT-084/TGT-113) already exists to recover from - unrelated to,
+# and not narrowed by, this fix.
 my $lock_acquired = 1;
 END { D2TG::Lock::release($lock_path) if $lock_acquired; }
 

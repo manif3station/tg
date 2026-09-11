@@ -2038,15 +2038,23 @@ a time - this was the fourth instance of the same bug class found
 across TGT-184/TGT-185 - `cli/poller.pl` now has a single `END` block
 placed right after `D2TG::Lock::acquire` succeeds:
 `END { D2TG::Lock::release($lock_path) if $lock_acquired; }`. It
-releases the lock on any exit past that point, current or future,
-without each one needing to be individually found and fixed again.
-`D2TG::Lock::release` is idempotent and PID-scoped (only unlinks a
-lock file this exact process still owns), so it is safe to run
-alongside the existing explicit `release()` calls, and does not fire
-on a successful `exec()` (the process image is replaced, not exited -
-the same PID correctly keeps holding the same lock). The no-bot-tokens
-scenario is covered by a new test case (confirmed red without the
-`END` block, green with it); the `exec()`-failure `die` is not
-independently tested (a deterministic reproduction would need
+releases the lock on every Perl-managed `exit`/uncaught `die` path
+past that point, current or future, without each one needing to be
+individually found and fixed again. `D2TG::Lock::release` is
+idempotent and PID-scoped (only unlinks a lock file this exact
+process still owns), so it is safe to run alongside the existing
+explicit `release()` calls, and does not fire on a successful
+`exec()` (the process image is replaced, not exited - the same PID
+correctly keeps holding the same lock). It does NOT cover abrupt
+termination Perl itself can't trap - `SIGKILL` always bypasses `END`,
+and `SIGHUP`/`SIGQUIT` would too in the brief window before the
+`$SIG{TERM}`/`$SIG{INT}` handlers are installed further down (a third
+Codex QA-stage review round correctly rejected an earlier "any exit"
+overclaim on this point) - that gap is exactly what `D2TG::Lock`'s
+own staleness/eviction logic (TGT-084/TGT-113) already exists to
+recover from, unrelated to and not narrowed by this fix. The
+no-bot-tokens scenario is covered by a new test case (confirmed red
+without the `END` block, green with it); the `exec()`-failure `die`
+is not independently tested (a deterministic reproduction would need
 environment sabotage this pass doesn't implement) but is covered by
 the same mechanism.

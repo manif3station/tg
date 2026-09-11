@@ -19,10 +19,12 @@ Revision history for the tg skill
         lock - a "no bot tokens configured" exit, and the
         exec()-restart-failure die. Rather than patching a fourth
         site individually, added a single END block right after
-        D2TG::Lock::acquire that releases the lock on any exit past
-        that point - a structural fix for the whole bug class.
-        Idempotent and PID-scoped, safe alongside the existing
-        explicit release() calls.
+        D2TG::Lock::acquire that releases the lock on every
+        Perl-managed exit/uncaught die past that point (not SIGKILL
+        or a pre-handler-installation signal, which D2TG::Lock's own
+        staleness/eviction logic already covers) - a structural fix
+        for the whole bug class. Idempotent and PID-scoped, safe
+        alongside the existing explicit release() calls.
 
 1.49  2026-09-11
       - RELIABILITY FIX (TGT-184, a follow-up filed while building
