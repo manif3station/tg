@@ -94,9 +94,10 @@ output can end up in shell scrollback or captured logs like any other
 command's - avoid pasting it somewhere the storage path or chat_id
 shouldn't be seen, the same caution that already applies to any
 `d2 tg.*` command's own output.
-C<masked_token>'s own short-token behavior (a token under 8 characters
-is shown as-is, unmasked) is pre-existing D2TG::Config design already
-relied on by C<cli/status.pl> and C<cli/poller.pl> - unchanged by this
+C<masked_token>'s own short-token behavior (TGT-138: a token of length
+<= 8 is shown as the fixed placeholder C<(short token, not shown)>,
+never shown as-is) is pre-existing D2TG::Config design already relied
+on by C<cli/status.pl> and C<cli/poller.pl> - unchanged by this
 ticket, which only reports whatever C<masked_token> already returns.
 
 =cut
