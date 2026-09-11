@@ -55,12 +55,36 @@ my $store = D2TG::Poller::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-if ( $store->approve( $chat_id, $bot_key ) ) {
+# TGT-195 (found via a Codex QA-stage review sweep on TGT-194, after
+# TGT-194 incorrectly claimed "all known instances of this bug class
+# are now fixed" before this repo-wide sweep was done): these two
+# calls ran unwrapped - the same raw-crash/db-path-leak risk TGT-165/
+#193 already fixed for D2TG::Poller::run_once's own is_allowed/
+# add_pending calls. A locked/busy database at either one died raw,
+# uncaught, printing the real Perl/DBI exception (which can embed the
+# real db_path) to STDERR and exiting non-zero via Perl's own default
+# die-at-top-level behavior, instead of the same clean, scrubbed
+# refusal this project's established pattern provides everywhere else.
+my $approved = eval { $store->approve( $chat_id, $bot_key ) };
+if ($@) {
+    my $reason = D2TG::Poller::_classify_store_error($@);
+    print STDERR "STORE ERROR: approve failed - $reason\n";
+    exit 1;
+}
+
+if ($approved) {
     print "Approved $chat_id\n";
     exit 0;
 }
 
-if ( $store->is_allowed( $chat_id, $bot_key ) ) {
+my $allowed = eval { $store->is_allowed( $chat_id, $bot_key ) };
+if ($@) {
+    my $reason = D2TG::Poller::_classify_store_error($@);
+    print STDERR "STORE ERROR: is_allowed failed - $reason\n";
+    exit 1;
+}
+
+if ($allowed) {
     print STDERR "$chat_id is already allowed - nothing to do\n";
 }
 else {
