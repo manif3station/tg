@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.46).** REFACTOR (TGT-181, found via
+**Status: early implementation (v1.47).** REFACTOR (TGT-182, found via
+a scheduled improvement hunt): `send_voice` and `_send_file` (backing
+`send_photo`/`send_document`) duplicated the identical 5-line multipart
+`reply_to_message_id` field-construction block - extracted into a new
+`_append_reply_to_message_id_field` helper. No behavior change -
+existing tests (`t/32-message-id-and-reply-threading.t`,
+`t/79-outbound-media-send.t`, `t/49-send-message-validates-reply-id.t`)
+all pass unchanged.
+REFACTOR (TGT-181, found via
 a scheduled improvement hunt): `run_once`'s 2-line
 `_record_message_safe` + `$offset_cap` bookkeeping pattern (introduced
 by TGT-178) was duplicated identically at all 5 call sites - extracted

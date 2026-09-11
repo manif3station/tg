@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.47  2026-09-11
+      - REFACTOR (TGT-182, found via a scheduled improvement hunt):
+        send_voice and _send_file (backing send_photo/send_document)
+        duplicated the identical 5-line multipart reply_to_message_id
+        field-construction block ("validate, then if defined append a
+        form-data fragment") - extracted into a new
+        _append_reply_to_message_id_field helper, taking the body by
+        scalar ref (matching TGT-181's own established by-reference
+        pattern for the same reason - the caller's own $body must
+        keep accumulating fragments after the call returns). No
+        behavior change - t/32-message-id-and-reply-threading.t,
+        t/79-outbound-media-send.t, and
+        t/49-send-message-validates-reply-id.t all pass unchanged
+        (verified via a before/after full-suite diff and 100%
+        statement+subroutine coverage on D2TG::Telegram.pm).
+
 1.46  2026-09-11
       - REFACTOR (TGT-181, found via a scheduled improvement hunt):
         run_once's 2-line _record_message_safe + $offset_cap

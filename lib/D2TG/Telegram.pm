@@ -170,6 +170,27 @@ sub _validate_reply_to_message_id {
     return;
 }
 
+sub _append_reply_to_message_id_field {
+    my ( $body_ref, $boundary, $method, $reply_to_message_id ) = @_;
+
+    # TGT-182 (found via a scheduled improvement hunt): the 5-line
+    # "validate, then if defined append a multipart form-data
+    # fragment" pattern appeared identically in send_voice and
+    # _send_file - extracted here, matching this project's own
+    # established "found it twice, extract it" convention
+    # (TGT-167/170/171/172/177/181). $body_ref is a scalar ref, the
+    # same by-reference approach TGT-181's _record_message_and_track_offset
+    # already established, since the caller's own $body must keep
+    # accumulating fragments after this call returns.
+    _validate_reply_to_message_id( $method, $reply_to_message_id );
+    if ( defined $reply_to_message_id ) {
+        $$body_ref .= "--$boundary\r\n"
+          . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
+          . "$reply_to_message_id\r\n";
+    }
+    return;
+}
+
 sub send_message {
     my ( $self, $chat_id, $text, $limit, %opts ) = @_;
 
@@ -201,12 +222,7 @@ sub send_voice {
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
       . "$chat_id\r\n";
 
-    _validate_reply_to_message_id( 'sendVoice', $opts{reply_to_message_id} );
-    if ( defined $opts{reply_to_message_id} ) {
-        $body .= "--$boundary\r\n"
-          . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
-          . "$opts{reply_to_message_id}\r\n";
-    }
+    _append_reply_to_message_id_field( \$body, $boundary, 'sendVoice', $opts{reply_to_message_id} );
 
     $body .= "--$boundary\r\n"
       . qq{Content-Disposition: form-data; name="voice"; filename="$filename"\r\n}
@@ -277,12 +293,7 @@ sub _send_file {
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
       . "$chat_id\r\n";
 
-    _validate_reply_to_message_id( $method, $opts{reply_to_message_id} );
-    if ( defined $opts{reply_to_message_id} ) {
-        $body .= "--$boundary\r\n"
-          . qq{Content-Disposition: form-data; name="reply_to_message_id"\r\n\r\n}
-          . "$opts{reply_to_message_id}\r\n";
-    }
+    _append_reply_to_message_id_field( \$body, $boundary, $method, $opts{reply_to_message_id} );
 
     if ( defined $opts{caption} && length $opts{caption} ) {
 
