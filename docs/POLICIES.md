@@ -2377,3 +2377,47 @@ change (swapping one classification call for a raw-echo pattern) with
 no shell invocation, no new file I/O, and no new external-input
 handling - no system/exec/backtick/piped-open/eval-STRING patterns in
 either touched file.
+
+## TGT-194: eval-wrap retry_failed_download's own store writes
+
+Found via a scheduled JOB-003 hourly bug hunt, reproduced live in a
+`developer-dashboard:latest` container - the same class of issue as
+TGT-132/165/166/186/190/191/192/193. `D2TG::Download::retry_failed_download`
+called `$store->record_message(...)` and `$store->remove_failed_download(...)`
+directly, with no `eval`/classification around either call - the one
+unwrapped `D2TG::Store` write pair in this module. A locked/busy
+database at either one used to die raw straight out of
+`retry_failed_download`, breaking its own documented
+`(1, $local_path)`/`(0, $error)` return contract even though the
+download itself genuinely succeeded, and - since `cli/retry-download.pl`'s
+own batch mode has no `eval` around this call either - crashing the
+whole script mid-loop, silently abandoning every remaining queued row
+in that batch.
+
+Fixed by wrapping both calls in `eval`, classified via
+`D2TG::Poller::_classify_store_error`, matching the established
+`_store_write_safe`/`_record_message_safe`/`persist_offset_safe`
+pattern - the reported `(1, $local_path)` success is unaffected by a
+bookkeeping-write failure, since the download itself did succeed.
+
+New test `t/194-retry-download-store-write-non-fatal.t` (15
+assertions): `record_message` failure (still reports success, failure
+classified and logged, `remove_failed_download` still attempted
+independently), `remove_failed_download` failure (same non-fatal
+guarantee), the no-`media_kind` case (`record_message` correctly never
+attempted, `remove_failed_download`'s own failure still non-fatal), and
+a two-row per-row-isolation check (the first row's store-write failure
+leaves the second row's own independent retry, on a different store
+instance, completely unaffected - standing in for `cli/retry-download.pl`'s
+own batch loop reusing one `$store` across every queued row). Confirmed
+genuinely red against the pre-fix code - the whole test script crashed
+with an uncaught die (`Wstat 6400`, exit 25, "No plan found in TAP
+output") rather than merely failing an assertion, since the raw
+exception propagated straight out of `retry_failed_download` with
+nothing to catch it.
+
+perlsec.pl-style vulnerability-scan audit: pure in-process control flow
+change (adding `eval` wrappers and a classification call) with no
+shell invocation, no new file I/O, and no new external-input handling
+- no system/exec/backtick/piped-open/eval-STRING patterns in either
+touched file.

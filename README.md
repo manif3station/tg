@@ -1,6 +1,23 @@
 # tg
 
-**Status: early implementation (v1.56).** CONSISTENCY FIX (TGT-193,
+**Status: early implementation (v1.57).** RELIABILITY FIX (TGT-194,
+found via a scheduled JOB-003 hourly bug hunt, reproduced live in a
+`developer-dashboard:latest` container, the same class of issue as
+TGT-132/165/166/186/190/191/192/193): `D2TG::Download::retry_failed_download`
+called `$store->record_message(...)` and `$store->remove_failed_download(...)`
+directly, with no `eval`/classification around either call. If either
+died (e.g. a locked/busy database), the exception propagated raw
+straight out of `retry_failed_download`, breaking its own documented
+`(1, $local_path)`/`(0, $error)` return contract even though the
+download itself genuinely succeeded - and, since `cli/retry-download.pl`'s
+own batch mode has no `eval` around this call either, crashed the whole
+script mid-loop, silently abandoning every remaining queued row in
+that batch. Both calls now `eval`-wrapped and classified via
+`D2TG::Poller::_classify_store_error`, matching the established
+`_store_write_safe`/`_record_message_safe`/`persist_offset_safe`
+pattern.
+
+CONSISTENCY FIX (TGT-193,
 found via a scheduled JOB-004 improvement hunt): `D2TG::Poller::run_once`'s
 4 STORE ERROR print blocks (`is_allowed` x3, `add_pending` x1) printed
 the raw DBI/SQLite exception text verbatim to STDERR, instead of

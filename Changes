@@ -1,5 +1,31 @@
 Revision history for the tg skill
 
+1.57  2026-09-11
+      - RELIABILITY FIX (TGT-194, found via a scheduled JOB-003 hourly
+        bug hunt, reproduced live in a developer-dashboard:latest
+        container, the same class of issue as TGT-132/165/166/186/
+        190/191/192/193): D2TG::Download::retry_failed_download called
+        $store->record_message(...) and $store->remove_failed_download(...)
+        directly, with no eval/classification around either call -
+        unlike every other D2TG::Store write call site in this
+        codebase. If either died (e.g. a locked/busy database), the
+        exception propagated raw straight out of retry_failed_download,
+        breaking its own documented (1, $local_path)/(0, $error)
+        return contract even though the download itself genuinely
+        succeeded. cli/retry-download.pl's own batch mode has no eval
+        around this call either, so the exception crashed the whole
+        script mid-loop, silently abandoning every remaining queued
+        row in that batch. Both calls now eval-wrapped and classified
+        via D2TG::Poller::_classify_store_error, matching the
+        established _store_write_safe/_record_message_safe/
+        persist_offset_safe pattern - the reported (1, $local_path)
+        success is unaffected by a bookkeeping-write failure, since
+        the download itself did succeed. New test
+        t/194-retry-download-store-write-non-fatal.t (15 assertions),
+        confirmed genuinely red against the pre-fix code (the whole
+        test script crashed with an uncaught die, no TAP plan
+        produced).
+
 1.56  2026-09-11
       - CONSISTENCY FIX (TGT-193, found via a scheduled JOB-004
         improvement hunt): D2TG::Poller::run_once's 4 STORE ERROR print

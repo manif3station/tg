@@ -268,6 +268,18 @@ row still in the queue rather than a message nowhere at all. On failure,
 the row is left untouched - never removed - so the caller (typically
 C<cli/retry-download.pl>) can retry again later.
 
+Both the C<record_message> and C<remove_failed_download> calls (TGT-194,
+found via a scheduled JOB-003 hourly bug hunt, reproduced live in a
+C<developer-dashboard:latest> container) are C<eval>-wrapped and
+classified via C<D2TG::Poller::_classify_store_error> - a locked/busy
+database at either one used to die raw, breaking this function's own
+documented return contract even though the download itself genuinely
+succeeded, and crashing C<cli/retry-download.pl>'s own per-row batch
+loop mid-run since it has no C<eval> around this call either. A
+bookkeeping-write failure is now logged non-fatally to STDERR as
+C<STORE ERROR [chat_id]: ... failed - REASON> and does not affect the
+reported C<(1, $local_path)> success.
+
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 
 Keeps the attachment vault (TGT-052, typically
