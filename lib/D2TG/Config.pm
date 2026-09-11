@@ -775,6 +775,19 @@ This validation is now delegated to L</shift_flag_value> (TGT-072),
 which checks generically for any flag-like value (starts with C<->)
 rather than only the two specific sibling flag names.
 
+Dies (TGT-202, found via a scheduled JOB-003 hourly bug hunt) if the
+same C<(chat_id, bot token)> pair appears more than once across all
+groups, including the appended env pair - the env-merge behavior above
+means a caller who already declared C<--chat_id $id --bot $token>
+explicitly and I<also> has C<D2TG_CHAT_ID>/C<D2TG_TOKEN> set to the
+exact same values would otherwise silently get two separate group
+entries sharing that one pair, and C<cli/poller.pl>'s own C<@pairs>
+construction would poll that one bot token twice per cycle, racing its
+own C<get_offset>/C<set_offset> calls against itself. A genuinely
+distinct configuration - two different chat ids, or the same chat id
+with two different bot tokens - is unaffected; only an EXACT duplicate
+pair refuses.
+
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 
 Resolves a Developer Dashboard path alias (TGT-051 - the left column of

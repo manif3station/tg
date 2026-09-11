@@ -2614,3 +2614,49 @@ placeholder text matches `D2TG::Config.pm`'s own real return value
 (not just some arbitrary string), and that no other doc/POD in the
 repo repeats the stale claim. Confirmed genuinely red against the
 pre-fix code (2/7 subtests failed).
+
+## TGT-202: bot_groups silently created a duplicate (chat_id, bot_token) pair
+
+A scheduled JOB-003 hourly bug hunt found that `D2TG::Config::bot_groups`
+folds `D2TG_CHAT_ID`/`D2TG_TOKEN` in as an implicit trailing group
+(TGT-049) whenever they're set, even when the CLI already declared an
+identical `--chat_id`/`--bot` pair explicitly - producing two group
+entries sharing the exact same `(chat_id, bot token)` pair. A plausible
+real operator setup (a wrapper/systemd unit setting the env vars as
+"defaults" while also passing the same values explicitly via CLI flags
+for clarity) would silently double that pair's own polling work every
+cycle: `cli/poller.pl`'s own `@pairs` construction builds two separate
+`D2TG::Telegram` instances for the identical bot token, each
+independently calling `$store->get_offset($bot_key)` and later
+`set_offset($bot_key, ...)` within the same poll cycle - racing each
+other and Telegram's own `getUpdates` offset semantics for that one
+token.
+
+`cli/poller.pl`'s existing TGT-164 duplicate-guard only refused a
+*malformed* env `chat_id` (failing `require_chat_id_or_warn`'s shape
+check) - it never checked whether a well-formed env pair was an exact
+duplicate of one the CLI already declared.
+
+Fixed by refusing loudly: `bot_groups` now dies with a clear message
+naming the duplicate whenever the same `(chat_id, token)` pair appears
+more than once across all groups (including the env-folded one) -
+matching this project's own established preference for explicit
+refusals over silent best-effort (e.g. TGT-107/TGT-122's own
+precedent), since a silent de-dup could just as easily mask a genuine
+operator typo the other direction. A genuinely distinct multi-bot
+configuration is unaffected - both "two different chat_ids" and "the
+same chat_id with two different bot tokens" remain valid, untouched
+shapes.
+
+New test `t/202-duplicate-bot-pair-refused.t`: unit-level checks
+against `bot_groups` directly, plus a CLI-level subprocess check
+against the real `cli/poller.pl` entrypoint (matching TGT-185's own
+established startup-refusal test pattern). The CLI-level check uses a
+bounded fork+setpgrp+alarm-timeout+process-group-kill helper (matching
+`D2TG::Transcribe`'s own established process-group-kill pattern,
+TGT-128) rather than an indefinite wait, since pre-fix the poller
+never exits on its own for this case - it proceeds into a real
+long-poll against Telegram with a fake token. Confirmed genuinely red
+against the pre-fix code (2/8 subtests failed, and the CLI-level
+subprocess had to be killed by the test's own timeout rather than
+exiting cleanly).

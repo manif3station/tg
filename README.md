@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.61).** DOC FIX (TGT-201, found via
+**Status: early implementation (v1.62).** RELIABILITY FIX (TGT-202,
+found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::bot_groups`
+now refuses loudly when D2TG_CHAT_ID/D2TG_TOKEN exactly duplicate an
+explicit CLI `--chat_id`/`--bot` pair - previously it silently created
+two group entries for the same `(chat_id, bot token)` pair, and
+`cli/poller.pl` would poll that one bot token twice per cycle, racing
+its own offset reads/writes against itself.
+
+DOC FIX (TGT-201, found via
 a scheduled JOB-003 hourly bug hunt): `cli/whoami.pl`'s own POD
 described `masked_token`'s short-token behavior as "shown as-is,
 unmasked" - true before TGT-138, but TGT-138 already fixed
