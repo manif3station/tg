@@ -1394,4 +1394,15 @@ suffix fall back to the original Telegram-payload-only behavior: a
 sanitized/truncated (5000 chars, TGT-035) snippet of the original text,
 or its media kind if the original had none.
 
+The 4 C<STORE ERROR> lines for C<is_allowed>/C<add_pending> failures
+(TGT-193, found via a scheduled JOB-004 improvement hunt) now classify
+the exception via C<_classify_store_error> instead of echoing the raw
+C<$@> text verbatim - these 4 call sites predated C<_classify_store_error>
+(TGT-165, before TGT-167 extracted the shared helper) and were never
+revisited to match the pattern every other C<D2TG::Store>-write error
+path in this module already uses (C<_record_message_safe>,
+C<persist_offset_safe>). A raw DBI/SQLite exception can embed the
+database file's own real path - the same disclosure risk TGT-133
+established as this project's standard to avoid.
+
 =cut
