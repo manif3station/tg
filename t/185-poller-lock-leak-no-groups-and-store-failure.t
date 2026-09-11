@@ -29,6 +29,21 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # "D2TG_CHAT_ID is not set..." from the earlier guard, never reaching
 # lock_path/heartbeat_path/Lock::acquire at all - so no lock is ever
 # held to leak in that case. Scope narrowed to the one reachable path.
+#
+# A second Codex QA-stage review round (on this ticket's own fix) found
+# two MORE reachable exit paths sharing the identical gap: the "no bot
+# tokens configured" exit (a --chat_id group with no --bot, and
+# D2TG_TOKEN unset) and the exec()-restart-failure die further down in
+# cli/poller.pl. Rather than adding a third/fourth explicit per-site
+# D2TG::Lock::release() call, cli/poller.pl now has a single END block
+# right after D2TG::Lock::acquire succeeds that releases the lock on
+# any exit past that point - a structural fix for the whole bug class
+# instead of another one-off patch. The no-bot-tokens scenario is
+# covered below; the exec()-failure die is not independently exercised
+# by a test in this file (triggering a real exec() failure
+# deterministically would need environment sabotage this pass doesn't
+# implement) but is covered by the same END-block mechanism as every
+# other exit path.
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
@@ -83,6 +98,28 @@ sub run_capturing_stderr {
 
     my $lock_path = File::Spec->catfile( $fake_db_dir, '.tira', 'telegram.pid' );
     ok( !-e $lock_path, 'the startup lock file does not survive a D2TG::Store->new failure' );
+}
+
+{
+    # "No bot tokens configured" exit (a --chat_id group with no --bot,
+    # D2TG_TOKEN unset) - lock_path/heartbeat_path/D2TG::Lock::acquire/
+    # D2TG::Store->new all succeed first, then this check fires. A
+    # second Codex QA-stage review round found this leaked the lock the
+    # same way the Store->new branch above did - now covered by the
+    # END-block backstop instead of a third explicit release() call.
+    my $fake_db_dir = tempdir( CLEANUP => 1 );
+    setup_mandatory_db_env( $Bin, $fake_db_dir );
+    local %ENV = %ENV;
+    delete $ENV{D2TG_TOKEN};
+    delete $ENV{D2TG_CHAT_ID};
+
+    my ( $out, $rc, $err ) = run_capturing_stderr( $poller_cli, '--chat_id', '12345' );
+
+    isnt( $rc, 0, 'a startup-time no-bot-tokens refusal exits non-zero' );
+    like( $err, qr/No bot tokens configured/, 'refuses with the expected no-bot-tokens message' );
+
+    my $lock_path = File::Spec->catfile( $fake_db_dir, '.tira', 'telegram.pid' );
+    ok( !-e $lock_path, 'the startup lock file does not survive a no-bot-tokens refusal' );
 }
 
 done_testing();

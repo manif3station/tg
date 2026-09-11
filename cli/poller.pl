@@ -159,6 +159,23 @@ if ($@) {
     exit 1;
 }
 
+# TGT-185 (Codex QA-stage review, second round): rather than continuing
+# to patch one leaking exit path at a time - heartbeat_path's and
+# D2TG::Store->new's own failure exits were fixed explicitly above/
+# below, then a "no bot tokens configured" exit and an exec()-restart-
+# failure die were found to share the identical gap - this END block
+# is a single backstop that releases the lock on every current AND
+# future exit path past this point, without each one needing to be
+# individually found and fixed again. D2TG::Lock::release is
+# idempotent and PID-scoped (only ever unlinks a lock file this exact
+# process still owns), so it is safe to run here even after an
+# explicit release() call elsewhere has already run, or if a different
+# process has since reclaimed the lock file. Does not run on a
+# successful exec() (the process image is replaced, not exited - the
+# same PID keeps holding the same, still-valid lock, correctly).
+my $lock_acquired = 1;
+END { D2TG::Lock::release($lock_path) if $lock_acquired; }
+
 # TGT-113 (live-experienced incident: a poller crashed mid-version-bump
 # race, never auto-restarted, and a SEPARATE orphaned instance under a
 # different PID - with a stale command line missing '-d tira' - was
@@ -331,6 +348,11 @@ for my $group (@$groups) {
     }
 }
 
+# TGT-185: this exit, and the exec()-failure die further down, were
+# found by a Codex QA-stage review to leak the startup lock the same
+# way heartbeat_path's/D2TG::Store->new's own exits did - covered by
+# the END-block backstop above rather than a third explicit
+# per-site release() call.
 if ( !@pairs ) {
     print STDERR "No bot tokens configured (a --chat_id group with no --bot, and D2TG_TOKEN not set) - refusing to start.\n";
     exit 1;
