@@ -2660,3 +2660,61 @@ long-poll against Telegram with a fake token. Confirmed genuinely red
 against the pre-fix code (2/8 subtests failed, and the CLI-level
 subprocess had to be killed by the test's own timeout rather than
 exiting cleanly).
+
+## TGT-203: run_capturing_stderr duplicated identically across 6 test files
+
+A scheduled JOB-004 improvement hunt found the exact same 8-line
+`run_capturing_stderr(@cmd)` helper hand-copied into 6 separate test
+files (`t/59`, `t/77`, `t/183`, `t/184`, `t/185`, `t/186`) - runs a
+command via backtick with STDERR redirected to a per-file tmp path,
+returns `($out, $rc, $err)`, unlinks the tmp file. Byte-for-byte
+identical except each file's own hardcoded
+`/tmp/d2tg-NNN-stderr.$$` suffix. Matches this project's own
+established "found it twice (or more), extract it" duplication-removal
+precedent (`shift_flag_value` TGT-072, `_classify_store_error`
+TGT-167, `open_store_or_die` TGT-186, `resolve_alias_dir_or_die`
+TGT-172, `extract_db_flag_or_die` TGT-177, `D2TG::Poller::store_write_safe`
+TGT-198) - just in test infrastructure (`t/lib/`) rather than
+production `lib/` code this time.
+
+Extracted into the existing `t/lib/Test/CaptureStdio.pm` (which
+already held an unrelated `capture_stdio` helper for a genuinely
+different purpose - in-process STDOUT/STDERR file-descriptor
+redirection around a coderef, vs. this one's external-subprocess
+backtick capture; confirmed distinct before extracting, not merged).
+Uses `File::Temp::tempfile` instead of a hand-rolled `$$`-suffixed
+path, so no caller needs to pick a unique suffix at all. `t/202`'s own
+intentionally-different `fork`+`setpgrp`+timeout+kill helper stays
+separate - it exists specifically because that one test's own
+subprocess can hang indefinitely pre-fix, unlike these 6 callers'
+subprocess, which always exits on its own.
+
+**A real regression caught and fixed during implementation, not by
+Codex (unavailable all session, transient sandbox failures) but by
+this project's own full-suite gate**: naively adding
+`use lib "$Bin/lib";` to `t/59` (needed to import the new shared
+helper) made that file's own pre-existing `SKIP:` block - which
+gates a real-Developer::Dashboard-required test behind
+`eval { require Developer::Dashboard; Developer::Dashboard->can('d2') }`
+- wrongly succeed: `$Bin/lib` also contains a *fake* `Developer::Dashboard`
+stub (used elsewhere to give a spawned subprocess a working `d2()` via
+`PERL5LIB`, matching `Test::MandatoryDb::setup_mandatory_db_env`'s own
+pattern), which the in-process `require` now found and accepted as
+"real enough". The gated test then ran for real instead of correctly
+skipping - but `t/59` never exports `PERL5LIB`, so its own actual
+subprocess (a real `cli/history.pl` invocation) never saw that fake
+stub either, and died with `Undefined subroutine &Developer::Dashboard::d2`.
+Fixed by loading `Test::CaptureStdio` via its own explicit file path
+(`require File::Spec->catfile(...); Test::CaptureStdio->import(...)`)
+in `t/59` specifically, leaving `@INC` - and the SKIP gate's own
+detection - untouched; the other 5 files already had `use lib "$Bin/lib"`
+before this ticket (via `Test::MandatoryDb`), so they carry no such
+risk and keep the plain `use Test::CaptureStdio qw(run_capturing_stderr);`
+form.
+
+New structural (source-inspection) regression test
+`t/203-run-capturing-stderr-shared-helper.t`, matching this project's
+own established precedent (`t/104`, `t/88`, `t/195`, `t/198`, `t/201`,
+`t/202`) - confirmed genuinely red against the pre-fix code (14/15
+subtests failed). Full suite (sequential and `-j4` parallel) both PASS
+with every existing assertion in all 6 migrated files unmodified.

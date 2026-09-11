@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.63  2026-09-11
+      - TEST INFRA (TGT-203, found via a scheduled JOB-004 improvement
+        hunt): the identical run_capturing_stderr(@cmd) test helper
+        was hand-copied into 6 test files (t/59, t/77, t/183, t/184,
+        t/185, t/186), differing only in each file's own hardcoded
+        /tmp/d2tg-NNN-stderr.$$ tempfile suffix. Extracted into
+        t/lib/Test/CaptureStdio.pm (uses File::Temp::tempfile instead
+        of a hand-rolled suffix); all 6 call sites now import it
+        instead of defining their own copy. Pure refactor, no
+        behavior change. t/202's own intentionally-different
+        fork+setpgrp+timeout+kill helper stays separate. Caught and
+        fixed a real regression during implementation: t/59's own
+        initial `use lib "$Bin/lib"` addition made its SKIP block's
+        `require Developer::Dashboard` probe wrongly find t/lib's
+        fake stub, causing a gated real-alias test to run and fail
+        instead of correctly skipping - fixed by loading
+        Test::CaptureStdio via its own explicit file path there
+        instead, leaving @INC untouched.
+
 1.62  2026-09-11
       - RELIABILITY FIX (TGT-202, found via a scheduled JOB-003 hourly
         bug hunt): D2TG::Config::bot_groups folded D2TG_CHAT_ID/

@@ -1,6 +1,12 @@
 # tg
 
-**Status: early implementation (v1.62).** RELIABILITY FIX (TGT-202,
+**Status: early implementation (v1.63).** TEST INFRA (TGT-203, found
+via a scheduled JOB-004 improvement hunt): `run_capturing_stderr` was
+duplicated identically across 6 test files - extracted into
+`t/lib/Test/CaptureStdio.pm`. No user-facing behavior change; every
+existing test assertion still passes.
+
+RELIABILITY FIX (TGT-202,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::bot_groups`
 now refuses loudly when D2TG_CHAT_ID/D2TG_TOKEN exactly duplicate an
 explicit CLI `--chat_id`/`--bot` pair - previously it silently created
