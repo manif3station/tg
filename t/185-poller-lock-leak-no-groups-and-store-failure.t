@@ -7,6 +7,7 @@ use File::Path qw(make_path);
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-185 (found via a Codex QA-stage review on TGT-184): lock_path
 # and heartbeat_path succeed (so D2TG::Lock::acquire acquires the
@@ -46,16 +47,6 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # other exit path.
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-185-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 {
     # Confirms the dead-code finding above: with no --chat_id/--bot

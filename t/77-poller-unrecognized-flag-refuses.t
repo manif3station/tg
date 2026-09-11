@@ -6,6 +6,7 @@ use File::Spec;
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-107 (live-experienced incident, user-supplied /tmp/missing2.md,
 # item 1): cli/poller.pl silently accepted ANY unrecognized flag
@@ -18,16 +19,6 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # is the dangerous side effect.
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-77-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 {
     my $fake_db_dir = tempdir( CLEANUP => 1 );

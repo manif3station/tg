@@ -6,6 +6,7 @@ use File::Spec;
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-184 (found while building TGT-183's own fix, a related but
 # distinct finding): cli/poller.pl's lock_path(...) and
@@ -40,16 +41,6 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # in the same script.
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-184-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 {
     # Root-proof, same technique TGT-183's own test uses: pre-create

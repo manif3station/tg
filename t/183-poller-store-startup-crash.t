@@ -6,6 +6,7 @@ use File::Spec;
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-183 (found via a scheduled JOB-003 hourly bug hunt, reproduced
 # live in the perl-test Docker container): cli/poller.pl's
@@ -21,16 +22,6 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # tracked separately as TGT-184.)
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-183-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 {
     # The test container runs as root, so a plain chmod-to-read-only

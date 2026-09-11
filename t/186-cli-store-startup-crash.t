@@ -7,6 +7,7 @@ use File::Path qw(make_path);
 use File::Temp qw(tempdir);
 use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live
 # against cli/history.pl): 7 cli/*.pl scripts (attachment, text-only-
@@ -21,16 +22,6 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # SQLite cannot open a directory as a database file, regardless of
 # permissions or root), with each script's own minimal required
 # positional args so every one reaches the D2TG::Store->new call.
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-186-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 sub assert_clean_refusal {
     my (%args) = @_;

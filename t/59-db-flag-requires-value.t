@@ -3,6 +3,8 @@ use warnings;
 use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
+use lib "$Bin/lib";
+use Test::CaptureStdio qw(run_capturing_stderr);
 
 # TGT-071: a bare trailing --db/-d, or one immediately followed by
 # another flag, must not silently swallow that flag's own name as the
@@ -22,16 +24,6 @@ my $reply_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'reply.pl' );
 my $approve_cli  = File::Spec->catfile( $Bin, '..', 'cli', 'approve.pl' );
 my $unread_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'unread.pl' );
 my $poller_cli   = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
-
-sub run_capturing_stderr {
-    my (@cmd) = @_;
-    my $err_file = "/tmp/d2tg-59-stderr.$$";
-    my $out = `@cmd 2>$err_file`;
-    my $rc  = $? >> 8;
-    my $err = do { open my $fh, '<', $err_file or die $!; local $/; <$fh> };
-    unlink $err_file;
-    return ( $out, $rc, $err );
-}
 
 {
     local $ENV{D2TG_DB};
