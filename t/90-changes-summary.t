@@ -152,7 +152,14 @@ CHANGES
 # changes_summary's own priority order (env var checked before
 # default_root, identical to state_db_path's own already-tested
 # priority order in t/10-state-path.t) that had no test coverage at
-# all, matching the live evidence rather than contradicting it.
+# all, matching the live evidence rather than contradicting it. This
+# test unit-tests changes_summary's own env-var-vs-default_root
+# priority logic in isolation (a Codex documentation-stage review
+# finding: it does not itself integration-test SkillDispatcher or
+# exercise a real `d2 tg.poller` dispatch - that verification was done
+# manually, live, in a developer-dashboard:latest container and on
+# this host's own real installed poller, not captured as an automated
+# test here).
 {
     my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
 Revision history for the tg skill

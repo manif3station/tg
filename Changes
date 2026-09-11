@@ -6,13 +6,17 @@ Revision history for the tg skill
         notices missing TGT-112's own Changes-line summary. Traced
         Developer::Dashboard::SkillDispatcher's own _skill_env/
         dispatch/exec_command (a real d2 tg.<command> dispatch sets
-        DEVELOPER_DASHBOARD_SKILL_ROOT via local %ENV = (%ENV, %env)
-        before launching the skill command, persisting for the whole
-        child process's lifetime including a later exec()-based
-        self-restart, which inherits the parent's environment by
-        default) and confirmed changes_summary correctly returns the
+        DEVELOPER_DASHBOARD_SKILL_ROOT before launching the skill
+        command - dispatch via local %ENV = (%ENV, %env), a
+        child-process-scoped system() call; exec_command via a
+        non-local %ENV = (%ENV, %env) right before its own final exec
+        - both persist for the whole resulting process's lifetime,
+        including a later exec()-based self-restart, which inherits
+        the calling process's environment by default) and confirmed
+        changes_summary correctly returns the
         summary when .env's VERSION and the Changes file's own header
-        entry match exactly - also independently confirmed live on
+        entry match exactly - confirmed both in a
+        developer-dashboard:latest container and independently on
         this host's own real, running installed poller (its
         1.43->1.49 restart notice included the summary correctly).
         changes_summary DOES silently return undef with zero
@@ -25,7 +29,9 @@ Revision history for the tg skill
         changes_summary's env-var-priority code path (state_db_path's
         identical priority order was already tested in
         t/10-state-path.t) had no test coverage at all; new regression
-        test in t/90-changes-summary.t closes it.
+        test in t/90-changes-summary.t closes it. The silent-undef-on-
+        any-mismatch fragility itself was filed separately as TGT-190
+        to add a diagnostic, not fixed here.
 
 1.51  2026-09-11
       - BUG FIX (TGT-186, found via a scheduled JOB-003 hourly bug

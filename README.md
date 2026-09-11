@@ -5,15 +5,19 @@ live user report (budget project) observed a version-bump restart
 notice missing TGT-112's own Changes-line summary. Traced
 `Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
 `exec_command` (a real `d2 tg.<command>` dispatch sets
-`DEVELOPER_DASHBOARD_SKILL_ROOT` via `local %ENV = (%ENV, %env)`
-before launching the skill command, persisting for the whole child
-process's lifetime including a later `exec()`-based self-restart,
-which inherits the parent's environment by default) and confirmed
+`DEVELOPER_DASHBOARD_SKILL_ROOT` before launching the skill command -
+`dispatch` via `local %ENV = (%ENV, %env)`, a child-process-scoped
+`system()` call; `exec_command` via a non-local `%ENV = (%ENV, %env)`
+right before its own final `exec` - both persist for the whole
+resulting process's lifetime, including a later `exec()`-based
+self-restart, which inherits the calling process's environment by
+default) and confirmed
 `changes_summary` correctly returns the summary when `.env`'s
 `VERSION` and the `Changes` file's own header entry match exactly -
-also independently confirmed live on this host's own real, running
-installed poller (its 1.43->1.49 restart notice included the summary
-correctly). `changes_summary` DOES silently return `undef` with zero
+confirmed both in a `developer-dashboard:latest` container and
+independently on this host's own real, running installed poller (its
+1.43->1.49 restart notice included the summary correctly).
+`changes_summary` DOES silently return `undef` with zero
 diagnostic on any mismatch (a missing entry, or even a trivial format
 difference like a trailing `.0`) - a real, confirmable fragility, but
 not independently reproducible against the current codebase for the

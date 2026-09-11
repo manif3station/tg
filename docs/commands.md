@@ -188,7 +188,8 @@ reproducible against the current codebase for the original report's
 own specific incident (many versions behind). `changes_summary` does
 silently omit with no diagnostic on ANY version-string mismatch
 (including a trivial format difference), a known fragility - not
-independently confirmed as the original incident's actual cause.
+independently confirmed as the original incident's actual cause,
+filed separately as **TGT-190** to add a diagnostic on that miss.
 
 Events printed:
 

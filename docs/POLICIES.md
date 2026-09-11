@@ -2108,10 +2108,13 @@ cli/poller.pl` invocation) and confirmed
 `$ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}` resolves correctly to the
 installed skill root (traced through
 `Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
-`exec_command` - both dispatch paths set it via `local %ENV = (%ENV,
-%env)` before launching the skill command, so it persists for the
-whole child process's lifetime including a later `exec()`-based
-self-restart, which inherits the parent's environment by default).
+`exec_command` - both dispatch paths set it before launching the
+skill command, though not identically: `dispatch` via `local %ENV =
+(%ENV, %env)` scoped to its own `system()` call, `exec_command` via a
+non-local `%ENV = (%ENV, %env)` right before its own final `exec`.
+Either way it persists for the whole resulting process's lifetime
+including a later `exec()`-based self-restart, which inherits the
+calling process's environment by default).
 `changes_summary` correctly returned the summary when `.env`'s
 `VERSION` and the `Changes` file's own header entry matched exactly -
 also independently confirmed live on this host's own real, running
@@ -2125,4 +2128,6 @@ many versions and fixes behind). Closed a real, independently-found
 gap instead: `changes_summary`'s env-var-priority code path
 (`state_db_path`'s identical priority order was already tested in
 `t/10-state-path.t`) had no test coverage at all - new regression
-test in `t/90-changes-summary.t` closes it.
+test in `t/90-changes-summary.t` closes it. The silent-`undef`-on-any-
+mismatch fragility itself was filed separately as **TGT-190** to add
+a diagnostic, not fixed here.
