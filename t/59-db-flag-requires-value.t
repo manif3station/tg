@@ -3,8 +3,18 @@ use warnings;
 use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
-use lib "$Bin/lib";
-use Test::CaptureStdio qw(run_capturing_stderr);
+
+# TGT-203: loads Test::CaptureStdio by its own explicit file path
+# rather than `use lib "$Bin/lib"` - adding $Bin/lib to @INC here
+# would make the SKIP block below's own `require Developer::Dashboard`
+# probe find t/lib/Developer/Dashboard.pm (a fake stub used elsewhere
+# to give a spawned subprocess a working d2() via PERL5LIB) and
+# wrongly conclude a real Developer::Dashboard is available - this
+# file's own subprocess calls never export PERL5LIB, so that fake
+# stub is never actually visible to them, and the test would fail for
+# real instead of correctly skipping.
+require File::Spec->catfile( $Bin, 'lib', 'Test', 'CaptureStdio.pm' );
+Test::CaptureStdio->import(qw(run_capturing_stderr));
 
 # TGT-071: a bare trailing --db/-d, or one immediately followed by
 # another flag, must not silently swallow that flag's own name as the
