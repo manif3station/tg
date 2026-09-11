@@ -430,6 +430,27 @@ sub run_once {
                         print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: "
                           . "failed to queue for retry too: $queue_error\n";
                     }
+                    else {
+                        # TGT-204 (a real, live-reported visibility
+                        # gap): the MEDIA DOWNLOAD ERROR line above
+                        # goes to STDERR only, which never reaches the
+                        # monitor job's own stdout-fed tira.policy.bridge
+                        # notification stream - a queued failed
+                        # download was otherwise invisible until a
+                        # human/agent thought to read the poller's own
+                        # raw output directly or ran
+                        # `d2 tg.retry-download --all` speculatively.
+                        # Printed only when the queue write itself
+                        # succeeded (the "else" above already reports a
+                        # failure to queue), matching NEW TG MEDIA's
+                        # own STDOUT visibility and naming the exact
+                        # recovery command, same convention as
+                        # _print_attachment_template's own
+                        # GET ATTACHMENT WITH line.
+                        print "$ts NEW TG MEDIA FAILED [$chat_id] $sender: "
+                          . "$media_kind$caption_note - queued for retry, "
+                          . "RETRY WITH: d2 tg.retry-download --all\n";
+                    }
                 }
             }
         }

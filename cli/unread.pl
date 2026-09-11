@@ -52,11 +52,28 @@ my @unread = $store->unread_messages;
 
 if ( !@unread ) {
     print "No unread messages.\n";
-    exit 0;
+}
+else {
+    for my $msg (@unread) {
+        print "[$msg->{chat_id}] msg #$msg->{message_id} $msg->{sender} ($msg->{created_at}): $msg->{summary}\n";
+    }
 }
 
-for my $msg (@unread) {
-    print "[$msg->{chat_id}] msg #$msg->{message_id} $msg->{sender} ($msg->{created_at}): $msg->{summary}\n";
+# TGT-204 (a real, live-reported visibility gap): a queued failed
+# media download used to be invisible to this command entirely - it's
+# not an unread message (it was never recorded into message history
+# at all, only queued), so it never appeared here even though it's
+# exactly the kind of "something needs your attention" state this
+# command exists to surface. Listed separately, after the unread
+# messages, naming the exact recovery command - matching
+# NEW TG MEDIA FAILED's own poller-side visibility fix.
+my @queued_failures = @{ $store->failed_downloads };
+if (@queued_failures) {
+    print "\n" if @unread;
+    print "Queued failed downloads (RETRY WITH: d2 tg.retry-download --all):\n";
+    for my $row (@queued_failures) {
+        print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}: $row->{media_kind} - $row->{error}\n";
+    }
 }
 
 =head1 NAME
