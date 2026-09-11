@@ -338,6 +338,30 @@ sub bot_groups {
         }
     }
 
+    # TGT-202 (found via a scheduled JOB-003 hourly bug hunt): the env
+    # fold-in above pushes D2TG_CHAT_ID/D2TG_TOKEN as a brand new
+    # trailing --chat_id/--bot pair, even when the CLI already
+    # declared an identical --chat_id/--bot pair explicitly - two
+    # separate group entries sharing the exact same (chat_id, token)
+    # pair. cli/poller.pl's own @pairs construction would then poll
+    # that one bot token twice per cycle, racing its own get_offset/
+    # set_offset calls against itself. Refused loudly (matching this
+    # project's own established preference for explicit refusals over
+    # silent best-effort, e.g. TGT-107/TGT-122) rather than silently
+    # de-duplicated, since a silent drop could just as easily mask a
+    # genuine operator typo the other direction.
+    my %seen_pair;
+    for my $group (@groups) {
+        for my $token ( @{ $group->{bots} } ) {
+            my $key = "$group->{chat_id}\0$token";
+            die "D2TG::Config::bot_groups: duplicate (chat_id, bot token) pair - "
+              . "chat_id $group->{chat_id} is configured with the same bot token "
+              . "more than once (check for an explicit --chat_id/--bot pair that "
+              . "exactly duplicates D2TG_CHAT_ID/D2TG_TOKEN)\n"
+              if $seen_pair{$key}++;
+        }
+    }
+
     return ( \@groups, @rest );
 }
 
