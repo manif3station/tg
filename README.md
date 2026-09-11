@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.47).** REFACTOR (TGT-182, found via
+**Status: early implementation (v1.48).** RELIABILITY FIX (TGT-183,
+found via a scheduled hourly bug hunt, reproduced live): `cli/poller.pl`'s
+`D2TG::Store->new(...)` startup call was unwrapped - a storage-open
+failure at that specific step (e.g. a colliding db-file path, a
+read-only mount) crashed the poller with a raw, uncaught Perl
+exception that could embed the real db path, instead of the clean,
+scrubbed refusal `require_existing_base_dir`/`D2TG::Lock::acquire`
+already produce for their own failures. Now wrapped and classified,
+matching TGT-133's own established scrubbing precedent. Two earlier
+startup steps (`lock_path`/`heartbeat_path`) share the same unwrapped-
+`make_path` risk and are tracked separately as TGT-184, not fixed
+here.
+REFACTOR (TGT-182, found via
 a scheduled improvement hunt): `send_voice` and `_send_file` (backing
 `send_photo`/`send_document`) duplicated the identical 5-line multipart
 `reply_to_message_id` field-construction block - extracted into a new

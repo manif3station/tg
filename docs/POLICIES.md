@@ -1973,3 +1973,24 @@ unaffected) so `_probe_duration` can capture ffprobe's output the same
 killable way. A timed-out probe falls back to 0 duration exactly like
 every other probe failure mode already did - the poller no longer
 blocks to get there.
+
+A third finding, **TGT-183**, shipped in 1.48, found by a scheduled
+JOB-003 hourly bug hunt: `cli/poller.pl`'s `D2TG::Store->new(...)`
+startup call was unwrapped, unlike `require_existing_base_dir`/
+`D2TG::Lock::acquire`, which already refuse loudly and cleanly on
+their own failures. Reproduced live in the `perl-test` Docker container:
+pointing the resolved db path at a location `DBI->connect` cannot open
+(a directory sitting where the database file should be) made the
+poller die with a raw, uncaught Perl exception instead of a clean
+refusal, and the raw exception text can embed the real db path -
+exactly the information-disclosure surface TGT-133 already closed off
+at every OTHER call site, but not this one. Fixed by wrapping the call
+in `eval` and classifying the error via the existing
+`D2TG::Poller::_classify_store_error` helper, matching every sibling
+startup check's own behavior: a clean `Failed to open local storage
+(REASON) - refusing to start.` message, never the raw exception. While
+building this fix, a related but distinct finding surfaced: `lock_path`
+and `heartbeat_path` (both called earlier in the same startup
+sequence, both unwrapped) independently call `make_path` on the same
+`.tira` directory and can die the identical raw way if it cannot be
+created - tracked separately as **TGT-184**, not fixed by this entry.

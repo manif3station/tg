@@ -243,13 +243,32 @@ $SIG{INT}  = sub { $shutting_down = 1; D2TG::Transcribe::kill_current() };
 
 my $skill_root = File::Spec->catdir( $Bin, '..' );
 
-my $store = D2TG::Store->new(
-    db_path => D2TG::Config::state_db_path(
-        default_root => $skill_root,
-        base_dir      => $base_dir,
-    ),
-    admin_chat_id => [ map { $_->{chat_id} } @$groups ],
-);
+# TGT-183 (found via a scheduled JOB-003 hourly bug hunt, reproduced
+# live): this call was unwrapped, unlike require_existing_base_dir/
+# D2TG::Lock::acquire above, which already refuse loudly and cleanly
+# on their own failures - a startup-time storage failure here (e.g. a
+# directory sitting where the database file should be, a read-only
+# filesystem) instead died raw. The raw exception is never echoed
+# (matches TGT-133's own established scrubbing precedent for a DBI/
+# SQLite error, via the identical classification
+# D2TG::Poller::_record_message_safe already uses) - only a short,
+# fixed reason, since it can embed the real db_path. (lock_path and
+# heartbeat_path above share the identical unwrapped-make_path risk
+# and are NOT fixed by this wrap - tracked separately as TGT-184.)
+my $store = eval {
+    D2TG::Store->new(
+        db_path => D2TG::Config::state_db_path(
+            default_root => $skill_root,
+            base_dir      => $base_dir,
+        ),
+        admin_chat_id => [ map { $_->{chat_id} } @$groups ],
+    );
+};
+if ($@) {
+    my $reason = D2TG::Poller::_classify_store_error($@);
+    print STDERR "Failed to open local storage ($reason) - refusing to start.\n";
+    exit 1;
+}
 
 my @pairs;
 for my $group (@$groups) {
@@ -444,6 +463,20 @@ C<getUpdates> queue - the lock-eviction above only ever sees whichever
 single PID the lock FILE currently names, not every process actually
 polling). This is a report only, never a kill - see
 L<D2TG::Lock/find_other_pollers> for why.
+
+Storage is opened next (C<D2TG::Store-E<gt>new>, backed by
+L<D2TG::Config/state_db_path>). TGT-183 (found via a scheduled hourly
+bug hunt, reproduced live): this call is C<eval>-wrapped and its error
+classified/scrubbed via C<D2TG::Poller::_classify_store_error>, the
+same clean-refusal treatment every other fallible startup step above
+already gets - a storage-open failure (a filesystem collision, a
+read-only mount) refuses cleanly with C<Failed to open local storage
+(REASON) - refusing to start.> rather than crashing with a raw,
+uncaught Perl exception that could embed the real db path (matching
+L<D2TG::Poller/_record_message_safe>'s own TGT-133 scrubbing
+precedent). A related finding - C<lock_path>/C<heartbeat_path> above
+independently share the identical unwrapped C<make_path> risk - is
+tracked separately as TGT-184, not fixed here.
 
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each

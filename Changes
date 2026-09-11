@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.48  2026-09-11
+      - RELIABILITY FIX (TGT-183, found via a scheduled hourly bug
+        hunt, reproduced live in the perl-test Docker container):
+        cli/poller.pl's D2TG::Store->new(...) call was unwrapped,
+        dying raw on a startup-time storage-open failure at that
+        specific step instead of refusing cleanly, the same way
+        require_existing_base_dir/D2TG::Lock::acquire already do for
+        their own failures. Now eval-wrapped and
+        classified via D2TG::Poller::_classify_store_error - the raw
+        exception (which can embed the real db_path) is never echoed,
+        matching TGT-133's own established scrubbing precedent. A
+        related finding (lock_path/heartbeat_path calls sharing the
+        same unwrapped-make_path risk, found while building this fix)
+        is tracked separately as TGT-184, not fixed here.
+
 1.47  2026-09-11
       - REFACTOR (TGT-182, found via a scheduled improvement hunt):
         send_voice and _send_file (backing send_photo/send_document)
