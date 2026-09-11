@@ -7,6 +7,7 @@ use File::Temp qw(tempfile);
 use File::Spec;
 use Digest::SHA qw(sha256_hex);
 use D2TG::Config;
+use D2TG::Poller;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
 
@@ -100,15 +101,38 @@ sub retry_failed_download {
     # remove the queue row, leaving nothing in D2TG::Store's own
     # message history the way a first-time success already gets via
     # D2TG::Poller's own record_message call - restore it the same way.
+    #
+    # TGT-194 (found via a scheduled JOB-003 hourly bug hunt, reproduced
+    # live in a developer-dashboard:latest container, the same class of
+    # issue as TGT-132/165/166/186/190/191/192/193): both of these
+    # D2TG::Store calls used to run unwrapped - a locked/busy database
+    # at either one died raw straight out of this function, breaking
+    # its own documented (1, $local_path)/(0, $error) return contract
+    # even though the download itself genuinely succeeded, and (since
+    # cli/retry-download.pl's own batch loop has no eval around this
+    # call either) crashing the whole script mid-loop, silently
+    # abandoning every remaining queued row in that batch. Now
+    # eval-wrapped and classified via D2TG::Poller::_classify_store_error,
+    # matching the established pattern - a bookkeeping-write failure is
+    # logged non-fatally to STDERR and does not affect the reported
+    # (1, $local_path) success, since the download itself did succeed.
     if ( defined $row->{media_kind} ) {
         # TGT-133: the summary text (shown verbatim by cli/history.pl and
         # cli/unread.pl) must never contain the real local path - only
         # local_path (a separate, narrow-accessor-only column) does.
         my $summary = "$row->{media_kind}" . ( $row->{caption_note} // '' );
-        $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path );
+        eval { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path ) };
+        if ($@) {
+            my $reason = D2TG::Poller::_classify_store_error($@);
+            print STDERR "STORE ERROR [$row->{chat_id}]: record_message failed - $reason\n";
+        }
     }
 
-    $store->remove_failed_download( $row->{id} );
+    eval { $store->remove_failed_download( $row->{id} ) };
+    if ($@) {
+        my $reason = D2TG::Poller::_classify_store_error($@);
+        print STDERR "STORE ERROR [$row->{chat_id}]: remove_failed_download failed - $reason\n";
+    }
 
     return ( 1, $local_path );
 }
