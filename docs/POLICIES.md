@@ -2110,8 +2110,9 @@ installed skill root (traced through
 `Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
 `exec_command` - both dispatch paths set it before launching the
 skill command, though not identically: `dispatch` via `local %ENV =
-(%ENV, %env)` scoped to its own `system()` call, `exec_command` via a
-non-local `%ENV = (%ENV, %env)` right before its own final `exec`.
+(%ENV, %env)` scoped to the block that runs its own `system()` call,
+`exec_command` via a non-local `%ENV = (%ENV, %env)` right before its
+own final `exec`.
 Either way it persists for the whole resulting process's lifetime
 including a later `exec()`-based self-restart, which inherits the
 calling process's environment by default).

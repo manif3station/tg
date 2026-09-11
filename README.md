@@ -6,8 +6,9 @@ notice missing TGT-112's own Changes-line summary. Traced
 `Developer::Dashboard::SkillDispatcher`'s own `_skill_env`/`dispatch`/
 `exec_command` (a real `d2 tg.<command>` dispatch sets
 `DEVELOPER_DASHBOARD_SKILL_ROOT` before launching the skill command -
-`dispatch` via `local %ENV = (%ENV, %env)`, a child-process-scoped
-`system()` call; `exec_command` via a non-local `%ENV = (%ENV, %env)`
+`dispatch` via `local %ENV = (%ENV, %env)` scoped to the block that
+runs its own `system()` call; `exec_command` via a non-local
+`%ENV = (%ENV, %env)`
 right before its own final `exec` - both persist for the whole
 resulting process's lifetime, including a later `exec()`-based
 self-restart, which inherits the calling process's environment by
@@ -24,7 +25,9 @@ not independently reproducible against the current codebase for the
 original report's own specific incident (version range 0.70-1.03 is
 many versions and fixes behind). Closed a real, independently-found
 test gap instead - `changes_summary`'s env-var-priority code path
-had no test coverage at all until now.
+had no test coverage at all until now. The silent-`undef`-on-any-
+mismatch fragility itself was filed separately as **TGT-190** to add
+a diagnostic, not fixed here.
 BUG FIX (TGT-186, found via
 a scheduled JOB-003 hourly bug hunt, reproduced live against
 `cli/history.pl`): 7 more `cli/*.pl` scripts (`attachment`,
