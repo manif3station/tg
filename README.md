@@ -7,7 +7,10 @@ a scheduled JOB-003 hourly bug hunt, reproduced live against
 `unread`) shared TGT-183's identical unwrapped `D2TG::Store->new`
 crash - each constructed the store directly, so a storage-open failure
 crashed the script raw, leaking the real db path. All 8 call sites
-(these 7 plus `cli/poller.pl`'s own) built identical args, so extracted
+(these 7 plus `cli/poller.pl`'s own) built the same `db_path` shape and
+the same overall eval/classify/refuse pattern - `cli/poller.pl` passes
+`admin_chat_id` as an arrayref of every configured group's chat_id,
+these 7 pass a plain scalar, not byte-identical args - so extracted
 into a shared `D2TG::Poller::open_store_or_die` helper rather than
 patching each one separately, matching this project's established
 TGT-167/170/171/172/177 duplication-removal precedent.

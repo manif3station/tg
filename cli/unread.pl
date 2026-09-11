@@ -34,11 +34,14 @@ if ($@) {
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
 # this call was unwrapped, the same raw-crash/db-path-leak risk TGT-183
-# already fixed for cli/poller.pl's own identical call. Now goes through
-# the shared D2TG::Poller::open_store_or_die helper (TGT-186) - prints a
-# clean, scrubbed refusal and exits 1 on a storage-open failure instead
-# of letting the raw Perl/DBI exception (which can embed the real db
-# path) propagate.
+# already fixed for cli/poller.pl's own equivalent call - not
+# byte-identical args (poller.pl passes admin_chat_id as an arrayref of
+# every configured group's chat_id; this script passes a plain scalar),
+# but the same eval/classify/refuse shape. Now goes through the shared
+# D2TG::Poller::open_store_or_die helper (TGT-186) - prints a clean,
+# scrubbed refusal and exits 1 on a storage-open failure instead of
+# letting the raw Perl/DBI exception (which can embed the real db path)
+# propagate.
 my $store = D2TG::Poller::open_store_or_die(
     skill_root    => File::Spec->catdir( $Bin, '..' ),
     base_dir      => $base_dir,

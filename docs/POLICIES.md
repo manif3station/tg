@@ -2078,8 +2078,11 @@ reproduced live against `cli/history.pl`: 7 more `cli/*.pl` scripts
 `D2TG::Store->new` unwrapped - the identical raw-crash/db-path-leak
 risk TGT-183 already fixed only for `cli/poller.pl`'s own call. All 8
 call sites (these 7 plus `poller.pl`'s own pre-existing shape) built
-the identical `db_path`/`admin_chat_id` args, so this became a shared
-helper - `D2TG::Poller::open_store_or_die` - rather than 7 separate
+the same `db_path` shape and the same overall `eval`/classify/refuse
+pattern - `poller.pl` passes `admin_chat_id` as an arrayref of every
+configured group's chat_id, these 7 pass a plain scalar, not
+byte-identical args - so this became a shared helper -
+`D2TG::Poller::open_store_or_die` - rather than 7 separate
 `eval`-wraps, matching this project's established TGT-167/170/171/172/
 177 duplication-removal precedent. `cli/poller.pl`'s own already-fixed
 inline version is deliberately left untouched - its TGT-185
@@ -2087,4 +2090,11 @@ lock-release logic is intertwined with that specific call site, not
 required scope. New test `t/186-cli-store-startup-crash.t`, one
 scenario per affected script (28 assertions total), reusing TGT-183's
 root-proof directory-collision technique; confirmed genuinely red
-against pre-fix code (21 of 28 assertions failed) before the fix.
+against pre-fix code (21 of 28 assertions failed) before the fix. A
+Codex documentation-stage review on this ticket also caught that
+several docs/comments overclaimed the args as fully "identical" -
+corrected everywhere to name the actual scalar-vs-arrayref difference.
+`open_store_or_die` itself initially showed 0% coverage (the original
+test only exercises it via real subprocesses, invisible to
+Devel::Cover) - closed by a second test,
+`t/186-open-store-or-die-coverage.t`, calling it directly in-process.

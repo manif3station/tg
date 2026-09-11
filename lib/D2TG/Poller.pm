@@ -13,12 +13,16 @@ use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 # replies, approve, retry-download, history, reply, unread) each
 # construct D2TG::Store->new unwrapped, sharing the identical raw-crash/
 # db-path-leak risk TGT-183 already fixed for cli/poller.pl's own call.
-# All 7 (plus poller.pl's own pre-TGT-183 shape) built the exact same
-# db_path/admin_chat_id args, so this is a shared helper rather than 7
-# separate eval-wraps, matching this project's own TGT-167/170/171/172/
-# 177 precedent for exactly this class of duplication. Returns the open
-# store on success; on failure, prints the identical scrubbed refusal
-# TGT-183 established and exits 1 - never returns in that case.
+# All 7 (plus poller.pl's own pre-TGT-183 shape) built the same
+# db_path shape and eval/classify/refuse pattern - poller.pl passes
+# admin_chat_id as an arrayref of every configured group's chat_id,
+# these 7 pass a plain scalar, not byte-identical args - so this is a
+# shared helper (this sub takes admin_chat_id opaquely, whatever shape
+# the caller passes through) rather than 7 separate eval-wraps,
+# matching this project's own TGT-167/170/171/172/177 precedent for
+# exactly this class of duplication. Returns the open store on
+# success; on failure, prints the identical scrubbed refusal TGT-183
+# established and exits 1 - never returns in that case.
 sub open_store_or_die {
     my (%args) = @_;
 
@@ -971,10 +975,14 @@ C<reply>, C<unread>) each independently constructed
 C<D2TG::Store-E<gt>new> unwrapped, sharing the identical raw-crash/
 db-path-leak risk C<cli/poller.pl>'s own call already had before
 TGT-183 fixed it. All 8 call sites (these 7 plus C<poller.pl>'s own)
-built the identical C<db_path>/C<admin_chat_id> args, so this is a
-shared helper rather than 7 separate C<eval>-wraps, matching this
-project's established TGT-167/170/171/172/177 duplication-removal
-precedent. Takes C<skill_root>, C<base_dir>, C<admin_chat_id> (the same
+built the same C<db_path> shape and the same overall
+C<eval>/classify/refuse pattern - C<poller.pl> passes C<admin_chat_id>
+as an arrayref of every configured group's chat_id, these 7 pass a
+plain scalar, not byte-identical args - so this is a shared helper
+(taking C<admin_chat_id> opaquely, whatever shape the caller passes)
+rather than 7 separate C<eval>-wraps, matching this project's
+established TGT-167/170/171/172/177 duplication-removal precedent.
+Takes C<skill_root>, C<base_dir>, C<admin_chat_id> (the same
 args C<D2TG::Config::state_db_path> and C<D2TG::Store-E<gt>new>
 themselves need); on a storage-open failure, classifies the error via
 C<_classify_store_error> and prints the same scrubbed
