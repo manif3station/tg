@@ -306,6 +306,18 @@ removing the queue row unconditionally on a C<record_message> failure
 would leave a message with neither a queue row nor a history record,
 worse than the pre-fix crash (which at least left the row queued).
 
+B<Known limitation> (a Codex documentation-stage review finding,
+tracked as TGT-196, not yet fixed): a queue row retained this way has
+no bounded-retry or dead-letter escape hatch - if C<record_message>
+fails for a persistent, non-transient reason (a schema mismatch, a
+permissions problem), the row retries forever, re-downloading the
+already-successfully-fetched file on every pass and reporting apparent
+success each time, with no signal distinguishing "still retrying
+normally" from "stuck, needs manual attention." Not a regression from
+this fix - the pre-fix crash-on-failure behavior had the same absence
+of an escape hatch, it simply failed loudly every time instead of
+silently.
+
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 
 Keeps the attachment vault (TGT-052, typically
