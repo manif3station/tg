@@ -2070,3 +2070,21 @@ without the `END` block, green with it); the `exec()`-failure `die`
 is not independently tested (a deterministic reproduction would need
 environment sabotage this pass doesn't implement) but is covered by
 the same mechanism.
+
+**TGT-186**, found via a scheduled JOB-003 hourly bug hunt and
+reproduced live against `cli/history.pl`: 7 more `cli/*.pl` scripts
+(`attachment`, `text-only-replies`, `approve`, `retry-download`,
+`history`, `reply`, `unread`) each independently constructed
+`D2TG::Store->new` unwrapped - the identical raw-crash/db-path-leak
+risk TGT-183 already fixed only for `cli/poller.pl`'s own call. All 8
+call sites (these 7 plus `poller.pl`'s own pre-existing shape) built
+the identical `db_path`/`admin_chat_id` args, so this became a shared
+helper - `D2TG::Poller::open_store_or_die` - rather than 7 separate
+`eval`-wraps, matching this project's established TGT-167/170/171/172/
+177 duplication-removal precedent. `cli/poller.pl`'s own already-fixed
+inline version is deliberately left untouched - its TGT-185
+lock-release logic is intertwined with that specific call site, not
+required scope. New test `t/186-cli-store-startup-crash.t`, one
+scenario per affected script (28 assertions total), reusing TGT-183's
+root-proof directory-collision technique; confirmed genuinely red
+against pre-fix code (21 of 28 assertions failed) before the fix.

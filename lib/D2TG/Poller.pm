@@ -962,6 +962,29 @@ this at startup, before option handling and any poller work.
 
 =head1 FUNCTIONS
 
+=head2 open_store_or_die(%args)
+
+TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live
+against C<cli/history.pl>): 7 C<cli/*.pl> scripts (C<attachment>,
+C<text-only-replies>, C<approve>, C<retry-download>, C<history>,
+C<reply>, C<unread>) each independently constructed
+C<D2TG::Store-E<gt>new> unwrapped, sharing the identical raw-crash/
+db-path-leak risk C<cli/poller.pl>'s own call already had before
+TGT-183 fixed it. All 8 call sites (these 7 plus C<poller.pl>'s own)
+built the identical C<db_path>/C<admin_chat_id> args, so this is a
+shared helper rather than 7 separate C<eval>-wraps, matching this
+project's established TGT-167/170/171/172/177 duplication-removal
+precedent. Takes C<skill_root>, C<base_dir>, C<admin_chat_id> (the same
+args C<D2TG::Config::state_db_path> and C<D2TG::Store-E<gt>new>
+themselves need); on a storage-open failure, classifies the error via
+C<_classify_store_error> and prints the same scrubbed
+C<Failed to open local storage (REASON) - refusing to start.> refusal
+TGT-183 established for C<cli/poller.pl>, then exits 1 - never returns
+in that case. Returns the open store on success. C<cli/poller.pl>'s
+own inline version is deliberately left untouched rather than
+refactored to call this too - its TGT-185 lock-release logic is
+intertwined with that specific call site, not required scope.
+
 =head2 persist_offset_safe($store, $offset, $bot_key)
 
 TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up

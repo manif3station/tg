@@ -1,6 +1,20 @@
 # tg
 
-**Status: early implementation (v1.50).** BUG FIX (TGT-185, filed
+**Status: early implementation (v1.51).** BUG FIX (TGT-186, found via
+a scheduled JOB-003 hourly bug hunt, reproduced live against
+`cli/history.pl`): 7 more `cli/*.pl` scripts (`attachment`,
+`text-only-replies`, `approve`, `retry-download`, `history`, `reply`,
+`unread`) shared TGT-183's identical unwrapped `D2TG::Store->new`
+crash - each constructed the store directly, so a storage-open failure
+crashed the script raw, leaking the real db path. All 8 call sites
+(these 7 plus `cli/poller.pl`'s own) built identical args, so extracted
+into a shared `D2TG::Poller::open_store_or_die` helper rather than
+patching each one separately, matching this project's established
+TGT-167/170/171/172/177 duplication-removal precedent.
+`cli/poller.pl`'s own already-fixed inline version is deliberately
+left untouched - its TGT-185 lock-release logic is intertwined with
+that specific call site, not required scope.
+BUG FIX (TGT-185, filed
 from a Codex QA-stage review on TGT-184): `cli/poller.pl`'s
 `D2TG::Store->new` failure exit (TGT-183) ran before releasing the
 startup lock file, leaking it on that failure - fixed by releasing

@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.51  2026-09-11
+      - BUG FIX (TGT-186, found via a scheduled JOB-003 hourly bug
+        hunt, reproduced live against cli/history.pl): 7 cli/*.pl
+        scripts (attachment, text-only-replies, approve,
+        retry-download, history, reply, unread) each constructed
+        D2TG::Store->new unwrapped, sharing the identical raw-crash/
+        db-path-leak risk TGT-183 already fixed only for
+        cli/poller.pl. All 8 call sites (these 7 plus poller.pl's own)
+        built the identical db_path/admin_chat_id args, so extracted
+        into a shared D2TG::Poller::open_store_or_die helper rather
+        than 7 separate wraps, matching this project's established
+        TGT-167/170/171/172/177 duplication-removal precedent.
+        cli/poller.pl's own already-fixed inline version is
+        deliberately left untouched (its TGT-185 lock-release logic is
+        intertwined with that call site) - not required scope. New
+        test t/186-cli-store-startup-crash.t, one scenario per
+        affected script (28 assertions), confirmed genuinely red
+        against pre-fix code before the fix.
+
 1.50  2026-09-11
       - BUG FIX (TGT-185, filed from a Codex QA-stage review on
         TGT-184): cli/poller.pl's D2TG::Store->new failure exit
