@@ -2347,13 +2347,18 @@ Found via a scheduled JOB-004 improvement hunt. `D2TG::Poller::run_once`'s
 `message` branch) each echoed the raw DBI/SQLite exception text
 verbatim to STDERR, instead of classifying it via the already-established
 shared `_classify_store_error` helper - every other `D2TG::Store` error
-path in this codebase already does this (a Codex documentation-stage
+path IN THIS MODULE already does this (a Codex documentation-stage
 review finding: `is_allowed` is a read, not a write - "write" only
-correctly describes `add_pending`/`record_message`/`persist_offset_safe`/
-`D2TG::Reply`'s own writes; the wording below is now scoped to "error
-path", not "write error path", since it covers both) (`_record_message_safe`
-TGT-132/133, `persist_offset_safe` TGT-166/191, `D2TG::Reply`'s
-`_store_write_safe` TGT-192). These 4 call sites predate
+correctly describes `add_pending`/`record_message`/`persist_offset_safe`;
+the wording is now scoped to "error path", not "write error path",
+since it covers both) (`_record_message_safe` TGT-132/133,
+`persist_offset_safe` TGT-166/191). A Codex QA-stage review finding:
+this claim is deliberately scoped to `D2TG::Poller.pm` specifically,
+not the whole codebase - `D2TG::Reply`'s own `_store_write_safe`
+(TGT-192) is a separate module with its own equivalent pattern, and
+`D2TG::Download::retry_failed_download` has the identical
+unwrapped-call gap, tracked separately as TGT-194, not yet fixed.
+These 4 call sites predate
 `_classify_store_error` (TGT-165, before TGT-167 extracted the shared
 helper) and were simply never revisited. A raw DBI/SQLite error can
 embed the database file's own real path - the same disclosure risk

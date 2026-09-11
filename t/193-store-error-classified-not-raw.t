@@ -32,12 +32,16 @@ package Fake::Store::DyingIsAllowed;
 
 sub new {
     my ( $class, %args ) = @_;
-    return bless { dies_for => $args{dies_for} }, $class;
+    return bless {
+        dies_for  => $args{dies_for},
+        dies_with => $args{dies_with}
+          || "database is locked at /home/mv/.developer-dashboard/skills/tg/.tira/bot.db line 42.\n",
+    }, $class;
 }
 
 sub is_allowed {
     my ( $self, $id ) = @_;
-    die "database is locked at /home/mv/.developer-dashboard/skills/tg/.tira/bot.db line 42.\n"
+    die $self->{dies_with}
       if defined $self->{dies_for} && $id == $self->{dies_for};
     return 1;
 }
@@ -150,6 +154,71 @@ package main;
         'add_pending failure logs the classified reason' );
     unlike( $err, qr{/home/mv/\.developer-dashboard}, 'the real db_path never leaks into STDERR' );
     unlike( $err, qr/at \S+\.db line \d+/, 'the raw DBI/SQLite exception text is never echoed verbatim' );
+}
+
+# A Codex QA-stage review finding: the blocks above only exercised
+# _classify_store_error's 'database is locked' branch - its other 3
+# branches (busy, readonly, and the unexpected-error fallback) had no
+# coverage through these 4 call sites at all. A regression narrowing
+# or breaking any of those other branches would still pass every
+# assertion above. These 3 blocks close that gap, all through the
+# plain-message is_allowed branch (the other 3 branches already prove
+# the classifier is reached identically at every call site above -
+# this is about the classifier's own remaining ternary arms, not a
+# 4th call-site concern).
+{
+    my $tg = Fake::Telegram->new(
+        [
+            { update_id => 934, message => { message_id => 10, chat => { id => 559 }, from => { username => 'hank' }, text => 'hi' } },
+        ],
+    );
+    my $store = Fake::Store::DyingIsAllowed->new(
+        dies_for  => 559,
+        dies_with => "database.tira is busy at /home/mv/.developer-dashboard/skills/tg/.tira/bot.db line 42.\n",
+    );
+
+    my $err = capture_stderr( sub { D2TG::Poller::run_once( $tg, undef, $store ) } );
+
+    like( $err, qr/STORE ERROR \[559\]: is_allowed failed - database is busy/,
+        '_classify_store_error\'s busy branch is reached and classified' );
+    unlike( $err, qr{/home/mv/\.developer-dashboard}, 'the real db_path never leaks into STDERR' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            { update_id => 935, message => { message_id => 11, chat => { id => 560 }, from => { username => 'iris' }, text => 'hi' } },
+        ],
+    );
+    my $store = Fake::Store::DyingIsAllowed->new(
+        dies_for  => 560,
+        dies_with => "attempt to write a readonly database at /home/mv/.developer-dashboard/skills/tg/.tira/bot.db line 42.\n",
+    );
+
+    my $err = capture_stderr( sub { D2TG::Poller::run_once( $tg, undef, $store ) } );
+
+    like( $err, qr/STORE ERROR \[560\]: is_allowed failed - database is readonly/,
+        '_classify_store_error\'s readonly branch is reached and classified' );
+    unlike( $err, qr{/home/mv/\.developer-dashboard}, 'the real db_path never leaks into STDERR' );
+}
+
+{
+    my $tg = Fake::Telegram->new(
+        [
+            { update_id => 936, message => { message_id => 12, chat => { id => 561 }, from => { username => 'jack' }, text => 'hi' } },
+        ],
+    );
+    my $store = Fake::Store::DyingIsAllowed->new(
+        dies_for  => 561,
+        dies_with => "disk I/O error at /home/mv/.developer-dashboard/skills/tg/.tira/bot.db line 42.\n",
+    );
+
+    my $err = capture_stderr( sub { D2TG::Poller::run_once( $tg, undef, $store ) } );
+
+    like( $err, qr/STORE ERROR \[561\]: is_allowed failed - an unexpected error/,
+        '_classify_store_error\'s fallback branch is reached for an unrecognized error shape' );
+    unlike( $err, qr{/home/mv/\.developer-dashboard}, 'the real db_path never leaks into STDERR - even the fallback branch never echoes the raw text' );
+    unlike( $err, qr/disk I.O error/, 'the raw exception message itself is never echoed, even for an unrecognized error' );
 }
 
 done_testing();

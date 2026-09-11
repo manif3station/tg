@@ -133,12 +133,16 @@ sub run_once {
                     # (TGT-165, before TGT-167 extracted the shared
                     # helper) and was never revisited - it echoed the raw
                     # exception text verbatim, unlike every other
-                    # D2TG::Store error path in this codebase (is_allowed
+                    # D2TG::Store error path in this module (is_allowed
                     # is a read, not a write, but is still classified the
-                    # same way)
-                    # (_record_message_safe, persist_offset_safe,
-                    # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
-                    # error can embed the database file's own real path.
+                    # same way) - see _record_message_safe/
+                    # persist_offset_safe above. D2TG::Reply's own
+                    # _store_write_safe (TGT-192) has the equivalent
+                    # pattern in a separate module; D2TG::Download's
+                    # retry_failed_download has the identical gap this
+                    # fix closes here, tracked separately as TGT-194,
+                    # not yet fixed. A raw DBI/SQLite error can embed
+                    # the database file's own real path.
                     my $reason = _classify_store_error($@);
                     print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
                     next;
@@ -227,12 +231,16 @@ sub run_once {
                     # (TGT-165, before TGT-167 extracted the shared
                     # helper) and was never revisited - it echoed the raw
                     # exception text verbatim, unlike every other
-                    # D2TG::Store error path in this codebase (is_allowed
+                    # D2TG::Store error path in this module (is_allowed
                     # is a read, not a write, but is still classified the
-                    # same way)
-                    # (_record_message_safe, persist_offset_safe,
-                    # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
-                    # error can embed the database file's own real path.
+                    # same way) - see _record_message_safe/
+                    # persist_offset_safe above. D2TG::Reply's own
+                    # _store_write_safe (TGT-192) has the equivalent
+                    # pattern in a separate module; D2TG::Download's
+                    # retry_failed_download has the identical gap this
+                    # fix closes here, tracked separately as TGT-194,
+                    # not yet fixed. A raw DBI/SQLite error can embed
+                    # the database file's own real path.
                     my $reason = _classify_store_error($@);
                     print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
                     next;
