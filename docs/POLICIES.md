@@ -2045,26 +2045,26 @@ idempotent and PID-scoped (only unlinks a lock file this exact
 process still owns), so it is safe to run alongside the existing
 explicit `release()` calls, and does not fire on a successful
 `exec()` (the process image is replaced, not exited - the same PID
-correctly keeps holding the same lock). It does NOT cover process
-termination by any untrapped signal - `SIGKILL` always (Perl can
-never trap it), `SIGHUP`/`SIGQUIT` for this script's entire lifetime
-(no handler is ever installed for them), and even `SIGTERM`/`SIGINT`
-during the window between the `END` block's own installation here and
-where `$SIG{TERM}`/`$SIG{INT}` are actually installed further below
-(only once trapped do they become a graceful-shutdown flag instead of
-default, untrapped termination). Three successive Codex QA-stage
-review rounds each found the previous draft of this exact comment
-still too broad or subtly wrong (round 3: "any exit" overclaimed past
+correctly keeps holding the same lock). This is a standard Perl
+`END`-block limitation, not specific to this fix: a signal this
+process terminates on without running any handler code of its own -
+`SIGKILL` always, or any other signal at any moment this script has
+not (yet, or ever) installed a handler for - bypasses `END` entirely,
+same as it would for any Perl program. No claim is made here about
+when, or whether, a specific signal becomes safe - five successive
+Codex QA-stage review rounds on this exact comment each found the
+previous draft's framing still overclaimed something about
+`SIGTERM`/`SIGINT`'s own timing (round 3: "any exit" overclaimed past
 `SIGKILL`; round 4: a "brief window" framing that missed the
-`SIGTERM`/`SIGINT` handler-installation gap itself; round 5: an "ARE
-covered" claim that missed that same gap again) - settled on the
-simpler and more defensible "untrapped signals bypass `END`, trapped
-ones don't" rather than re-attempting a precise timeline. `D2TG::Lock`'s
-own staleness/eviction logic (TGT-084/TGT-113) is what recovers a
-lock left behind by any untrapped-signal termination - not automatic
-eviction, but detected and reclaimed the next time a poller attempts
-to acquire the same lock - unrelated to and not narrowed by
-this fix. The
+handler-installation gap itself; round 5: an "ARE covered" claim that
+reintroduced the same gap; round 6: even "trapped ones don't [bypass
+`END`]" was judged to reassert the same converse/timing claim under a
+different phrasing) - the honest scope is just "an untrapped signal
+bypasses `END`", full stop, asserting nothing about the trapped case.
+`D2TG::Lock`'s own staleness/eviction logic (TGT-084/TGT-113) is what
+recovers a lock left behind by that kind of termination - detected
+and reclaimed the next time a poller attempts to acquire the same
+lock, not automatic - unrelated to and not narrowed by this fix. The
 no-bot-tokens scenario is covered by a new test case (confirmed red
 without the `END` block, green with it); the `exec()`-failure `die`
 is not independently tested (a deterministic reproduction would need

@@ -15,11 +15,12 @@ exits sharing the same leak (a "no bot tokens configured" exit, and
 an `exec()`-restart-failure `die`) - rather than patching a fourth
 site individually, `cli/poller.pl` now has a single `END` block
 right after `D2TG::Lock::acquire` succeeds that releases the lock on
-every Perl-managed `exit`/uncaught `die` past that point - it does
-NOT cover process termination by any untrapped signal (`SIGKILL`
-always; `SIGHUP`/`SIGQUIT` for this script's entire lifetime; even
-`SIGTERM`/`SIGINT` during the brief window before their own handlers
-are installed further below). `D2TG::Lock`'s own staleness/eviction
+every Perl-managed `exit`/uncaught `die` past that point - standard
+Perl `END`-block behavior, it does NOT run if the process terminates
+on an untrapped signal (`SIGKILL` always, or any signal this script
+has not installed a handler for at that moment) - no claim is made
+about exactly when `SIGTERM`/`SIGINT` become safe, only that an
+untrapped signal bypasses `END`. `D2TG::Lock`'s own staleness/eviction
 logic (TGT-084) is what recovers a lock left behind that way, on the
 next poller start, not automatic eviction.
 RELIABILITY FIX (TGT-184,

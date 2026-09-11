@@ -173,22 +173,19 @@ if ($@) {
 # run, or if a different process has since reclaimed the lock file.
 # Does not run on a successful exec() (the process image is replaced,
 # not exited - the same PID keeps holding the same, still-valid lock,
-# correctly). Does NOT cover process termination by any UNTRAPPED
-# signal - SIGKILL always (Perl can never trap it), SIGHUP/SIGQUIT
-# for this script's entire lifetime (no handler is ever installed for
-# them), and even SIGTERM/SIGINT during the window between here and
-# where $SIG{TERM}/$SIG{INT} are actually installed further below
-# (only once trapped do they become a graceful-shutdown flag instead
-# of default, untrapped termination). Each of several Codex QA-stage
-# review rounds on this exact comment (three so far) found the
-# previous draft's framing of this still too broad or subtly wrong -
-# keep this to "untrapped signals bypass END, trapped ones don't"
-# rather than re-attempting a precise timeline. D2TG::Lock's own
+# correctly). Standard Perl END-block limitation, not specific to this
+# fix: a signal this process terminates on without running any handler
+# code of its own - SIGKILL always, or any other signal at any moment
+# this script has not (yet, or ever) installed a handler for - bypasses
+# END entirely, the same as it would for any Perl program. No claim is
+# made here about when, or whether, a specific signal becomes safe
+# (five Codex QA-stage review rounds on this exact comment progressively
+# rejected each attempt to state that precisely - the honest scope is
+# just "an untrapped signal bypasses END", full stop). D2TG::Lock's own
 # staleness/eviction logic (TGT-084/TGT-113) is what recovers a lock
-# left behind by any untrapped-signal termination - not automatic
-# eviction, but detected and reclaimed the next time a poller attempts
-# to acquire the same lock - unrelated to, and not narrowed by, this
-# fix.
+# left behind by that kind of termination - detected and reclaimed the
+# next time a poller attempts to acquire the same lock, not automatic -
+# unrelated to, and not narrowed by, this fix.
 my $lock_acquired = 1;
 END { D2TG::Lock::release($lock_path) if $lock_acquired; }
 
