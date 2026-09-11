@@ -127,4 +127,12 @@ ways that can happen: the chat id is already allowed under this bot
 (nothing to do), or it was never pending under this bot at all (never
 messaged this specific bot, so there's nothing to approve).
 
+The C<approve>/C<is_allowed> calls themselves (TGT-195, found via a
+repo-wide grep sweep done as part of a Codex QA-stage review on
+TGT-194) are C<eval>-wrapped and classified via
+C<D2TG::Poller::_classify_store_error> - a locked/busy database at
+either one used to die raw, printing a raw Perl/DBI exception
+(potentially embedding the real db_path) to STDERR instead of a clean
+C<STORE ERROR: ... failed - REASON> refusal.
+
 =cut

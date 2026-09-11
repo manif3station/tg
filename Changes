@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.58  2026-09-11
+      - RELIABILITY FIX (TGT-195, found via a repo-wide grep sweep done
+        as part of a Codex QA-stage review on TGT-194): cli/approve.pl's
+        own approve/is_allowed calls were unwrapped - a locked/busy
+        database at either one died raw, uncaught, printing the real
+        Perl/DBI exception (which can embed the real db_path) to STDERR
+        and exiting non-zero via Perl's own default die-at-top-level
+        behavior, instead of the same clean, scrubbed refusal this
+        project's established pattern provides everywhere else
+        (D2TG::Poller::run_once's own is_allowed/add_pending,
+        TGT-165/193). Both calls now eval-wrapped and classified via
+        D2TG::Poller::_classify_store_error. New test
+        t/195-approve-store-calls-classified-not-raw.t (9 assertions,
+        a structural/source-inspection regression test matching this
+        project's own established precedent for a CLI script with no
+        injectable seam), confirmed genuinely red against the pre-fix
+        code (9/9 assertions failed).
+
 1.57  2026-09-11
       - RELIABILITY FIX (TGT-194, found via a scheduled JOB-003 hourly
         bug hunt, reproduced live in a developer-dashboard:latest

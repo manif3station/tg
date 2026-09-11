@@ -2446,3 +2446,39 @@ change (adding `eval` wrappers and a classification call) with no
 shell invocation, no new file I/O, and no new external-input handling
 - no system/exec/backtick/piped-open/eval-STRING patterns in either
 touched file.
+
+## TGT-195: eval-wrap cli/approve.pl's own approve/is_allowed calls
+
+Found via a repo-wide grep sweep (`grep -rn` for every `D2TG::Store`
+write-method call across `lib/` and `cli/`), done as part of a Codex
+QA-stage review on TGT-194 - which had incorrectly claimed "all known
+instances of this bug class are now fixed" before this sweep was ever
+done. `cli/approve.pl` called `$store->approve(...)` and
+`$store->is_allowed(...)` directly at lines 58 and 63, with no
+`eval`/classification around either call - the same raw-crash/
+db-path-leak risk `D2TG::Poller::run_once`'s own `is_allowed`/
+`add_pending` calls already had before TGT-165/193 fixed them. A
+locked/busy database at either call died raw, uncaught, printing the
+real Perl/DBI exception (which can embed the real db_path) to STDERR
+and exiting non-zero via Perl's own default die-at-top-level behavior.
+
+Fixed by wrapping both calls in `eval`, classified via
+`D2TG::Poller::_classify_store_error`, matching the established
+pattern - `open_store_or_die` (TGT-186) already protected this
+script's `D2TG::Store->new` call, but not these 2 later calls.
+
+New test `t/195-approve-store-calls-classified-not-raw.t` (9
+assertions) - a structural/source-inspection regression test, matching
+this project's own established precedent for a CLI script with no
+injectable seam (`t/104-retry-download-cli-no-raw-path.t`,
+`t/88-poller-help-pod-parity.t`): a real locked-database failure
+occurring strictly after `D2TG::Store->new` already succeeded is not
+reliably reproducible black-box via a CLI subprocess without fragile
+timing/concurrency tricks. Confirmed genuinely red against the pre-fix
+code (9/9 assertions failed).
+
+perlsec.pl-style vulnerability-scan audit: pure in-process control
+flow change (adding `eval` wrappers and a classification call) with no
+shell invocation, no new file I/O, and no new external-input handling
+- no system/exec/backtick/piped-open/eval-STRING patterns in either
+touched file.

@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.57).** RELIABILITY FIX (TGT-194,
+**Status: early implementation (v1.58).** RELIABILITY FIX (TGT-195,
+found via a repo-wide grep sweep done as part of a Codex QA-stage
+review on TGT-194): `cli/approve.pl`'s own `approve`/`is_allowed`
+calls were unwrapped - a locked/busy database at either one died raw,
+uncaught, printing the real Perl/DBI exception (which can embed the
+real db_path) to STDERR and exiting non-zero, instead of the same
+clean, scrubbed refusal this project's established pattern provides
+everywhere else. Both calls now `eval`-wrapped and classified via
+`D2TG::Poller::_classify_store_error`.
+
+RELIABILITY FIX (TGT-194,
 found via a scheduled JOB-003 hourly bug hunt, reproduced live in a
 `developer-dashboard:latest` container, the same class of issue as
 TGT-132/165/166/186/190/191/192/193): `D2TG::Download::retry_failed_download`
