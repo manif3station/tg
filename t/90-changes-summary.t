@@ -138,4 +138,36 @@ CHANGES
     );
 }
 
+# TGT-187 (investigating a live user report that this feature's own
+# restart notice wasn't appearing in a real installed/dispatched
+# poller): every scenario above only ever exercises the default_root
+# fallback - none set $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}, which is
+# what a real `d2 tg.poller` dispatch actually sets (confirmed live on
+# this host's own installed, running poller process - its own environ
+# carries DEVELOPER_DASHBOARD_SKILL_ROOT pointing at the real install
+# directory, and its own restart notice DID include the Changes-line
+# summary correctly, e.g. "d2tg poller detected version change
+# (1.43 -> 1.49) - RELIABILITY FIX (TGT-184, ..." observed directly on
+# this project's own bridge). This closes the one path in
+# changes_summary's own priority order (env var checked before
+# default_root, identical to state_db_path's own already-tested
+# priority order in t/10-state-path.t) that had no test coverage at
+# all, matching the live evidence rather than contradicting it.
+{
+    my $skill_root = write_changes( tempdir( CLEANUP => 1 ), <<'CHANGES');
+Revision history for the tg skill
+
+1.49  2026-09-11
+      - RELIABILITY FIX (TGT-184): matches the real installed Changes
+        file's own shape.
+CHANGES
+    local $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} = $skill_root;
+
+    is(
+        D2TG::Config::changes_summary( version => '1.49', default_root => '/this/path/must/be/ignored' ),
+        'RELIABILITY FIX (TGT-184): matches the real installed Changes',
+        'changes_summary reads Changes under DEVELOPER_DASHBOARD_SKILL_ROOT when set, not the given default_root - the real d2-dispatch code path, matching state_db_path\'s own already-tested priority order'
+    );
+}
+
 done_testing();
