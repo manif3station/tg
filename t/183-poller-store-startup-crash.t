@@ -8,16 +8,17 @@ use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 # TGT-183 (found via a scheduled JOB-003 hourly bug hunt, reproduced
-# live in the perl-test Docker container): cli/poller.pl's startup
-# sequence wraps every other fallible step (require_existing_base_dir,
-# D2TG::Lock::acquire) in eval/print-STDERR/exit(1), refusing to start
-# loudly and cleanly on failure - except the D2TG::Store->new(...)
-# call, which was completely unwrapped. A startup-time DB-open failure
-# crashed the poller with a raw, uncaught Perl death instead of the
-# clean refusal every sibling startup check already produces, and the
-# raw DBI/SQLite exception text can embed the real db_path - the exact
+# live in the perl-test Docker container): cli/poller.pl's
+# D2TG::Store->new(...) startup call was unwrapped, unlike
+# require_existing_base_dir/D2TG::Lock::acquire earlier in the same
+# sequence, which already refuse loudly and cleanly on their own
+# failures. A startup-time DB-open failure crashed the poller with a
+# raw, uncaught Perl death instead of a clean refusal, and the raw
+# DBI/SQLite exception text can embed the real db_path - the exact
 # information-disclosure surface TGT-133 already closed off at every
-# OTHER call site, but not this one.
+# OTHER call site, but not this one. (lock_path/heartbeat_path share
+# the identical unwrapped-make_path risk and are NOT fixed here -
+# tracked separately as TGT-184.)
 
 my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
@@ -63,8 +64,19 @@ sub run_capturing_stderr {
     isnt( $rc, 0, 'a startup-time storage failure exits non-zero, not a hang or a background start' );
     unlike( $err, qr/\Q$fake_db_dir\E/, 'the STDERR message never contains the raw db_path (TGT-133 precedent)' );
     unlike( $err, qr/at \S+\.pm line \d+/, 'the STDERR message is a clean refusal, not a raw uncaught Perl death with a file/line trace' );
-    is( $err, "Failed to open local storage (an unexpected error) - refusing to start.\n",
-        'the STDERR message is the exact fixed, scrubbed refusal text - not just a loose substring match' );
+
+    # Codex QA-stage review finding: this box can also be genuinely
+    # running OTHER real poller-shaped processes (a different project
+    # on the same host, or this project's own monitor job) at the
+    # moment the test runs - D2TG::Lock::find_other_pollers's own
+    # informational NOTE about that can legitimately precede the
+    # refusal line on STDERR, unrelated to this fix. Anchor to the
+    # LAST line specifically (the refusal itself), not the whole
+    # captured STDERR, so the assertion stays exact without being
+    # fragile against that genuine, unrelated host-state noise.
+    my @lines = split /\n/, $err;
+    is( $lines[-1], 'Failed to open local storage (an unexpected error) - refusing to start.',
+        'the LAST STDERR line is the exact fixed, scrubbed refusal text - not just a loose substring match' );
 }
 
 {

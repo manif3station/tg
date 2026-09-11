@@ -1986,9 +1986,10 @@ refusal, and the raw exception text can embed the real db path -
 exactly the information-disclosure surface TGT-133 already closed off
 at every OTHER call site, but not this one. Fixed by wrapping the call
 in `eval` and classifying the error via the existing
-`D2TG::Poller::_classify_store_error` helper, matching every sibling
-startup check's own behavior: a clean `Failed to open local storage
-(REASON) - refusing to start.` message, never the raw exception. While
+`D2TG::Poller::_classify_store_error` helper, matching
+`require_existing_base_dir`/`D2TG::Lock::acquire`'s own clean-refusal
+behavior: a fixed `Failed to open local storage (REASON) - refusing to
+start.` message, never the raw exception. While
 building this fix, a related but distinct finding surfaced: `lock_path`
 and `heartbeat_path` (both called earlier in the same startup
 sequence, both unwrapped) independently call `make_path` on the same

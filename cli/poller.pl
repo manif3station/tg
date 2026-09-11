@@ -468,15 +468,15 @@ Storage is opened next (C<D2TG::Store-E<gt>new>, backed by
 L<D2TG::Config/state_db_path>). TGT-183 (found via a scheduled hourly
 bug hunt, reproduced live): this call is C<eval>-wrapped and its error
 classified/scrubbed via C<D2TG::Poller::_classify_store_error>, the
-same clean-refusal treatment every other fallible startup step above
-already gets - a storage-open failure (a filesystem collision, a
-read-only mount) refuses cleanly with C<Failed to open local storage
-(REASON) - refusing to start.> rather than crashing with a raw,
-uncaught Perl exception that could embed the real db path (matching
-L<D2TG::Poller/_record_message_safe>'s own TGT-133 scrubbing
-precedent). A related finding - C<lock_path>/C<heartbeat_path> above
-independently share the identical unwrapped C<make_path> risk - is
-tracked separately as TGT-184, not fixed here.
+same clean-refusal treatment C<require_existing_base_dir>/
+C<D2TG::Lock::acquire> already give their own failures - a storage-open
+failure (a filesystem collision, a read-only mount) refuses cleanly
+with C<Failed to open local storage (REASON) - refusing to start.>
+rather than crashing with a raw, uncaught Perl exception that could
+embed the real db path (matching L<D2TG::Poller/_record_message_safe>'s
+own TGT-133 scrubbing precedent). C<lock_path>/C<heartbeat_path> above
+independently share the identical unwrapped C<make_path> risk and are
+NOT covered by this fix - tracked separately as TGT-184.
 
 C<--chat_id <id>>/C<--bot <token>> (TGT-049, repeatable) declare one or
 more bot/chat groups: each C<--chat_id> starts a new group, and each
