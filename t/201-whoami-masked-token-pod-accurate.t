@@ -44,12 +44,25 @@ like(
     'sanity check: D2TG::Config.pm itself really does return this exact placeholder text'
 );
 
-# No other doc/POD in the repo repeats the stale claim.
+# No other doc/POD in the repo repeats the stale claim AS CURRENT FACT.
+# README.md/Changes are changelog-style and legitimately narrate the
+# stale wording as history when describing what TGT-201 fixed (e.g.
+# "described ... as 'shown as-is, unmasked' - true before TGT-138") -
+# that is not itself a live copy of the defect, so only flag an
+# occurrence that isn't accompanied by nearby TGT-138/history context.
 for my $rel (qw(docs/commands.md docs/POLICIES.md README.md SKILLS.md)) {
     my $path = File::Spec->catfile( $Bin, '..', $rel );
     next unless -f $path;
     my $src = _slurp($path);
-    unlike( $src, qr/shown as-is,\s*unmasked/i, "$rel does not repeat the stale claim" );
+    # /s so the lookahead's "." can cross the line wrap between the
+    # stale phrase and its own "- true before TGT-138" qualifier in
+    # README.md's prose - without it, a multi-line changelog entry
+    # would false-positive as a bare (unqualified) stale claim.
+    my $bare_stale_claim_re = qr/
+        shown \s+ as-is,\s*unmasked
+        (?! .{0,120} TGT-138 )
+    /isxs;
+    unlike( $src, $bare_stale_claim_re, "$rel does not repeat the stale claim as current fact" );
 }
 
 done_testing();
