@@ -128,9 +128,17 @@ sub run_once {
             if ($store) {
                 my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
                 if ($@) {
-                    my $error = $@;
-                    $error =~ s/\n\z//;
-                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                    # TGT-193 (found via a scheduled JOB-004 improvement
+                    # hunt): this call site predates _classify_store_error
+                    # (TGT-165, before TGT-167 extracted the shared
+                    # helper) and was never revisited - it echoed the raw
+                    # exception text verbatim, unlike every other
+                    # D2TG::Store-write error path in this codebase
+                    # (_record_message_safe, persist_offset_safe,
+                    # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
+                    # error can embed the database file's own real path.
+                    my $reason = _classify_store_error($@);
+                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
                     next;
                 }
                 next unless $allowed;
@@ -212,9 +220,17 @@ sub run_once {
             if ($store) {
                 my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
                 if ($@) {
-                    my $error = $@;
-                    $error =~ s/\n\z//;
-                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                    # TGT-193 (found via a scheduled JOB-004 improvement
+                    # hunt): this call site predates _classify_store_error
+                    # (TGT-165, before TGT-167 extracted the shared
+                    # helper) and was never revisited - it echoed the raw
+                    # exception text verbatim, unlike every other
+                    # D2TG::Store-write error path in this codebase
+                    # (_record_message_safe, persist_offset_safe,
+                    # D2TG::Reply's _store_write_safe). A raw DBI/SQLite
+                    # error can embed the database file's own real path.
+                    my $reason = _classify_store_error($@);
+                    print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
                     next;
                 }
                 next unless $allowed;
@@ -294,18 +310,19 @@ sub run_once {
             # this update non-fatally on either call's error.
             my $allowed = eval { $store->is_allowed( $chat_id, $bot_token ) };
             if ($@) {
-                my $error = $@;
-                $error =~ s/\n\z//;
-                print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $error\n";
+                # TGT-193: see the same fix's comment on the
+                # message_reaction/edited_message branches above.
+                my $reason = _classify_store_error($@);
+                print STDERR "STORE ERROR [$chat_id]: is_allowed failed - $reason\n";
                 next;
             }
 
             unless ($allowed) {
                 my $added = eval { $store->add_pending( $chat_id, $bot_token ) };
                 if ($@) {
-                    my $error = $@;
-                    $error =~ s/\n\z//;
-                    print STDERR "STORE ERROR [$chat_id]: add_pending failed - $error\n";
+                    # TGT-193: same fix as is_allowed above.
+                    my $reason = _classify_store_error($@);
+                    print STDERR "STORE ERROR [$chat_id]: add_pending failed - $reason\n";
                     next;
                 }
                 if ($added) {
