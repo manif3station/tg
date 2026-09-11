@@ -605,7 +605,13 @@ the resolved storage/attachments paths are additional operational
 information this command adds beyond what that precedent covers, not
 something already exposed elsewhere. The same care about where command
 output ends up (shell scrollback, captured logs) applies as with any
-other `d2 tg.*` command.
+other `d2 tg.*` command. `masked_token`'s own short-token behavior
+(TGT-138: a token of length <= 8 is shown as the fixed placeholder
+`(short token, not shown)`, never as-is) is described accurately in
+this command's own POD as of TGT-201 (found via a scheduled JOB-003
+hourly bug hunt) - the POD previously still described the pre-TGT-138
+shown-as-is behavior, a documentation-accuracy defect only, since
+`masked_token`'s own real behavior was already correct.
 
 ## `d2 tg.status [--db <alias> | -d <alias>]`
 

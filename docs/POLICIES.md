@@ -2589,3 +2589,28 @@ regress by excluding `store_write_safe`'s own canonical definition
 from the duplicate-detection scan (which would otherwise self-flag).
 Full suite (sequential and `-j4` parallel) both PASS with no test
 changes needed at any of the 7 migrated call sites.
+
+## TGT-201: cli/whoami.pl's own POD described masked_token's pre-TGT-138 (fixed) short-token behavior as current
+
+A scheduled JOB-003 hourly bug hunt found a documentation-accuracy
+defect (not a code defect): `cli/whoami.pl`'s own POD, lines ~97-99,
+described `D2TG::Config::masked_token`'s short-token behavior as "shown
+as-is, unmasked" - true before TGT-138, but TGT-138 already shipped a
+fix making `masked_token` return a fixed `(short token, not shown)`
+placeholder for any token of length <= 8, never the raw token. The POD
+was simply never updated to match the real, already-correct code
+behavior - actively misleading a reader into believing a short bot
+token leaks in full via `d2 tg.whoami`, when the opposite is true.
+
+Fixed by updating the POD text to name the actual placeholder
+`masked_token` returns. A repo-wide grep sweep (`docs/commands.md`,
+`docs/POLICIES.md`, `README.md`, `SKILLS.md`) confirmed the stale claim
+was isolated to this one file - `cli/status.pl` and `cli/poller.pl`,
+which also rely on `masked_token`'s short-token behavior, never
+repeated the stale wording. New structural (source-inspection)
+regression test `t/201-whoami-masked-token-pod-accurate.t` - checks
+the stale claim is gone, the correct placeholder text is present, that
+placeholder text matches `D2TG::Config.pm`'s own real return value
+(not just some arbitrary string), and that no other doc/POD in the
+repo repeats the stale claim. Confirmed genuinely red against the
+pre-fix code (2/7 subtests failed).

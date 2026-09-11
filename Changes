@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+1.61  2026-09-11
+      - DOC FIX (TGT-201, found via a scheduled JOB-003 hourly bug
+        hunt): cli/whoami.pl's own POD described
+        D2TG::Config::masked_token's short-token behavior as "shown
+        as-is, unmasked" - true before TGT-138, but TGT-138 already
+        fixed masked_token to return a fixed "(short token, not
+        shown)" placeholder for any token of length <= 8. Updated the
+        POD to describe the current, correct behavior. Repo-wide grep
+        confirmed no other doc/POD in the codebase repeated the stale
+        claim. New structural regression test
+        t/201-whoami-masked-token-pod-accurate.t.
+
 1.60  2026-09-11
       - REFACTOR (TGT-198, found via a scheduled JOB-004 improvement
         hunt): the eval + D2TG::Poller::_classify_store_error + print

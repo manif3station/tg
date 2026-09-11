@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.60).** REFACTOR (TGT-198, found via
+**Status: early implementation (v1.61).** DOC FIX (TGT-201, found via
+a scheduled JOB-003 hourly bug hunt): `cli/whoami.pl`'s own POD
+described `masked_token`'s short-token behavior as "shown as-is,
+unmasked" - true before TGT-138, but TGT-138 already fixed
+`masked_token` to return a fixed `(short token, not shown)`
+placeholder instead. Updated the POD to match; a repo-wide grep
+confirmed no other doc/POD repeated the stale claim.
+
+REFACTOR (TGT-198, found via
 a scheduled JOB-004 improvement hunt): the eval + classify + print
 "STORE ERROR" pattern, hand-duplicated across 7 call sites in
 `D2TG::Poller.pm` (`is_allowed` x3, `add_pending`) and
