@@ -347,6 +347,13 @@ entirely and only the still-failing C<record_message> write is
 retried, so a persistently-failing C<record_message> no longer
 re-downloads the same file from Telegram on every pass.
 
+This function's own C<record_message>/C<remove_failed_download>/
+C<mark_failed_download_downloaded> calls (TGT-198, found via a
+scheduled JOB-004 improvement hunt) are now routed through
+L<D2TG::Poller/store_write_safe> instead of each hand-writing its own
+C<eval>/classify/print block - a pure refactor, printed
+C<STORE ERROR [chat_id]: ... failed - REASON> text unchanged.
+
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 
 Keeps the attachment vault (TGT-052, typically

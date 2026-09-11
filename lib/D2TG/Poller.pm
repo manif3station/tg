@@ -1048,6 +1048,39 @@ own inline version is deliberately left untouched rather than
 refactored to call this too - its TGT-185 lock-release logic is
 intertwined with that specific call site, not required scope.
 
+=head2 store_write_safe($chat_id, $description, $coderef)
+
+TGT-198 (found via a scheduled JOB-004 improvement hunt): the
+promoted, public version of L<D2TG::Reply>'s own private
+C<_store_write_safe> (TGT-192) - runs C<$coderef-E<gt>()> in C<eval>,
+classifies any failure via C<_classify_store_error>, and prints
+C<STORE ERROR [chat_id]: DESC failed - REASON> non-fatally. Returns a
+C<($ok, $value)> two-element list rather than a bare value: C<$ok> is
+false only when C<$coderef> died (after the error has already been
+classified and printed); C<$value> is C<$coderef>'s own return value
+on success, or C<undef> on failure. This distinguishes "the write
+failed" from "the write succeeded and legitimately returned a false
+value" (e.g. C<is_allowed> returning 0) - something a bare
+undef-on-failure return couldn't do, matching this codebase's own
+C<(1, $result)>/C<(0, $error)> convention (e.g.
+L<D2TG::Download/retry_failed_download>).
+
+Migrated 7 call sites that previously hand-duplicated this exact
+eval/classify/print shape: C<is_allowed> (message_reaction, edited_message
+and plain message branches) and C<add_pending> here in C<run_once>,
+plus C<record_message>/C<remove_failed_download>/
+C<mark_failed_download_downloaded> in L<D2TG::Download/retry_failed_download>.
+Pure refactor - the printed text and every call site's own control
+flow (C<next>, C<$record_ok>, fire-and-forget) are unchanged.
+C<_record_message_safe> and C<persist_offset_safe> below were
+deliberately left unmigrated - their own printed message text and
+C<0>/C<1> return-boolean contract differ from this shape, and forcing
+them through it would either change observable STDERR output or
+complicate this helper's own contract for two outliers.
+L<D2TG::Reply>'s own private helper was left as-is too (out of this
+ticket's own scope) - its call sites never need the coderef's own
+return value, unlike C<is_allowed>/C<add_pending> here.
+
 =head2 persist_offset_safe($store, $offset, $bot_key)
 
 TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up
