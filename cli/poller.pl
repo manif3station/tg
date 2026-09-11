@@ -173,20 +173,22 @@ if ($@) {
 # run, or if a different process has since reclaimed the lock file.
 # Does not run on a successful exec() (the process image is replaced,
 # not exited - the same PID keeps holding the same, still-valid lock,
-# correctly). $SIG{TERM}/$SIG{INT} (installed further below) ARE
-# covered - they set a flag for graceful shutdown rather than killing
-# the process immediately, so the script always still reaches either
-# this END block or the normal post-loop release() call. NOT covered:
-# SIGKILL (always untrappable), and any other signal this script
-# never installs a handler for (e.g. SIGHUP, SIGQUIT) whose default
-# action terminates the process - those bypass END unconditionally,
-# not just in some narrow startup window (a Codex QA-stage review,
-# fourth round, correctly rejected an earlier draft's narrower framing
-# of this gap). D2TG::Lock's own staleness/eviction logic
-# (TGT-084/TGT-113) is what recovers from a lock left behind that way
-# - not automatic eviction, but detected and reclaimed the next time a
-# poller attempts to acquire the same lock - unrelated to, and not
-# narrowed by, this fix.
+# correctly). Does NOT cover process termination by any UNTRAPPED
+# signal - SIGKILL always (Perl can never trap it), SIGHUP/SIGQUIT
+# for this script's entire lifetime (no handler is ever installed for
+# them), and even SIGTERM/SIGINT during the window between here and
+# where $SIG{TERM}/$SIG{INT} are actually installed further below
+# (only once trapped do they become a graceful-shutdown flag instead
+# of default, untrapped termination). Each of several Codex QA-stage
+# review rounds on this exact comment (three so far) found the
+# previous draft's framing of this still too broad or subtly wrong -
+# keep this to "untrapped signals bypass END, trapped ones don't"
+# rather than re-attempting a precise timeline. D2TG::Lock's own
+# staleness/eviction logic (TGT-084/TGT-113) is what recovers a lock
+# left behind by any untrapped-signal termination - not automatic
+# eviction, but detected and reclaimed the next time a poller attempts
+# to acquire the same lock - unrelated to, and not narrowed by, this
+# fix.
 my $lock_acquired = 1;
 END { D2TG::Lock::release($lock_path) if $lock_acquired; }
 
