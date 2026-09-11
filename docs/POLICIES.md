@@ -2028,3 +2028,25 @@ no-groups run comes from the earlier guard, well before
 and documented in `t/185-poller-lock-leak-no-groups-and-store-failure.t`
 rather than faking a scenario that cannot occur; the `!@$groups` check
 itself is left in place as defense-in-depth.
+
+A second Codex QA-stage review round, on TGT-185's own fix, found two
+MORE reachable exit paths sharing the identical lock-leak gap: a "no
+bot tokens configured" exit (a `--chat_id` group with no `--bot`, and
+`D2TG_TOKEN` unset), and the `exec()`-restart-failure `die` further
+down in `cli/poller.pl`. Rather than continuing to patch one exit at
+a time - this was the fourth instance of the same bug class found
+across TGT-184/TGT-185 - `cli/poller.pl` now has a single `END` block
+placed right after `D2TG::Lock::acquire` succeeds:
+`END { D2TG::Lock::release($lock_path) if $lock_acquired; }`. It
+releases the lock on any exit past that point, current or future,
+without each one needing to be individually found and fixed again.
+`D2TG::Lock::release` is idempotent and PID-scoped (only unlinks a
+lock file this exact process still owns), so it is safe to run
+alongside the existing explicit `release()` calls, and does not fire
+on a successful `exec()` (the process image is replaced, not exited -
+the same PID correctly keeps holding the same lock). The no-bot-tokens
+scenario is covered by a new test case (confirmed red without the
+`END` block, green with it); the `exec()`-failure `die` is not
+independently tested (a deterministic reproduction would need
+environment sabotage this pass doesn't implement) but is covered by
+the same mechanism.

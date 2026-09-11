@@ -9,7 +9,13 @@ on `heartbeat_path`'s own exit. The ticket's other originally-scoped
 scenario (a "no groups configured" exit leaking the lock) turned out
 to be unreachable dead code - two earlier startup guards already
 refuse before that check can ever see an empty groups list - proven
-and documented in the new test rather than faked.
+and documented in the new test rather than faked. A second Codex
+QA-stage review round on this fix then found two MORE reachable
+exits sharing the same leak (a "no bot tokens configured" exit, and
+an `exec()`-restart-failure `die`) - rather than patching a fourth
+site individually, `cli/poller.pl` now has a single `END` block
+right after `D2TG::Lock::acquire` succeeds that releases the lock on
+any exit past that point, closing the whole bug class structurally.
 RELIABILITY FIX (TGT-184,
 follow-up to TGT-183): `cli/poller.pl`'s `lock_path`/`heartbeat_path`
 startup calls shared the identical unwrapped-`make_path` risk TGT-183
