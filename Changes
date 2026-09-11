@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+1.56  2026-09-11
+      - CONSISTENCY FIX (TGT-193, found via a scheduled JOB-004
+        improvement hunt): D2TG::Poller::run_once's 4 STORE ERROR print
+        blocks (is_allowed x3 - message_reaction, edited_message, plain
+        message branches; add_pending x1 - plain message branch) each
+        printed the raw DBI/SQLite exception text verbatim to STDERR,
+        instead of classifying it via the already-established shared
+        _classify_store_error helper - every other D2TG::Store-write
+        error path in this codebase already does this
+        (_record_message_safe TGT-132/133, persist_offset_safe
+        TGT-166/191, D2TG::Reply's _store_write_safe TGT-192). These 4
+        call sites predate _classify_store_error (TGT-165, before
+        TGT-167 extracted the shared helper) and were simply never
+        revisited. A raw DBI/SQLite error can embed the database
+        file's own real path - the same disclosure risk TGT-133
+        established as this project's standard to avoid. New test
+        t/193-store-error-classified-not-raw.t (12 assertions,
+        covering all 4 call sites), confirmed genuinely red against
+        the pre-fix code (8/12 assertions failed, each showing the raw
+        db_path/exception text leaking into STDERR).
+
 1.55  2026-09-11
       - RELIABILITY FIX (TGT-192, found via a scheduled JOB-003 hourly
         bug hunt, the same class of issue TGT-191 just fixed):

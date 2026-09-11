@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.55).** RELIABILITY FIX (TGT-192,
+**Status: early implementation (v1.56).** CONSISTENCY FIX (TGT-193,
+found via a scheduled JOB-004 improvement hunt): `D2TG::Poller::run_once`'s
+4 STORE ERROR print blocks (`is_allowed` x3, `add_pending` x1) printed
+the raw DBI/SQLite exception text verbatim to STDERR, instead of
+classifying it via the already-established shared `_classify_store_error`
+helper - every other `D2TG::Store`-write error path in this codebase
+already does this. These 4 call sites predate `_classify_store_error`
+(TGT-165, before TGT-167 extracted the shared helper) and were simply
+never revisited. A raw DBI/SQLite error can embed the database file's
+own real path - the same disclosure risk TGT-133 established as this
+project's standard to avoid.
+
+RELIABILITY FIX (TGT-192,
 found via a scheduled JOB-003 hourly bug hunt, the same class of
 issue TGT-191 just fixed): `D2TG::Reply::send_reply`/`resend_voice`'s
 own `record_sent_text`/`record_sent_voice`/`mark_read` calls were the
