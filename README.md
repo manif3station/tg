@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.58).** RELIABILITY FIX (TGT-195,
+**Status: early implementation (v1.59).** RELIABILITY FIX (TGT-196,
+Michael's own design choice, Q-013, answering a Codex documentation-
+stage review finding on TGT-194): a persistently-failing
+`record_message` used to make `retry_failed_download` re-download the
+same already-fetched file on every retry pass, forever. A queued row
+now persists its own already-downloaded `local_path` via
+`D2TG::Store::mark_failed_download_downloaded` on a `record_message`
+failure - a future retry checks this first and, if set, skips
+`download_file` entirely, retrying only the still-failing
+`record_message` write.
+
+RELIABILITY FIX (TGT-195,
 found via a repo-wide grep sweep done as part of a Codex QA-stage
 review on TGT-194): `cli/approve.pl`'s own `approve`/`is_allowed`
 calls were unwrapped - a locked/busy database at either one died raw,

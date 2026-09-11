@@ -2482,3 +2482,60 @@ flow change (adding `eval` wrappers and a classification call) with no
 shell invocation, no new file I/O, and no new external-input handling
 - no system/exec/backtick/piped-open/eval-STRING patterns in either
 touched file.
+
+## TGT-196: persist a downloaded-but-pending state, skip re-download on a stuck retry
+
+A follow-on Codex documentation-stage review finding on TGT-194's own
+fix: a persistently-failing `record_message` made `retry_failed_download`
+re-download the same already-successfully-fetched file on every retry
+pass, forever - wasting bandwidth and Telegram API calls with no
+escape hatch. Documented as a known limitation and a design question
+(Q-013) raised on the card with two real options (with a synthesized
+voice note and options, per this project's own standing rule for
+genuine design ambiguity) rather than guessing.
+
+Michael chose Option A: persist a distinct "downloaded, history
+pending" state so a future retry, given a row already in this state,
+skips re-downloading entirely and only retries the `record_message`
+write.
+
+Implementation: `D2TG::Store::failed_downloads` gained a `local_path`
+column via the established duplicate-tolerant `ALTER TABLE ... ADD
+COLUMN` migration pattern (matching `messages.read_at`/`messages.local_path`/
+`sent_replies.text`'s own precedent), and a new
+`mark_failed_download_downloaded($id, $local_path)` method sets it.
+`D2TG::Download::retry_failed_download` now checks `$row->{local_path}`
+first - if defined, `download_file` is skipped entirely and the
+persisted path is reused directly; otherwise the existing download
+proceeds as before. A `record_message` failure now persists the
+already-downloaded path on the row (a no-op if a prior retry already
+did this for the same row) before leaving it queued, instead of simply
+leaving the row in its ordinary not-yet-downloaded state.
+
+New test `t/196-retry-failed-download-skips-redownload.t` (13
+assertions): a first retry (download succeeds, `record_message` fails)
+persists `local_path`, verified via a Telegram double's own
+`get_file` call counter; a second retry on the same row makes zero
+further `get_file` calls, proving the escape hatch genuinely works;
+and once `record_message` eventually succeeds (with a pre-set
+`local_path`), the row is removed and history restored using the
+persisted path rather than a fresh download. Confirmed genuinely red
+against the pre-fix code (4/7 assertions failed, plus a fatal "no
+method mark_failed_download_downloaded" error once the test reached
+that call).
+
+Not covered by this ticket, deliberately: a downloaded file that gets
+pruned from the vault (`prune_vault`'s own oldest-`mtime`-first
+eviction) between a failed retry and a later successful one would
+leave `local_path` pointing at a now-missing file - the same
+characteristic risk every other downloaded file already carries once
+`prune_vault` can evict it, not a new risk this ticket introduces;
+`record_message` itself never verifies the file exists before storing
+the path.
+
+perlsec.pl-style vulnerability-scan audit: pure in-process control
+flow and schema-migration change (an `ALTER TABLE ADD COLUMN`, a new
+accessor method, a conditional branch) with no shell invocation, no
+new file I/O beyond the existing SQLite writes, and no new
+external-input handling - no system/exec/backtick/piped-open/
+eval-STRING patterns in either touched file.
