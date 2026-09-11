@@ -61,11 +61,10 @@ package main;
         error  => 'HTTP request failed (status 500)',
     );
 
-    # Force record_message to fail by closing the underlying dbh - the
-    # simplest way to make a real D2TG::Store call die predictably
-    # without a fake double, since this test wants the REAL schema/
+    # Force record_message to fail by overriding just that one method
+    # on a real D2TG::Store subclass - this test wants the REAL schema/
     # persistence behavior of mark_failed_download_downloaded exercised
-    # end to end, not a mocked one.
+    # end to end, not a bare mocked store.
     package Fake::Store::DyingRecordMessage;
     our @ISA = ('D2TG::Store');
     sub record_message { die "database is locked\n"; }
