@@ -2539,3 +2539,53 @@ accessor method, a conditional branch) with no shell invocation, no
 new file I/O beyond the existing SQLite writes, and no new
 external-input handling - no system/exec/backtick/piped-open/
 eval-STRING patterns in either touched file.
+
+## TGT-198: extract a shared store-write-safe helper, the eval+classify+print pattern was duplicated 7 times
+
+A scheduled JOB-004 improvement hunt found the exact class of
+duplication this project has extracted before (`_classify_store_error`
+itself, `_record_message_and_track_offset`, `_synthesize_and_send_voice`,
+`_format_forwarded_sender`): `eval { $store->WRITE(...) }; if ($@) {
+my $reason = D2TG::Poller::_classify_store_error($@); print STDERR
+"STORE ERROR [$chat_id]: DESC failed - $reason\n"; }` hand-written
+identically at 7 call sites across `D2TG::Poller.pm` (`is_allowed` x3,
+`add_pending`) and `D2TG::Download.pm` (`record_message`,
+`remove_failed_download`, `mark_failed_download_downloaded`) - while
+`D2TG::Reply.pm` already had an equivalent private helper
+(`_store_write_safe`, TGT-192) doing exactly this for its own 5 call
+sites.
+
+Two more candidate call sites originally named in the ticket
+(`_record_message_safe`'s own `record_message` call, `persist_offset_safe`'s
+own `set_offset` call) were investigated and deliberately excluded
+before implementation started (recorded as a card comment): both print
+custom, differently-worded messages and return a `0`/`1` success
+boolean rather than the coderef's own return value, so forcing them
+through the same helper would either change observable STDERR text or
+complicate the helper's own contract for two outliers. `D2TG::Reply.pm`'s
+own private helper was also left untouched (out of this ticket's own
+scope) - its call sites never need the coderef's return value, unlike
+`is_allowed`/`add_pending` here.
+
+New public `D2TG::Poller::store_write_safe($chat_id, $description,
+$coderef)` returns a `($ok, $value)` pair rather than a bare value or
+undef, since a coderef like `is_allowed` can legitimately return a
+false value (0) on success - a bare undef-on-failure return couldn't
+distinguish "the write failed" from "the write succeeded and returned
+false". This matches this codebase's own established `(1, $result)`/
+`(0, $error)` convention (e.g. `D2TG::Download::retry_failed_download`).
+
+Pure refactor, no behavior change: the printed `STORE ERROR [chat_id]:
+DESC failed - REASON` text and every call site's own control flow
+(`next`, `$record_ok`, fire-and-forget) are unchanged. New structural
+(source-inspection) regression test
+`t/198-store-write-safe-shared-helper.t` - the same established
+precedent as `t/104`/`t/88`/`t/195` for asserting "routed through a
+shared helper" vs. "still duplicated inline" when there is no
+injectable functional seam - confirmed genuinely red against the
+pre-fix code (no shared helper existed, both files still showed the
+inline pattern), and confirmed the migration didn't accidentally
+regress by excluding `store_write_safe`'s own canonical definition
+from the duplicate-detection scan (which would otherwise self-flag).
+Full suite (sequential and `-j4` parallel) both PASS with no test
+changes needed at any of the 7 migrated call sites.

@@ -1,6 +1,15 @@
 # tg
 
-**Status: early implementation (v1.59).** RELIABILITY FIX (TGT-196,
+**Status: early implementation (v1.60).** REFACTOR (TGT-198, found via
+a scheduled JOB-004 improvement hunt): the eval + classify + print
+"STORE ERROR" pattern, hand-duplicated across 7 call sites in
+`D2TG::Poller.pm` (`is_allowed` x3, `add_pending`) and
+`D2TG::Download.pm` (`record_message`, `remove_failed_download`,
+`mark_failed_download_downloaded`), is now a single shared
+`D2TG::Poller::store_write_safe` helper. Pure refactor, no behavior
+change - every existing test still passes unmodified.
+
+RELIABILITY FIX (TGT-196,
 Michael's own design choice, Q-013, answering a Codex documentation-
 stage review finding on TGT-194): a persistently-failing
 `record_message` used to make `retry_failed_download` re-download the

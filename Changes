@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+1.60  2026-09-11
+      - REFACTOR (TGT-198, found via a scheduled JOB-004 improvement
+        hunt): the eval + D2TG::Poller::_classify_store_error + print
+        STDERR "STORE ERROR [chat_id]: DESC failed - REASON" pattern
+        was hand-duplicated across 7 call sites - is_allowed (x3) and
+        add_pending in D2TG::Poller.pm, plus record_message,
+        remove_failed_download, and mark_failed_download_downloaded in
+        D2TG::Download.pm. New public D2TG::Poller::store_write_safe
+        helper (promoted from D2TG::Reply's own private
+        _store_write_safe, TGT-192) centralizes it; all 7 call sites
+        now call the shared helper instead. Pure refactor, no behavior
+        change - every existing test for all 7 call sites passes
+        unmodified. New structural regression test
+        t/198-store-write-safe-shared-helper.t, confirmed genuinely red
+        against the pre-fix code (no shared helper existed, both files
+        still showed the inline pattern). _record_message_safe and
+        persist_offset_safe were deliberately left unmigrated - their
+        printed message text and 0/1 return-boolean contract differ
+        from this shared shape.
+
 1.59  2026-09-11
       - RELIABILITY FIX (TGT-196, Michael's own design choice, Q-013,
         answering a Codex documentation-stage review finding on TGT-194):
