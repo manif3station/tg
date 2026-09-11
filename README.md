@@ -15,7 +15,15 @@ script mid-loop, silently abandoning every remaining queued row in
 that batch. Both calls now `eval`-wrapped and classified via
 `D2TG::Poller::_classify_store_error`, matching the established
 `_store_write_safe`/`_record_message_safe`/`persist_offset_safe`
-pattern.
+pattern - `remove_failed_download` is deliberately only attempted when
+`record_message` either succeeded or wasn't needed, so a
+`record_message` failure never removes the queue row (a Codex
+documentation-stage review finding: doing so unconditionally would
+leave a message with neither a queue row nor a history record, worse
+than the pre-fix crash). A repo-wide sweep for this bug class, done as
+part of that same review, found one more remaining unwrapped call pair
+- `cli/approve.pl`'s own `approve`/`is_allowed` calls - filed
+separately as TGT-195, not yet fixed.
 
 CONSISTENCY FIX (TGT-193,
 found via a scheduled JOB-004 improvement hunt): `D2TG::Poller::run_once`'s

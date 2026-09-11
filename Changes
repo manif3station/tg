@@ -7,8 +7,8 @@ Revision history for the tg skill
         190/191/192/193): D2TG::Download::retry_failed_download called
         $store->record_message(...) and $store->remove_failed_download(...)
         directly, with no eval/classification around either call -
-        unlike every other D2TG::Store write call site in this
-        codebase. If either died (e.g. a locked/busy database), the
+        the one unwrapped D2TG::Store write pair in this module. If
+        either died (e.g. a locked/busy database), the
         exception propagated raw straight out of retry_failed_download,
         breaking its own documented (1, $local_path)/(0, $error)
         return contract even though the download itself genuinely
@@ -20,8 +20,18 @@ Revision history for the tg skill
         established _store_write_safe/_record_message_safe/
         persist_offset_safe pattern - the reported (1, $local_path)
         success is unaffected by a bookkeeping-write failure, since
-        the download itself did succeed. New test
-        t/194-retry-download-store-write-non-fatal.t (15 assertions),
+        the download itself did succeed. remove_failed_download is
+        deliberately only attempted when record_message either
+        succeeded or wasn't needed - a record_message failure never
+        removes the queue row (a Codex documentation-stage review
+        finding: doing so unconditionally would leave a message with
+        neither a queue row nor a history record, worse than the
+        pre-fix crash, which at least left the row queued). A
+        repo-wide sweep for this bug class, done as part of that same
+        review, found one more remaining unwrapped call pair -
+        cli/approve.pl's own approve/is_allowed calls - filed
+        separately as TGT-195, not yet fixed. New test
+        t/194-retry-download-store-write-non-fatal.t (19 assertions),
         confirmed genuinely red against the pre-fix code (the whole
         test script crashed with an uncaught die, no TAP plan
         produced).

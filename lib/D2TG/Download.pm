@@ -116,6 +116,20 @@ sub retry_failed_download {
     # matching the established pattern - a bookkeeping-write failure is
     # logged non-fatally to STDERR and does not affect the reported
     # (1, $local_path) success, since the download itself did succeed.
+    # A Codex documentation-stage review finding: removing the queue
+    # row unconditionally, even when record_message itself failed,
+    # would be a genuine data-retention regression - the pre-fix code
+    # accidentally preserved the row in this exact case (the raw die
+    # from record_message happened BEFORE remove_failed_download was
+    # ever reached, so a locked-database failure here at least left
+    # the row queued for a later retry attempt). Silently removing it
+    # anyway would leave a message with NEITHER a queue row NOR a
+    # history record - worse than the pre-fix crash, not better. Only
+    # remove the row when record_message either succeeded or was never
+    # attempted (no media_kind); when it failed, the row stays queued
+    # so a future retry can still restore history, and remove_failed_download
+    # is deliberately not attempted at all this cycle.
+    my $record_ok = 1;
     if ( defined $row->{media_kind} ) {
         # TGT-133: the summary text (shown verbatim by cli/history.pl and
         # cli/unread.pl) must never contain the real local path - only
@@ -123,15 +137,22 @@ sub retry_failed_download {
         my $summary = "$row->{media_kind}" . ( $row->{caption_note} // '' );
         eval { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path ) };
         if ($@) {
+            $record_ok = 0;
             my $reason = D2TG::Poller::_classify_store_error($@);
             print STDERR "STORE ERROR [$row->{chat_id}]: record_message failed - $reason\n";
         }
     }
 
-    eval { $store->remove_failed_download( $row->{id} ) };
-    if ($@) {
-        my $reason = D2TG::Poller::_classify_store_error($@);
-        print STDERR "STORE ERROR [$row->{chat_id}]: remove_failed_download failed - $reason\n";
+    if ($record_ok) {
+        eval { $store->remove_failed_download( $row->{id} ) };
+        if ($@) {
+            my $reason = D2TG::Poller::_classify_store_error($@);
+            print STDERR "STORE ERROR [$row->{chat_id}]: remove_failed_download failed - $reason\n";
+        }
+    }
+    else {
+        print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
+          . "a future retry can still restore history for this message\n";
     }
 
     return ( 1, $local_path );
@@ -278,7 +299,12 @@ succeeded, and crashing C<cli/retry-download.pl>'s own per-row batch
 loop mid-run since it has no C<eval> around this call either. A
 bookkeeping-write failure is now logged non-fatally to STDERR as
 C<STORE ERROR [chat_id]: ... failed - REASON> and does not affect the
-reported C<(1, $local_path)> success.
+reported C<(1, $local_path)> success. A Codex documentation-stage
+review finding: C<remove_failed_download> is deliberately only
+attempted when C<record_message> either succeeded or wasn't needed -
+removing the queue row unconditionally on a C<record_message> failure
+would leave a message with neither a queue row nor a history record,
+worse than the pre-fix crash (which at least left the row queued).
 
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 

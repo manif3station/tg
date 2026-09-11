@@ -49,12 +49,22 @@ sub get { my ($self) = @_; return shift @{ $self->{responses} }; }
 
 package Fake::Store::DyingRecordMessage;
 
-sub new { return bless { calls => [] }, shift; }
+# dies_for (a message_id), when given, dies only for that specific
+# message_id and succeeds for every other one - lets one store
+# instance be reused across multiple rows in a single test, proving
+# real per-row isolation on the SAME store rather than merely on two
+# separate store instances.
+sub new {
+    my ( $class, %args ) = @_;
+    return bless { calls => [], dies_for => $args{dies_for} }, $class;
+}
 
 sub record_message {
-    my $self = shift;
-    push @{ $self->{calls} }, [ 'record_message', @_ ];
-    die "database is locked\n";
+    my ( $self, $chat_id, $message_id, @rest ) = @_;
+    push @{ $self->{calls} }, [ 'record_message', $chat_id, $message_id, @rest ];
+    die "database is locked\n"
+      if !defined $self->{dies_for} || $message_id == $self->{dies_for};
+    return;
 }
 
 sub remove_failed_download {
@@ -104,8 +114,18 @@ package main;
     like( $err, qr/STORE ERROR \[999\]: record_message failed - database is locked/,
         'the record_message failure is logged non-fatally, classified (never the raw exception)' );
     unlike( $err, qr/at \S+\.pm line \d+/, 'the raw exception trace is never echoed - only the classified reason (TGT-133 precedent)' );
-    ok( ( grep { $_->[0] eq 'remove_failed_download' } @{ $store->{calls} } ),
-        'remove_failed_download is still attempted even after record_message failed - the queue row cleanup is independent' );
+    # A Codex documentation-stage review finding: removing the queue
+    # row unconditionally here, even though record_message itself
+    # failed, would leave a message with NEITHER a queue row NOR a
+    # history record - worse than the pre-fix crash (which at least
+    # left the row queued, since the raw die happened before
+    # remove_failed_download was ever reached). remove_failed_download
+    # must NOT be attempted this cycle so the row survives for a
+    # future retry that can still restore history.
+    is_deeply( [ grep { $_->[0] eq 'remove_failed_download' } @{ $store->{calls} } ], [],
+        'remove_failed_download is deliberately NOT attempted when record_message failed - the queue row survives for a future retry' );
+    like( $err, qr/STORE ERROR \[999\]: queue row not removed/,
+        'a clear note explains why the row was left queued' );
 }
 
 {
@@ -153,13 +173,19 @@ package main;
         'remove_failed_download failure still logged non-fatally' );
 }
 
-# Per-row batch isolation: two consecutive calls on the SAME store
-# instance (matching cli/retry-download.pl's own for-loop reusing one
-# $store across every queued row) - the first row's store-write
-# failure must not affect the second row's own independent success.
+# Per-row batch isolation: two consecutive calls on the ACTUAL SAME
+# store instance (matching cli/retry-download.pl's own for-loop
+# reusing one $store across every queued row) - the first row's
+# store-write failure must not affect the second row's own
+# independent success. A Codex documentation-stage review finding: an
+# earlier draft of this block claimed to test this but silently used
+# a second, different store instance for row 2 instead, so it never
+# actually proved same-store isolation - fixed by giving the fake a
+# dies_for(message_id) so one store instance can fail for row 1's
+# message_id specifically while genuinely succeeding for row 2's.
 {
-    my $dir      = tempdir( CLEANUP => 1 );
-    my $store    = Fake::Store::DyingRecordMessage->new;
+    my $dir   = tempdir( CLEANUP => 1 );
+    my $store = Fake::Store::DyingRecordMessage->new( dies_for => 1 );
 
     my $telegram1 = Fake::DownloadTelegram->new( file_path => 'documents/row1.pdf' );
     my $response1 = HTTP::Response->new( 200, 'OK' );
@@ -172,31 +198,24 @@ package main;
     } );
 
     ok( $ok1, 'first queued row: retry_failed_download does not die despite its own record_message failure' );
+    is_deeply( [ grep { $_->[0] eq 'remove_failed_download' } @{ $store->{calls} } ], [],
+        'first row: remove_failed_download not attempted, its queue row survives - same guarantee as the earlier block' );
 
-    # A second, DIFFERENT store instance whose calls all succeed,
-    # standing in for "the next queued row's own retry, on the same
-    # $store, now behaving normally" - proving the first row's failure
-    # left nothing broken that would affect subsequent rows.
     my $telegram2 = Fake::DownloadTelegram->new( file_path => 'documents/row2.pdf' );
     my $response2 = HTTP::Response->new( 200, 'OK' );
     $response2->content('row 2 bytes');
     my $ua2  = Fake::UA->new( responses => [$response2] );
     my $row2 = { id => 11, chat_id => 222, message_id => 2, file_id => 'row2', sender => 'bob', media_kind => 'document', caption_note => '' };
 
-    package Fake::Store::AllSucceed;
-    sub new { return bless {}, shift; }
-    sub record_message         { return; }
-    sub remove_failed_download { return; }
-    package main;
-
-    my $store2 = Fake::Store::AllSucceed->new;
     my ( $err2, $ok2, $result2 ) = capture_stderr( sub {
-        return D2TG::Download::retry_failed_download( $telegram2, $store2, $row2, $dir, ua => $ua2 );
+        return D2TG::Download::retry_failed_download( $telegram2, $store, $row2, $dir, ua => $ua2 );
     } );
 
-    ok( $ok2, 'second queued row succeeds independently - per-row isolation preserved' );
+    ok( $ok2, 'second queued row succeeds independently on the SAME store instance - per-row isolation genuinely preserved' );
     like( $result2, qr/\.pdf$/, 'second row returns its own local path, unaffected by the first row\'s store-write failure' );
-    is( $err2, '', 'second row logs nothing to STDERR - it never touched the first row\'s failing store' );
+    is( $err2, '', 'second row logs nothing to STDERR - its own record_message and remove_failed_download both succeed on the shared store' );
+    ok( ( grep { $_->[0] eq 'remove_failed_download' && $_->[1] == 11 } @{ $store->{calls} } ),
+        'second row: remove_failed_download IS attempted (row id 11) and succeeds, proving the shared store genuinely recovered for a different message_id' );
 }
 
 done_testing();

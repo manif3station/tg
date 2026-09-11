@@ -2400,16 +2400,41 @@ Fixed by wrapping both calls in `eval`, classified via
 pattern - the reported `(1, $local_path)` success is unaffected by a
 bookkeeping-write failure, since the download itself did succeed.
 
-New test `t/194-retry-download-store-write-non-fatal.t` (15
+A Codex documentation-stage review finding: an earlier draft removed
+the queue row unconditionally, even when `record_message` itself
+failed - this would leave a message with NEITHER a queue row NOR a
+history record, a genuine data-retention regression worse than the
+pre-fix crash (which at least left the row queued, since the raw die
+happened before `remove_failed_download` was ever reached). Fixed by
+only attempting `remove_failed_download` when `record_message` either
+succeeded or wasn't needed (no `media_kind`) - on a `record_message`
+failure, the row now stays queued so a future retry can still restore
+history, and a clear STDERR note explains why.
+
+A second finding from the same review: the earlier draft's own
+"unlike every other `D2TG::Store` write call site" / "all known
+instances of this bug class are now fixed" claims (in this doc and the
+parent EPIC's own comment) were unverified. A repo-wide sweep
+(`grep -rn` for every `D2TG::Store` write-method call across `lib/` and
+`cli/`) found one more remaining unwrapped call pair -
+`cli/approve.pl`'s own `approve`/`is_allowed` calls at lines 58 and 63
+- filed separately as TGT-195, not yet fixed. Claims narrowed to "the
+one unwrapped `D2TG::Store` write pair in this module" (true) rather
+than the whole codebase.
+
+New test `t/194-retry-download-store-write-non-fatal.t` (19
 assertions): `record_message` failure (still reports success, failure
-classified and logged, `remove_failed_download` still attempted
-independently), `remove_failed_download` failure (same non-fatal
-guarantee), the no-`media_kind` case (`record_message` correctly never
+classified and logged, `remove_failed_download` now deliberately NOT
+attempted - the row survives), `remove_failed_download` failure (same
+non-fatal guarantee, unaffected since `record_message` succeeded
+first), the no-`media_kind` case (`record_message` correctly never
 attempted, `remove_failed_download`'s own failure still non-fatal), and
-a two-row per-row-isolation check (the first row's store-write failure
-leaves the second row's own independent retry, on a different store
-instance, completely unaffected - standing in for `cli/retry-download.pl`'s
-own batch loop reusing one `$store` across every queued row). Confirmed
+a two-row per-row-isolation check on the ACTUAL SAME store instance (a
+`dies_for(message_id)` fake lets one store fail for row 1's message_id
+specifically while genuinely succeeding for row 2's - an earlier draft
+of this block claimed to test same-store isolation but silently used a
+second, different store instance instead, never actually proving it;
+another Codex documentation-stage review finding, fixed). Confirmed
 genuinely red against the pre-fix code - the whole test script crashed
 with an uncaught die (`Wstat 6400`, exit 25, "No plan found in TAP
 output") rather than merely failing an assertion, since the raw
