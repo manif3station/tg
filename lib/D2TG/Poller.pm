@@ -514,9 +514,11 @@ sub persist_offset_safe {
     # so a locked/busy SQLite database crashed the ENTIRE poller
     # process, not just one poll cycle's batch. The poll cycle itself
     # already completed successfully via run_once_safe by the time this
-    # runs, so losing only this one offset persistence (retried
-    # automatically on the next successful poll cycle) is the right
-    # degradation, matching _record_message_safe's own philosophy.
+    # runs, so losing only this one offset persistence is the right
+    # degradation, matching _record_message_safe's own philosophy - not
+    # a retry of this specific failed value, but a later poll cycle
+    # attempting to persist its own (by then newer) offset again, per
+    # this function's own POD below.
     local $@;
     eval { $store->set_offset( $offset, $bot_key ) };
     if ($@) {
