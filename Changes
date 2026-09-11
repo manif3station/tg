@@ -61,6 +61,22 @@ Revision history for the tg skill
         skips just the store write, exactly as before. New regression
         blocks cover both shapes independently.
 
+        A fourth round: the docs overclaimed the non-hashref die as
+        unconditional (it's gated on store+text_message_id being
+        present, matching the store write's own pre-existing gating -
+        qualified in README/Changes/POLICIES/commands.md), and the
+        malformed/shapeless coverage and the "left unread" guarantee
+        had no resend_voice-specific assertions - added both.
+
+        A fifth round found that "left unread" guarantee was actually
+        FALSE for resend_voice: its own mark_read call ran BEFORE the
+        ref() eq 'HASH' check, so a malformed voice result died only
+        after the message had already been marked read, defeating the
+        retry/recovery state resend_voice exists to preserve. Fixed by
+        reordering resend_voice so mark_read only runs after the
+        result shape is confirmed usable. Confirmed red against the
+        pre-fix ordering first.
+
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the
         budget project: 2 real Telegram messages permanently lost):

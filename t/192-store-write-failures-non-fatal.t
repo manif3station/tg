@@ -353,6 +353,14 @@ package main;
     unlike( $err, qr/STORE ERROR/, 'this failure is never misreported as a STORE ERROR - it is not a store-write problem at all' );
     is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
         'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result' );
+    # A Codex QA-stage review finding (round 5): the original ordering
+    # ran mark_read BEFORE checking the voice result's shape, so a
+    # malformed result died only after the message had already been
+    # marked read - defeating the retry/recovery state resend_voice
+    # exists to preserve. mark_read now only runs after the result
+    # shape is confirmed usable, so it must never be attempted here.
+    is_deeply( [ grep { $_->[0] eq 'mark_read' } @{ $store->{calls} } ], [],
+        'mark_read is never attempted either - the message is correctly left unread after a malformed voice result, not falsely marked handled' );
 }
 
 {

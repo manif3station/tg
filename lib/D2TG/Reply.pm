@@ -156,17 +156,6 @@ sub resend_voice {
         opts       => \%opts,
     );
 
-    # Codex review finding: without this, a successfully-recovered
-    # reply (text already sent earlier, voice now resent here) stayed
-    # unread forever - inviting later reprocessing/a duplicate full
-    # reply, since nothing else ever marks it read for this recovery
-    # path. Same guard as send_reply's own: only when both store and
-    # reply_to_message_id are given, and only after send_voice has
-    # actually succeeded.
-    _store_write_safe( $chat_id, 'mark_read', sub {
-        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
-    } ) if $args{store} && defined $args{reply_to_message_id};
-
     # TGT-105: this is exactly what clears a send_reply-recorded
     # text-only flag once the missing voice half is actually recovered.
     # A Codex QA-stage review finding (same as send_reply's own, see
@@ -178,6 +167,15 @@ sub resend_voice {
     # missing this key. A non-hashref result now dies for real; a
     # present hashref missing the key (e.g. Fake::ReplyTelegram's
     # 'shapeless' option) still quietly skips just the store write.
+    #
+    # A round-5 Codex finding: this check - and the die it can raise -
+    # must run BEFORE mark_read, not after. The original ordering ran
+    # mark_read first (see its own comment, still true, just relocated
+    # below), so a malformed voice result died AFTER the message had
+    # already been marked read - defeating the exact retry/recovery
+    # state this whole function exists to preserve on a genuine
+    # failure. Now nothing marks the message read until send_voice's
+    # result shape is actually confirmed usable.
     my $voice_message_id;
     if ( $args{store} && defined $text_message_id ) {
         die "D2TG::Reply::resend_voice: send_voice returned an unexpected result "
@@ -189,6 +187,18 @@ sub resend_voice {
             $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
         } ) if defined $voice_message_id;
     }
+
+    # Codex review finding: without this, a successfully-recovered
+    # reply (text already sent earlier, voice now resent here) stayed
+    # unread forever - inviting later reprocessing/a duplicate full
+    # reply, since nothing else ever marks it read for this recovery
+    # path. Same guard as send_reply's own: only when both store and
+    # reply_to_message_id are given, and only after send_voice has
+    # actually succeeded (the round-5 finding above is exactly why this
+    # now runs after, not before, the result-shape check).
+    _store_write_safe( $chat_id, 'mark_read', sub {
+        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
+    } ) if $args{store} && defined $args{reply_to_message_id};
 
     return { voice => $voice_result };
 }

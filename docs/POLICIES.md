@@ -2299,10 +2299,23 @@ attempted, another round-4 finding: this state must survive for a
 later retry/recovery path to still find it pending) - and a
 `shapeless`-but-present hashref (via `Fake::ReplyTelegram`) is
 separately proven to still succeed silently for both functions,
-confirming the two shapes are genuinely distinguished. Confirmed
-genuinely red against the pre-fix code - the whole test script crashed
-with an uncaught die (no TAP plan produced at all) rather than merely
-failing an assertion, since the raw exception propagated straight out
+confirming the two shapes are genuinely distinguished.
+
+A round-5 finding on that same "left genuinely unread" claim: it held
+for `send_reply` from the start, but `resend_voice`'s own `mark_read`
+call originally ran BEFORE the `ref($voice_result) eq 'HASH'` check, so
+a malformed voice result there died only after the message had already
+been marked read - directly contradicting the claim, and defeating the
+retry/recovery state `resend_voice` exists to preserve. Fixed by
+reordering `resend_voice` so `mark_read` only runs after the result
+shape is confirmed usable (mirroring the order the result-shape check
+and the store write it guards already had); the test above now asserts
+`mark_read` was never attempted for `resend_voice`'s own malformed case
+too, and was confirmed genuinely red against the pre-fix ordering
+first. Confirmed genuinely red against the pre-fix code - the whole
+test script crashed with an uncaught die (no TAP plan produced at all)
+rather than merely failing an assertion, since the raw exception
+propagated straight out
 of `send_reply` with nothing to catch it; the malformed-result
 regression block was separately confirmed red against the round-2
 (`eval`-guarded dereference) code before landing on the `ref()`-check
