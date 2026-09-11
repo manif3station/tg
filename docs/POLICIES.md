@@ -2246,18 +2246,39 @@ stage review finding: an earlier draft's "returns normally whenever
 TGT-083 tradeoff) - only the local audit-trail write's own failure is
 now non-fatal.
 
+A second, QA-stage Codex finding on this same fix: an earlier draft
+evaluated `$voice_result->{message_id}` INSIDE the `_store_write_safe`
+closure. A malformed (non-hashref) `$voice_result` - e.g. `send_voice`
+returning `undef` - died on that dereference *inside* the same `eval`
+meant only for the store write itself, so `_store_write_safe`
+misclassified it as a non-fatal `record_sent_voice failed` `STORE
+ERROR` and swallowed it, silently turning what used to be a correctly-
+propagated hard failure into a falsely-reported success. Fixed by
+extracting `$voice_result->{message_id}` into its own eval-guarded
+variable BEFORE `_store_write_safe` is called in both `send_reply` and
+`resend_voice`, mirroring `$text_message_id`'s own established TGT-105
+pattern - `record_sent_voice` is now simply skipped (never attempted,
+never misreported) when the voice result's shape can't supply a
+message id.
+
 New test `t/192-store-write-failures-non-fatal.t`: each of the 3
 failure modes is non-fatal and classified (never the raw exception,
 matching TGT-133's own scrubbing precedent), voice is genuinely still
 sent after a `record_sent_text` failure (checked via the fake
 Telegram double's own `call_order`), the fully-successful path is
 completely unaffected (no STDERR output, all 3 `send_reply` store
-calls made exactly once), and `resend_voice`'s own `mark_read`/
+calls made exactly once), `resend_voice`'s own `mark_read`/
 `record_sent_voice` failures are independently proven non-fatal too
 (a Codex QA-stage review finding: an earlier draft only exercised
 `send_reply`, leaving 2 of the 5 fixed call sites completely
-untested). Confirmed genuinely red against the
+untested), and a malformed `send_voice` result (a `Fake::Telegram`
+double returning `undef`) is proven to never produce a misleading
+`STORE ERROR` for `record_sent_voice` (the second QA-stage finding
+above). Confirmed genuinely red against the
 pre-fix code - the whole test script crashed with an uncaught die
 (no TAP plan produced at all) rather than merely failing an
 assertion, since the raw exception propagated straight out of
-`send_reply` with nothing to catch it.
+`send_reply` with nothing to catch it; the malformed-result regression
+block was separately confirmed red against the intermediate (first-fix)
+code, where it failed on the specific assertion that
+`record_sent_voice` is never attempted.

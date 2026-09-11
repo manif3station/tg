@@ -59,6 +59,21 @@ sub mark_read {
 
 sub is_recent_duplicate_reply { return 0; }
 
+package Fake::Telegram::MalformedVoiceResult;
+
+sub new { return bless { sent_messages => [] }, shift; }
+
+sub send_message {
+    my ( $self, $chat_id, $text ) = @_;
+    push @{ $self->{sent_messages} }, { chat_id => $chat_id, text => $text };
+    return [ { message_id => 1 } ];
+}
+
+# Returns undef instead of the usual { message_id => ... } hashref -
+# a malformed shape distinct from Fake::ReplyTelegram's own
+# 'shapeless' option (which still returns a real hashref, { ok => 1 }).
+sub send_voice { return undef; }
+
 package main;
 
 {
@@ -224,6 +239,44 @@ package main;
 
     is( $err, '', 'resend_voice: nothing is printed to STDERR when every store write succeeds' );
     is( scalar @{ $store->{calls} }, 2, 'resend_voice: mark_read and record_sent_voice are each called exactly once' );
+}
+
+# TGT-192 (a second Codex QA-stage review finding, on THIS ticket's
+# own fix): _store_write_safe's eval must only cover the store write
+# itself, not the evaluation of arguments passed to it. A malformed
+# $voice_result (not a hashref - e.g. a caller's own telegram double
+# never opting into this feature, or a genuine send_voice bug)
+# previously died loudly on its own dereference, correctly propagating
+# as a hard failure all the way to cli/reply.pl. An earlier draft of
+# this fix evaluated $voice_result->{message_id} INSIDE the
+# _store_write_safe closure, so that die was caught by the SAME eval
+# meant only for the store's own write call, misclassified as a
+# non-fatal "record_sent_voice failed" STORE ERROR, and swallowed -
+# reporting overall success for a reply whose voice half never
+# actually confirmed a proper result shape. Fixed by extracting
+# $voice_result->{message_id} into its own eval-guarded variable
+# BEFORE _store_write_safe is ever called (mirroring $text_message_id's
+# own pre-existing TGT-105 pattern) - now this record_sent_voice call
+# is correctly skipped (not attempted, not errored either way) rather
+# than mis-attributing a send-side problem to the store.
+{
+    my $telegram = Fake::Telegram::MalformedVoiceResult->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return D2TG::Reply::send_reply(
+            telegram   => $telegram,
+            chat_id    => 999,
+            text       => 'hello',
+            store      => $store,
+            synthesize => sub { return '/tmp/fake-voice.ogg' },
+        );
+    } );
+
+    is( $err, '', 'a malformed send_voice result does not log a misleading STORE ERROR for record_sent_voice' );
+    is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
+        'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result - not misreported as a store failure' );
+    ok( defined $result, 'send_reply still returns normally - a malformed voice result is not itself a store-write concern' );
 }
 
 done_testing();

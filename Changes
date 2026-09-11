@@ -22,10 +22,26 @@ Revision history for the tg skill
         otherwise-successful send_reply call into a reported hard
         failure - synthesis/send_voice themselves still fail loudly
         exactly as before (TGT-083's own tradeoff unchanged). New test
-        t/192-store-write-failures-non-fatal.t (20 assertions,
+        t/192-store-write-failures-non-fatal.t (23 assertions,
         covering both send_reply and resend_voice), confirmed
         genuinely red against the pre-fix code (the whole test script
         crashed with an uncaught die).
+
+        A second Codex QA-stage finding on this same fix: the initial
+        version evaluated $voice_result->{message_id} INSIDE the
+        _store_write_safe closure, so a malformed (non-hashref)
+        $voice_result - e.g. send_voice returning undef - died on its
+        own dereference and was caught by the very same eval meant only
+        for the store write, misclassified as a non-fatal
+        "record_sent_voice failed" STORE ERROR, and swallowed. That
+        silently converted what used to be a correctly-propagated hard
+        failure into a falsely-reported success. Fixed in both
+        send_reply and resend_voice by extracting
+        $voice_result->{message_id} into its own eval-guarded variable
+        BEFORE _store_write_safe is called, mirroring $text_message_id's
+        own established TGT-105 pattern - record_sent_voice is now
+        simply skipped (not attempted, not misreported) when the voice
+        result's shape is malformed.
 
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the

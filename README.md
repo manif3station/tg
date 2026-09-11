@@ -18,7 +18,12 @@ aborts the sub), and a store-write failure specifically can no longer
 turn an otherwise-successful `send_reply` call into a reported hard
 failure - synthesis/`send_voice` themselves still fail loudly exactly
 as before (TGT-083's own text-first tradeoff is unchanged; only the
-local audit-trail write's own failure is now non-fatal).
+local audit-trail write's own failure is now non-fatal - a malformed
+voice-send result, discovered by a second Codex QA-stage review, is
+never misclassified as a store-write failure either: `record_sent_voice`
+is simply skipped when the voice result's own shape can't supply a
+message id, rather than swallowing an unrelated send-side problem as a
+non-fatal `STORE ERROR`).
 RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its

@@ -91,9 +91,23 @@ sub send_reply {
         opts       => \%opts,
     );
 
+    # A Codex QA-stage review finding: $voice_result->{message_id}
+    # must be extracted BEFORE _store_write_safe's own eval, not
+    # inside its closure - otherwise a malformed $voice_result (not a
+    # hashref) dies on ITS OWN dereference, and _store_write_safe's
+    # eval would misclassify that as a "record_sent_voice failed"
+    # STORE ERROR and swallow it non-fatally, when it is actually an
+    # unrelated, more serious failure that used to (correctly)
+    # propagate as a hard failure before this ticket. Mirrors
+    # $text_message_id's own established eval-guard above (TGT-105) -
+    # a malformed shape (existing tests' bare fakes that never opted
+    # into this feature) skips the store write entirely rather than
+    # erroring either way.
+    my $voice_message_id = eval { $voice_result->{message_id} };
+
     _store_write_safe( $chat_id, 'record_sent_voice', sub {
-        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} );
-    } ) if $args{store} && defined $text_message_id;
+        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
+    } ) if $args{store} && defined $text_message_id && defined $voice_message_id;
 
     _store_write_safe( $chat_id, 'mark_read', sub {
         $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
@@ -137,9 +151,16 @@ sub resend_voice {
 
     # TGT-105: this is exactly what clears a send_reply-recorded
     # text-only flag once the missing voice half is actually recovered.
+    # A Codex QA-stage review finding (same as send_reply's own, see
+    # its comment above): $voice_result->{message_id} must be
+    # extracted BEFORE _store_write_safe's own eval, not inside its
+    # closure, or a malformed $voice_result gets misclassified as a
+    # non-fatal STORE ERROR instead of the more serious failure it is.
+    my $voice_message_id = eval { $voice_result->{message_id} };
+
     _store_write_safe( $chat_id, 'record_sent_voice', sub {
-        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_result->{message_id}, bot_key => $args{bot_key} );
-    } ) if $args{store} && defined $text_message_id;
+        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
+    } ) if $args{store} && defined $text_message_id && defined $voice_message_id;
 
     return { voice => $voice_result };
 }
