@@ -2415,7 +2415,7 @@ A second finding from the same review: the earlier draft's own
 "unlike every other `D2TG::Store` write call site" / "all known
 instances of this bug class are now fixed" claims (in this doc and the
 parent EPIC's own comment) were unverified. A repo-wide sweep
-(`grep -rn` for every `D2TG::Store` write-method call across `lib/` and
+(`grep -rn` for every `D2TG::Store` call (write or read) across `lib/` and
 `cli/`) found one more remaining unwrapped call pair -
 `cli/approve.pl`'s own `approve`/`is_allowed` calls at lines 58 and 63
 - filed separately as TGT-195, not yet fixed. Claims narrowed to "the
@@ -2450,7 +2450,7 @@ touched file.
 ## TGT-195: eval-wrap cli/approve.pl's own approve/is_allowed calls
 
 Found via a repo-wide grep sweep (`grep -rn` for every `D2TG::Store`
-write-method call across `lib/` and `cli/`), done as part of a Codex
+call, write or read, across `lib/` and `cli/`), done as part of a Codex
 QA-stage review on TGT-194 - which had incorrectly claimed "all known
 instances of this bug class are now fixed" before this sweep was ever
 done. `cli/approve.pl` called `$store->approve(...)` and

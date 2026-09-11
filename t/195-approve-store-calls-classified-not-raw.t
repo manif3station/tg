@@ -33,24 +33,35 @@ like( $source, qr/my \$approved = eval \{ \$store->approve\(/,
 like( $source, qr/my \$allowed = eval \{ \$store->is_allowed\(/,
     'the is_allowed call is wrapped in eval, not called raw' );
 
-my $approve_count  = () = $source =~ /D2TG::Poller::_classify_store_error/g;
-cmp_ok( $approve_count, '>=', 2, 'both call sites classify their own failure via D2TG::Poller::_classify_store_error - not the raw exception (POD may also mention it)' );
-
 unlike( $source, qr/if\s*\(\s*\$store->approve\(/,
     'approve is never called directly inside a conditional - only via the eval-captured $approved variable' );
 unlike( $source, qr/if\s*\(\s*\$store->is_allowed\(/,
     'is_allowed is never called directly inside a conditional - only via the eval-captured $allowed variable' );
 
-like( $source, qr/STORE ERROR: approve failed - \$reason/,
-    'an approve failure prints a classified STORE ERROR line, matching the established STDERR shape' );
-like( $source, qr/STORE ERROR: is_allowed failed - \$reason/,
-    'an is_allowed failure prints a classified STORE ERROR line, matching the established STDERR shape' );
+# A Codex QA-stage review finding: a global count of
+# D2TG::Poller::_classify_store_error occurrences (even ">= 2") does
+# not tie either failure branch to its own classifier call, and is
+# thrown off by the POD's own prose mention of the same identifier -
+# it would miss the more relevant partial regression of one branch
+# staying eval-wrapped while reporting the raw $@ instead of the
+# classified reason. Extract each individual failure-handling block
+# (approve's own "if ($@) { ... }", and is_allowed's own) and assert
+# each one, specifically, contains its own classifier call and its own
+# STORE ERROR line - not a codebase-wide count.
+my ($approve_error_block) = $source =~ /(my \$approved = eval.*?\n\}\n)/s;
+ok( defined $approve_error_block, 'found the approve failure-handling block' );
+like( $approve_error_block, qr/D2TG::Poller::_classify_store_error/,
+    'the approve failure-handling block itself calls the classifier - not just somewhere else in the file' );
+like( $approve_error_block, qr/STORE ERROR: approve failed - \$reason/,
+    'the approve failure-handling block itself prints the classified STORE ERROR line' );
+like( $approve_error_block, qr/exit 1;/, 'an approve failure exits 1, not 0' );
 
-# Both failure branches must exit non-zero (1), matching the script's
-# own existing "nothing to approve"/"already allowed" exit(1) shape -
-# a store-write/read failure is not a success.
-my ($approve_block) = $source =~ /(my \$approved = eval.*?exit 1;\n\})/s;
-ok( defined $approve_block, 'found the approve failure-handling block' );
-like( $approve_block, qr/exit 1;/, 'an approve failure exits 1, not 0' );
+my ($is_allowed_error_block) = $source =~ /(my \$allowed = eval.*?\n\}\n)/s;
+ok( defined $is_allowed_error_block, 'found the is_allowed failure-handling block' );
+like( $is_allowed_error_block, qr/D2TG::Poller::_classify_store_error/,
+    'the is_allowed failure-handling block itself calls the classifier - not just somewhere else in the file' );
+like( $is_allowed_error_block, qr/STORE ERROR: is_allowed failed - \$reason/,
+    'the is_allowed failure-handling block itself prints the classified STORE ERROR line' );
+like( $is_allowed_error_block, qr/exit 1;/, 'an is_allowed failure exits 1, not 0' );
 
 done_testing();
