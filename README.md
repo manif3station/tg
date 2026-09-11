@@ -18,12 +18,17 @@ aborts the sub), and a store-write failure specifically can no longer
 turn an otherwise-successful `send_reply` call into a reported hard
 failure - synthesis/`send_voice` themselves still fail loudly exactly
 as before (TGT-083's own text-first tradeoff is unchanged; only the
-local audit-trail write's own failure is now non-fatal - a malformed
-voice-send result, discovered by a second Codex QA-stage review, is
-never misclassified as a store-write failure either: `record_sent_voice`
-is simply skipped when the voice result's own shape can't supply a
-message id, rather than swallowing an unrelated send-side problem as a
-non-fatal `STORE ERROR`).
+local audit-trail write's own failure is now non-fatal). A malformed
+voice-send result (not a hashref - e.g. `send_voice` returning `undef`)
+is never misclassified as a store-write failure: `ref($voice_result) eq
+'HASH'` is checked explicitly and a non-hashref result dies for real,
+matching what a malformed shape deserves. A well-formed hashref simply
+missing a `message_id` key (a legitimate shape some callers'
+`telegram` doubles use) still quietly skips just the store write, with
+no error at all - two Codex QA-stage review rounds were needed to land
+on this: an `eval`-guarded dereference alone can't tell the two shapes
+apart, since dereferencing a hash key off `undef` never actually raises
+an exception in Perl.
 RELIABILITY FIX (TGT-191,
 live production incident via the budget project: 2 real Telegram
 messages permanently lost): `cli/poller.pl`'s main loop advanced its

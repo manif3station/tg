@@ -29,19 +29,32 @@ Revision history for the tg skill
 
         A second Codex QA-stage finding on this same fix: the initial
         version evaluated $voice_result->{message_id} INSIDE the
-        _store_write_safe closure, so a malformed (non-hashref)
-        $voice_result - e.g. send_voice returning undef - died on its
-        own dereference and was caught by the very same eval meant only
-        for the store write, misclassified as a non-fatal
-        "record_sent_voice failed" STORE ERROR, and swallowed. That
-        silently converted what used to be a correctly-propagated hard
-        failure into a falsely-reported success. Fixed in both
-        send_reply and resend_voice by extracting
-        $voice_result->{message_id} into its own eval-guarded variable
-        BEFORE _store_write_safe is called, mirroring $text_message_id's
-        own established TGT-105 pattern - record_sent_voice is now
-        simply skipped (not attempted, not misreported) when the voice
-        result's shape is malformed.
+        _store_write_safe closure, risking a malformed (non-hashref)
+        $voice_result being misclassified as a non-fatal
+        "record_sent_voice failed" STORE ERROR rather than propagating
+        as the more serious failure it actually is. Moved the
+        extraction outside _store_write_safe's own eval.
+
+        A third round on the same finding, after the first attempt at
+        moving it turned out to still be wrong: $voice_result->{message_id}
+        was wrapped in its own eval and the store write was simply
+        skipped when that eval caught something - but dereferencing a
+        hash key off undef in Perl's rvalue context does not raise an
+        exception at all (eval { undef->{key} } leaves $@ empty), so
+        that eval could never actually distinguish a malformed
+        (non-hashref) result from a well-formed hashref that's simply
+        missing the key - both silently produced undef, and the
+        malformed case was now reported as a plain, silent success
+        instead of ever propagating as a failure (worse than the round
+        2 misclassification, not better). Fixed by checking
+        ref($voice_result) eq 'HASH' explicitly in both send_reply and
+        resend_voice: a non-hashref result now dies for real (matching
+        TGT-083's "voice failures are loud, never silent" tradeoff, and
+        the pre-TGT-192 behavior for the cases that genuinely did die
+        back then), while a present-but-incomplete hashref (e.g.
+        Fake::ReplyTelegram's own 'shapeless' option) still quietly
+        skips just the store write, exactly as before. New regression
+        blocks cover both shapes independently.
 
 1.54  2026-09-11
       - RELIABILITY FIX (TGT-191, live production incident via the

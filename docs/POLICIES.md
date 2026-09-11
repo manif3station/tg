@@ -2248,18 +2248,31 @@ now non-fatal.
 
 A second, QA-stage Codex finding on this same fix: an earlier draft
 evaluated `$voice_result->{message_id}` INSIDE the `_store_write_safe`
-closure. A malformed (non-hashref) `$voice_result` - e.g. `send_voice`
-returning `undef` - died on that dereference *inside* the same `eval`
-meant only for the store write itself, so `_store_write_safe`
-misclassified it as a non-fatal `record_sent_voice failed` `STORE
-ERROR` and swallowed it, silently turning what used to be a correctly-
-propagated hard failure into a falsely-reported success. Fixed by
-extracting `$voice_result->{message_id}` into its own eval-guarded
-variable BEFORE `_store_write_safe` is called in both `send_reply` and
-`resend_voice`, mirroring `$text_message_id`'s own established TGT-105
-pattern - `record_sent_voice` is now simply skipped (never attempted,
-never misreported) when the voice result's shape can't supply a
-message id.
+closure, risking a malformed (non-hashref) `$voice_result` being
+misclassified as a non-fatal `record_sent_voice failed` `STORE ERROR`
+by `_store_write_safe`'s own `eval` rather than propagating as the more
+serious failure it actually is. Moved the extraction to its own
+variable BEFORE `_store_write_safe` is called.
+
+A third round on the very same finding: that fix still didn't hold up.
+Wrapping `$voice_result->{message_id}` in its own `eval` and skipping
+the store write whenever that `eval` caught something looks right, but
+it isn't - dereferencing a hash key off `undef` in Perl's rvalue
+context does **not** raise an exception at all (`eval { undef->{key} }`
+leaves `$@` completely empty; verified directly). So that `eval` could
+never actually distinguish "malformed (non-hashref) result" from
+"well-formed hashref legitimately missing this key" - both shapes
+silently produced `undef`, and a malformed `send_voice` result (e.g.
+`undef`) was now reported as a plain, silent overall SUCCESS instead of
+ever propagating as a failure - worse than round 2's misclassification,
+not better. Fixed by checking `ref($voice_result) eq 'HASH'` explicitly
+in both `send_reply` and `resend_voice`: a non-hashref result now dies
+for real (matching TGT-083's "voice failures are loud, never silent"
+tradeoff, and the genuine pre-TGT-192 behavior for the cases that
+actually did die back then), while a present-but-incomplete hashref -
+e.g. `Fake::ReplyTelegram`'s own `shapeless` option, `{ ok => 1 }` -
+still quietly skips just the store write with no error, exactly as
+before.
 
 New test `t/192-store-write-failures-non-fatal.t`: each of the 3
 failure modes is non-fatal and classified (never the raw exception,
@@ -2271,14 +2284,18 @@ calls made exactly once), `resend_voice`'s own `mark_read`/
 `record_sent_voice` failures are independently proven non-fatal too
 (a Codex QA-stage review finding: an earlier draft only exercised
 `send_reply`, leaving 2 of the 5 fixed call sites completely
-untested), and a malformed `send_voice` result (a `Fake::Telegram`
-double returning `undef`) is proven to never produce a misleading
-`STORE ERROR` for `record_sent_voice` (the second QA-stage finding
-above). Confirmed genuinely red against the
-pre-fix code - the whole test script crashed with an uncaught die
-(no TAP plan produced at all) rather than merely failing an
-assertion, since the raw exception propagated straight out of
-`send_reply` with nothing to catch it; the malformed-result regression
-block was separately confirmed red against the intermediate (first-fix)
-code, where it failed on the specific assertion that
-`record_sent_voice` is never attempted.
+untested), a malformed `send_voice` result (a
+`Fake::Telegram::MalformedVoiceResult` double returning `undef`) is
+proven to make `send_reply` die for real - never misclassified as a
+`STORE ERROR`, and never silently reported as success either (the
+round-3 finding above) - and a `shapeless`-but-present hashref (via
+`Fake::ReplyTelegram`) is separately proven to still succeed silently,
+confirming the two shapes are genuinely distinguished. Confirmed
+genuinely red against the pre-fix code - the whole test script crashed
+with an uncaught die (no TAP plan produced at all) rather than merely
+failing an assertion, since the raw exception propagated straight out
+of `send_reply` with nothing to catch it; the malformed-result
+regression block was separately confirmed red against the round-2
+(`eval`-guarded dereference) code before landing on the `ref()`-check
+version - the round-2 code returned success silently instead of dying,
+which is exactly the failure this block exists to catch.

@@ -91,23 +91,41 @@ sub send_reply {
         opts       => \%opts,
     );
 
-    # A Codex QA-stage review finding: $voice_result->{message_id}
+    # A Codex QA-stage review finding (round 2): $voice_result->{message_id}
     # must be extracted BEFORE _store_write_safe's own eval, not
     # inside its closure - otherwise a malformed $voice_result (not a
-    # hashref) dies on ITS OWN dereference, and _store_write_safe's
-    # eval would misclassify that as a "record_sent_voice failed"
-    # STORE ERROR and swallow it non-fatally, when it is actually an
-    # unrelated, more serious failure that used to (correctly)
-    # propagate as a hard failure before this ticket. Mirrors
-    # $text_message_id's own established eval-guard above (TGT-105) -
-    # a malformed shape (existing tests' bare fakes that never opted
-    # into this feature) skips the store write entirely rather than
-    # erroring either way.
-    my $voice_message_id = eval { $voice_result->{message_id} };
+    # hashref) dereferenced there could be misclassified as a
+    # "record_sent_voice failed" STORE ERROR and swallowed non-fatally.
+    #
+    # Round 3 (same review, next pass): an eval-guarded dereference is
+    # not actually sufficient here - C<undef->{key}> is a well-known
+    # Perl non-death: reading a hash key off undef in rvalue context
+    # quietly returns undef, it does not raise an exception for eval
+    # to catch (verified directly: C<eval { undef()->{k} }> leaves C<$@>
+    # empty). So a bare C<eval { $voice_result->{message_id} }> can
+    # never distinguish "malformed result" from "well-formed hashref
+    # legitimately missing this key" (e.g. Fake::ReplyTelegram's own
+    # 'shapeless' option, C<{ ok => 1 }>) - both silently yield undef.
+    # Checking C<ref($voice_result) eq 'HASH'> explicitly is the only
+    # way to actually tell them apart. A non-hashref result (undef, a
+    # plain string, etc.) now dies for real - matching what a
+    # malformed shape deserves per TGT-083's own "voice failures are
+    # loud, never silent" tradeoff - while a present-but-incomplete
+    # hashref still quietly skips just the store write, same as
+    # always. Only checked when a store write was actually going to be
+    # attempted (matches the original code's own gating), so a caller
+    # that never passes store is entirely unaffected by this check.
+    my $voice_message_id;
+    if ( $args{store} && defined $text_message_id ) {
+        die "D2TG::Reply::send_reply: send_voice returned an unexpected result "
+          . "(not a hashref) - cannot confirm the voice reply was actually sent\n"
+          unless ref($voice_result) eq 'HASH';
 
-    _store_write_safe( $chat_id, 'record_sent_voice', sub {
-        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
-    } ) if $args{store} && defined $text_message_id && defined $voice_message_id;
+        $voice_message_id = $voice_result->{message_id};
+        _store_write_safe( $chat_id, 'record_sent_voice', sub {
+            $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
+        } ) if defined $voice_message_id;
+    }
 
     _store_write_safe( $chat_id, 'mark_read', sub {
         $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
@@ -152,15 +170,25 @@ sub resend_voice {
     # TGT-105: this is exactly what clears a send_reply-recorded
     # text-only flag once the missing voice half is actually recovered.
     # A Codex QA-stage review finding (same as send_reply's own, see
-    # its comment above): $voice_result->{message_id} must be
-    # extracted BEFORE _store_write_safe's own eval, not inside its
-    # closure, or a malformed $voice_result gets misclassified as a
-    # non-fatal STORE ERROR instead of the more serious failure it is.
-    my $voice_message_id = eval { $voice_result->{message_id} };
+    # its comment above, rounds 2 and 3): C<ref($voice_result) eq
+    # 'HASH'> is checked explicitly - C<eval { undef->{key} }> does not
+    # raise an exception in Perl (it quietly returns undef), so an
+    # eval-guarded dereference alone can never distinguish a malformed
+    # (non-hashref) result from a well-formed hashref that's simply
+    # missing this key. A non-hashref result now dies for real; a
+    # present hashref missing the key (e.g. Fake::ReplyTelegram's
+    # 'shapeless' option) still quietly skips just the store write.
+    my $voice_message_id;
+    if ( $args{store} && defined $text_message_id ) {
+        die "D2TG::Reply::resend_voice: send_voice returned an unexpected result "
+          . "(not a hashref) - cannot confirm the voice reply was actually sent\n"
+          unless ref($voice_result) eq 'HASH';
 
-    _store_write_safe( $chat_id, 'record_sent_voice', sub {
-        $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
-    } ) if $args{store} && defined $text_message_id && defined $voice_message_id;
+        $voice_message_id = $voice_result->{message_id};
+        _store_write_safe( $chat_id, 'record_sent_voice', sub {
+            $args{store}->record_sent_voice( $chat_id, $text_message_id, $voice_message_id, bot_key => $args{bot_key} );
+        } ) if defined $voice_message_id;
+    }
 
     return { voice => $voice_result };
 }

@@ -242,25 +242,59 @@ package main;
 }
 
 # TGT-192 (a second Codex QA-stage review finding, on THIS ticket's
-# own fix): _store_write_safe's eval must only cover the store write
-# itself, not the evaluation of arguments passed to it. A malformed
-# $voice_result (not a hashref - e.g. a caller's own telegram double
-# never opting into this feature, or a genuine send_voice bug)
-# previously died loudly on its own dereference, correctly propagating
-# as a hard failure all the way to cli/reply.pl. An earlier draft of
-# this fix evaluated $voice_result->{message_id} INSIDE the
-# _store_write_safe closure, so that die was caught by the SAME eval
-# meant only for the store's own write call, misclassified as a
-# non-fatal "record_sent_voice failed" STORE ERROR, and swallowed -
-# reporting overall success for a reply whose voice half never
-# actually confirmed a proper result shape. Fixed by extracting
-# $voice_result->{message_id} into its own eval-guarded variable
-# BEFORE _store_write_safe is ever called (mirroring $text_message_id's
-# own pre-existing TGT-105 pattern) - now this record_sent_voice call
-# is correctly skipped (not attempted, not errored either way) rather
-# than mis-attributing a send-side problem to the store.
+# own fix, rounds 2 and 3): _store_write_safe's eval must only cover
+# the store write itself, not the evaluation of arguments passed to
+# it. Round 2: an earlier draft evaluated $voice_result->{message_id}
+# INSIDE the _store_write_safe closure, so a malformed (non-hashref)
+# $voice_result's own dereference died inside that same eval,
+# misclassified as a non-fatal "record_sent_voice failed" STORE ERROR,
+# and swallowed. Round 3: the next draft moved the dereference outside
+# _store_write_safe but then simply skipped the store write when it
+# died - which converted the malformed result into a silently-reported
+# SUCCESS instead, when this is exactly the class of voice-half
+# failure that must propagate loudly (TGT-083's own tradeoff; this is
+# also the pre-TGT-192 behavior - the raw dereference used to die
+# uncaught here, reaching cli/reply.pl's own eval as a real reported
+# failure). The fix now re-raises this as a die (only when a store
+# write was actually going to be attempted, matching the original
+# code's own gating), so a malformed send_voice result is neither
+# misclassified as a store failure NOR silently treated as success -
+# it is a real, reported failure, same as before this ticket ever
+# existed.
 {
     my $telegram = Fake::Telegram::MalformedVoiceResult->new;
+    my $store    = Fake::Store::DyingWrite->new;
+
+    my ( $err, $result ) = capture_stderr( sub {
+        return eval {
+            D2TG::Reply::send_reply(
+                telegram   => $telegram,
+                chat_id    => 999,
+                text       => 'hello',
+                store      => $store,
+                synthesize => sub { return '/tmp/fake-voice.ogg' },
+            );
+        };
+    } );
+
+    my $eval_error = $@;
+    ok( !defined $result, 'send_reply dies (returns nothing) on a malformed send_voice result - it is not silently reported as success' );
+    like( $eval_error, qr/unexpected result/, 'the die names the actual problem - an unexpected (non-hashref) send_voice result' );
+    unlike( $err, qr/STORE ERROR/, 'this failure is never misreported as a STORE ERROR - it is not a store-write problem at all' );
+    is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
+        'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result' );
+}
+
+{
+    # Regression: Fake::ReplyTelegram's own pre-existing 'shapeless'
+    # option (a REAL hashref, { ok => 1 }, just missing the message_id
+    # key) must still be treated as a legitimate shape that quietly
+    # skips the store write - not the malformed (non-hashref) case
+    # above. This is the case t/84-text-only-reply-audit.t already
+    # exercises for send_reply's overall return value; this block
+    # confirms it specifically does not die and does not log a STORE
+    # ERROR either.
+    my $telegram = Fake::ReplyTelegram->new( shapeless => 1 );
     my $store    = Fake::Store::DyingWrite->new;
 
     my ( $err, $result ) = capture_stderr( sub {
@@ -273,10 +307,10 @@ package main;
         );
     } );
 
-    is( $err, '', 'a malformed send_voice result does not log a misleading STORE ERROR for record_sent_voice' );
+    is( $err, '', 'a shapeless-but-present voice result does not die and does not log a STORE ERROR' );
+    ok( defined $result, 'send_reply returns normally for a shapeless (present hashref, no message_id) voice result' );
     is_deeply( [ grep { $_->[0] eq 'record_sent_voice' } @{ $store->{calls} } ], [],
-        'record_sent_voice is never attempted at all when send_voice returned a malformed (non-hashref) result - not misreported as a store failure' );
-    ok( defined $result, 'send_reply still returns normally - a malformed voice result is not itself a store-write concern' );
+        'record_sent_voice is not attempted when the voice result carries no message_id, but this is not an error' );
 }
 
 done_testing();
