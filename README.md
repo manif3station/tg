@@ -6,12 +6,14 @@ silently returned `undef` with zero diagnostic whenever no entry could
 be matched for the requested version against an otherwise-readable
 `Changes` file - not only a genuine wrong-version mismatch, but also a
 header line whose version matches but whose own shape is malformed.
-Now prints a non-fatal STDERR diagnostic naming both the requested
-version and a recognizable header found elsewhere in the file (a
-Codex QA-stage review finding: an earlier draft of this diagnostic
-searches for the first strictly-shaped header anywhere in the file,
-so it can skip a malformed earlier one and isn't necessarily "the"
-file's own literal top header - worded accordingly) before returning
+Now prints a non-fatal STDERR diagnostic naming the requested version
+and, if the file has one, a recognizable header found elsewhere in it
+- or says explicitly that none was found, if it doesn't (two Codex
+QA-stage review rounds: the diagnostic searches for the first
+strictly-shaped header anywhere in the file, so it can skip a
+malformed earlier one and isn't necessarily "the" file's own literal
+top header; and a file with no strictly-shaped header at all names
+none, rather than always naming one) before returning
 `undef` unchanged - matching this project's established non-fatal-
 degradation pattern (`skill_version_check_safe`/`persist_offset_safe`).
 A genuinely missing/unreadable `Changes` file still returns `undef`

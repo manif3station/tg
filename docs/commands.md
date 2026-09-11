@@ -191,12 +191,15 @@ for the requested version (including a wrong version, or a header
 whose version matched but whose own shape was malformed) - not
 independently confirmed as the original TGT-187 incident's actual
 cause, but a real, separate fragility, fixed as **TGT-190**: this
-branch now prints a non-fatal STDERR diagnostic naming both the
-requested version and a recognizable header found elsewhere in the
-file (the first strictly-shaped header anywhere in the file, which
-can skip a malformed earlier one - not necessarily "the" file's own
-literal top header), before returning `undef` unchanged (the return
-value itself is not affected). A genuinely missing/unreadable
+branch now prints a non-fatal STDERR diagnostic naming the requested
+version and, if the file has one, a recognizable header found
+elsewhere in it - or says explicitly that none was found, if it
+doesn't (two Codex QA-stage review rounds: the diagnostic searches
+for the first strictly-shaped header anywhere in the file, which can
+skip a malformed earlier one - not necessarily "the" file's own
+literal top header; and a file with no strictly-shaped header at all
+names none, rather than always naming one), before returning `undef`
+unchanged (the return value itself is not affected). A genuinely missing/unreadable
 `Changes` file still returns `undef` silently, with no diagnostic -
 only a readable file with no matching entry is covered.
 

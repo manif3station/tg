@@ -2136,11 +2136,14 @@ mismatch fragility itself was filed separately as **TGT-190**.
 can be matched for the requested version - not only a genuine
 wrong-version mismatch, but also a header line whose version matches
 but whose own shape is malformed, a Codex QA-stage review finding)
-now prints a non-fatal STDERR diagnostic naming both the requested
-version and a recognizable header found elsewhere in the file (the
-first strictly-shaped header anywhere, which can skip a malformed
-earlier one - not necessarily "the" file's own literal top header),
-before returning `undef` unchanged - matching this project's
+now prints a non-fatal STDERR diagnostic naming the requested version
+and, if the file has one, a recognizable header found elsewhere in it
+- or says explicitly that none was found, if it doesn't (two Codex
+QA-stage review rounds: the first strictly-shaped header anywhere can
+skip a malformed earlier one - not necessarily "the" file's own
+literal top header; and a file with no strictly-shaped header at all
+names none, rather than always naming one), before returning `undef`
+unchanged - matching this project's
 established non-fatal-degradation pattern
 (`skill_version_check_safe`/`persist_offset_safe`). A genuinely
 missing/unreadable `Changes` file still returns `undef` silently with
