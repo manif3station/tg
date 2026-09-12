@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.69  2026-09-12
+      - RELIABILITY FIX (TGT-213, found via a scheduled JOB-004
+        improvement hunt): D2TG::Config::bot_groups' TGT-202 duplicate-
+        pair guard only caught the EXACT same (chat_id, bot token) pair
+        declared twice - it never caught the same bot token reused under
+        two DIFFERENT chat_id groups. The actual offset-race hazard is
+        keyed on the token alone (D2TG::Store::get_offset/set_offset key
+        the shared offset row purely on bot_key, with no chat_id
+        involved), so a token reused across chat_ids still produced the
+        identical race TGT-202 was meant to prevent, just uncaught by
+        its narrower key. bot_groups now also refuses when the same
+        token is configured under two different chat_id groups, naming
+        the masked token and both conflicting chat_ids. TGT-202's own
+        exact-duplicate case, and every genuinely distinct
+        configuration, are unaffected.
+
 1.68  2026-09-12
       - DOC FIX (TGT-212, found via a scheduled JOB-005 doc-accuracy
         hunt): SKILLS.md's onboarding overview said d2 tg.status flags

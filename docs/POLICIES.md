@@ -2937,3 +2937,36 @@ subtests failed: still said 20 minutes/TGT-116, no 4 hours/TGT-147
 mention), confirmed green after the fix (3/3), and the existing sibling
 `t/98-skills-md-cli-list-current.t` re-run clean alongside it (17/17
 total). Full suite re-run clean at 1543/1543.
+
+## TGT-213: bot_groups' TGT-202 duplicate guard missed same-token-different-chat_id
+
+Found via a scheduled JOB-004 improvement hunt. TGT-202's own duplicate-
+pair guard in `D2TG::Config::bot_groups` refuses only when the exact
+same `(chat_id, bot_token)` pair appears twice - key =
+`"$group->{chat_id}\0$token"`. But the actual hazard TGT-202 was fixing
+- two `cli/poller.pl` `@pairs` entries racing the same
+`get_offset`/`set_offset` calls against each other - is keyed purely on
+the bot TOKEN, not on `(chat_id, token)`: confirmed by direct source
+read that `D2TG::Store::_offset_meta_key`/`get_offset`/`set_offset` key
+the offset row on `$bot_key` alone, and `cli/poller.pl` line 355 sets
+`my $bot_key = $single_bot_mode ? undef : $token;` - the token alone,
+with no `chat_id` folded in. So the same bot token declared under two
+DIFFERENT `--chat_id` groups (e.g.
+`--chat_id 111 --bot SAME_TOKEN --chat_id 222 --bot SAME_TOKEN`)
+produces the identical race, but the `(chat_id, token)`-keyed check
+lets it through silently since the two keys differ.
+
+Fixed by adding a second dedup check in `bot_groups`, keyed on bot
+token alone, checked alongside (not replacing) the existing
+`(chat_id, token)` check - refuses naming the masked token (never the
+raw value, matching `masked_token`'s own established convention) and
+both conflicting `chat_id`s. New test
+`t/213-bot-token-reused-across-chat-ids-refused.t`: confirmed genuinely
+red against the pre-fix code (3/8 subtests failed - no refusal at all
+for the same-token-different-chat_id shape), confirmed green after the
+fix (8/8), and includes explicit regression coverage for TGT-202's own
+exact-duplicate case plus both genuinely-distinct-configuration cases
+(different chat_id+different token; one chat_id+two tokens) - all
+re-run clean alongside `t/202-duplicate-bot-pair-refused.t` (16/16
+total). Full suite re-run clean at 1551/1551; 100% statement+subroutine
+coverage confirmed on `lib/D2TG/Config.pm`.

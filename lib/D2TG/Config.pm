@@ -362,6 +362,30 @@ sub bot_groups {
         }
     }
 
+    # TGT-213 (found via a scheduled JOB-004 improvement hunt): TGT-202's
+    # guard above is keyed on (chat_id, token) - it never catches the
+    # SAME token reused under two DIFFERENT chat_id groups, but the
+    # actual hazard is keyed on the token alone: D2TG::Store's
+    # get_offset/set_offset key the shared offset row purely on
+    # bot_key (the token), and cli/poller.pl's own @pairs construction
+    # sets bot_key to the token alone with no chat_id folded in - so
+    # two groups sharing a token would still race the same offset row
+    # even though their (chat_id, token) pairs differ.
+    my %seen_token_at;
+    for my $group (@groups) {
+        for my $token ( @{ $group->{bots} } ) {
+            if ( exists $seen_token_at{$token} && $seen_token_at{$token} ne $group->{chat_id} ) {
+                die "D2TG::Config::bot_groups: bot token "
+                  . masked_token($token)
+                  . " is configured under two different chat_id groups ("
+                  . "$seen_token_at{$token} and $group->{chat_id}) - one Telegram bot "
+                  . "token can only be long-polled by one consumer at a time, so this "
+                  . "would race the same shared offset row regardless of chat_id\n";
+            }
+            $seen_token_at{$token} = $group->{chat_id};
+        }
+    }
+
     return ( \@groups, @rest );
 }
 
@@ -787,6 +811,18 @@ own C<get_offset>/C<set_offset> calls against itself. A genuinely
 distinct configuration - two different chat ids, or the same chat id
 with two different bot tokens - is unaffected; only an EXACT duplicate
 pair refuses.
+
+Also dies (TGT-213, found via a scheduled JOB-004 improvement hunt) if
+the same bot token is configured under two I<different> C<chat_id>
+groups - the check above alone doesn't catch this, since its key
+includes C<chat_id>, but the actual hazard is keyed on the token alone:
+L<D2TG::Store>'s C<get_offset>/C<set_offset> key the shared offset row
+purely on C<bot_key> (the token), and C<cli/poller.pl>'s own C<@pairs>
+construction sets C<bot_key> to the token alone with no C<chat_id>
+folded in - so two groups sharing a token would still race the same
+offset row even though their C<(chat_id, token)> pairs differ. The
+message names the masked token (never the raw value) and both
+conflicting C<chat_id>s.
 
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 

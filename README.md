@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.68).** DOC FIX (TGT-212, found via a
+**Status: early implementation (v1.69).** RELIABILITY FIX (TGT-213,
+found via a scheduled JOB-004 improvement hunt): `D2TG::Config::bot_groups`'s
+TGT-202 duplicate-pair guard only caught the exact same `(chat_id, bot
+token)` pair declared twice - it never caught the same bot token reused
+under two different `chat_id` groups, even though the real offset-race
+hazard is keyed on the token alone (`D2TG::Store::get_offset`/
+`set_offset` key the shared offset row purely on `bot_key`, with no
+`chat_id` involved). `bot_groups` now also refuses when the same token
+is configured under two different `chat_id` groups, naming the masked
+token and both conflicting `chat_id`s. TGT-202's own exact-duplicate
+case and every genuinely distinct configuration are unaffected.
+
+DOC FIX (TGT-212, found via a
 scheduled JOB-005 doc-accuracy hunt): SKILLS.md's onboarding overview
 said `d2 tg.status` flags the heartbeat "stale past 20 minutes
 (TGT-116)" - the original flat threshold, superseded by TGT-147, which
