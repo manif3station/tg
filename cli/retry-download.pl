@@ -16,17 +16,24 @@ my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
+# TGT-211 (found via a scheduled JOB-004 improvement hunt): argv-shape
+# validation now runs BEFORE storage resolution, matching the majority
+# sibling family (cli/whoami.pl, cli/text-only-replies.pl, cli/unread.pl,
+# cli/status.pl) - previously this ran after, so a caller with BOTH a
+# bad --db alias and malformed positional args got an inconsistent
+# exit 1/storage-error instead of the exit 2/Usage: every majority
+# sibling gives for the same class of double-invalid-input.
+if ( @ARGV > 1 || ( @ARGV == 1 && $ARGV[0] ne '--all' && $ARGV[0] !~ /^\d+$/ ) ) {
+    print STDERR "Usage: d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]\n";
+    exit 2;
+}
+
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 eval { D2TG::Config::require_existing_base_dir($base_dir) };
 if ($@) {
     print STDERR $@;
     exit 1;
-}
-
-if ( @ARGV > 1 || ( @ARGV == 1 && $ARGV[0] ne '--all' && $ARGV[0] !~ /^\d+$/ ) ) {
-    print STDERR "Usage: d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]\n";
-    exit 2;
 }
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
@@ -141,6 +148,12 @@ that queue.
 With no positional argument, lists every currently-queued failed
 download - id, chat_id, message_id, file_id, the original error, and
 when it was queued - or C<No failed downloads queued.> when empty.
+Argv-shape validation (a leftover argument, or a value that's neither
+numeric nor C<--all>) now runs before C<--db> storage resolution
+(TGT-211, found via a scheduled improvement hunt) - matching the
+majority sibling family, so a caller giving both a bad C<--db> and a
+malformed positional argument gets a consistent exit 2/Usage rather
+than an exit 1/storage-error.
 
 With a numeric C<id>, retries exactly that queued entry via
 L<D2TG::Download/retry_failed_download> - re-downloads using its saved

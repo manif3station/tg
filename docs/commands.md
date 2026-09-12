@@ -364,6 +364,15 @@ db_path) to STDERR and exiting non-zero via Perl's own default
 die-at-top-level behavior, instead of the same clean, scrubbed refusal
 this project's established pattern provides everywhere else.
 
+Argv-shape validation now runs before `--db` storage resolution
+(TGT-211, found via a scheduled improvement hunt) - previously it ran
+after, so a caller giving both a bad `--db` and a malformed `<chat_id>`
+at once got an exit 1/storage-error instead of the exit 2/`Usage:`
+every majority sibling command (`d2 tg.whoami`, `d2
+tg.text-only-replies`, `d2 tg.unread`, `d2 tg.status`) gives for the
+same class of double-invalid-input. Single-invalid-input behavior is
+unaffected.
+
 ## `d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]`
 
 (`--reply-to-message-id`, when given, must be the last two arguments -
@@ -696,8 +705,13 @@ this exact command (`GET ATTACHMENT WITH: d2 tg.attachment <chat_id>
 clear STDERR message) if no attachment is recorded for that
 `(chat_id, message_id)` pair, if the stored file can no longer be
 opened, or if the recorded path is no longer a regular file; refuses
-(exit 2, Usage) if `chat_id`/`message_id` are missing or not numeric.
-`--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s does.
+(exit 2, Usage) if `chat_id`/`message_id` are missing or not numeric -
+checked before `--db` storage resolution (TGT-211, found via a
+scheduled improvement hunt, reordered from checking storage first),
+matching the majority sibling family so a caller with both a bad `--db`
+and malformed positional args gets a consistent exit 2/Usage rather
+than an exit 1/storage-error. `--db`/`-d` (TGT-051) resolves the same
+way `d2 tg.poller`'s does.
 
 **Fetching is not permanently guaranteed** (TGT-134): a stored
 `local_path` never expires from the database, but the file itself can
@@ -746,6 +760,13 @@ The queue is keyed uniquely by `(chat_id, message_id)`, so Telegram's
 own at-least-once delivery redelivering the same failed update
 refreshes the existing row rather than duplicating it (another Codex
 finding).
+
+Argv-shape validation (a leftover argument, or a value that's neither
+numeric nor `--all`) now runs before `--db` storage resolution
+(TGT-211, found via a scheduled improvement hunt) - matching the
+majority sibling family, so a caller with both a bad `--db` and a
+malformed positional argument gets a consistent exit 2/Usage rather
+than an exit 1/storage-error.
 
 With no positional argument, lists every currently-queued entry - id,
 chat_id, message_id, file_id, the original error, when it was queued -

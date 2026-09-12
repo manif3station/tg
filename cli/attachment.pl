@@ -14,6 +14,19 @@ my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
+# TGT-211 (found via a scheduled JOB-004 improvement hunt): argv-shape
+# validation now runs BEFORE storage resolution, matching the majority
+# sibling family (cli/whoami.pl, cli/text-only-replies.pl, cli/unread.pl,
+# cli/status.pl) - previously this ran after, so a caller with BOTH a
+# bad --db alias and malformed positional args got an inconsistent
+# exit 1/storage-error instead of the exit 2/Usage: every majority
+# sibling gives for the same class of double-invalid-input.
+if ( @ARGV != 2 || $ARGV[0] !~ /^-?\d+$/ || $ARGV[1] !~ /^\d+$/ ) {
+    print STDERR "Usage: d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]\n";
+    exit 2;
+}
+my ( $chat_id, $message_id ) = @ARGV;
+
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 eval { D2TG::Config::require_existing_base_dir($base_dir) };
@@ -21,12 +34,6 @@ if ($@) {
     print STDERR $@;
     exit 1;
 }
-
-if ( @ARGV != 2 || $ARGV[0] !~ /^-?\d+$/ || $ARGV[1] !~ /^\d+$/ ) {
-    print STDERR "Usage: d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]\n";
-    exit 2;
-}
-my ( $chat_id, $message_id ) = @ARGV;
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
 # this call was unwrapped, the same raw-crash/db-path-leak risk TGT-183
@@ -128,7 +135,12 @@ Refuses (exit 1, clear STDERR message) if no attachment is recorded for
 that pair, or if the stored path can no longer be opened. C<chat_id>
 and C<message_id> must both be given and numeric (exit 2, Usage
 message, otherwise) - C<chat_id> may be negative (a Telegram group/
-channel id).
+channel id). This check now runs before C<--db> storage resolution
+(TGT-211, found via a scheduled improvement hunt) - matching the
+majority sibling family (C<cli/whoami.pl>, C<cli/text-only-replies.pl>,
+C<cli/unread.pl>, C<cli/status.pl>), so a caller giving both a bad
+C<--db> and malformed positional args gets a consistent exit 2/Usage
+rather than an exit 1/storage-error.
 
 TGT-134: fetching is not permanently guaranteed - C<local_path> never
 expires from the database, but the file it names can be evicted at any

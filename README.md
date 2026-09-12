@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.66).** DOC FIX (TGT-210, found via a
+**Status: early implementation (v1.67).** CONSISTENCY FIX (TGT-211,
+found via a scheduled JOB-004 improvement hunt): `cli/attachment.pl`,
+`cli/retry-download.pl`, and `cli/approve.pl` checked `--db` storage
+resolution before positional-argument shape - the opposite order their
+siblings (`cli/whoami.pl`, `cli/text-only-replies.pl`, `cli/unread.pl`,
+`cli/status.pl`) use. A caller giving both a bad `--db` alias/storage
+location AND malformed positional args at once got an inconsistent
+signal (exit 1/storage-error vs. exit 2/`Usage:`) depending only on
+which sibling command they called. Reordered all 3 to validate argv
+shape first, matching the majority family; single-invalid-input cases
+are unaffected.
+
+DOC FIX (TGT-210, found via a
 scheduled JOB-003 hourly bug hunt): `cli/approve.pl`'s own SYNOPSIS/Usage
 text documented `--bot <token>` in a trailing position (after
 `<chat_id>`) that the implementation never accepted - it only recognizes

@@ -24,17 +24,24 @@ if ($@) {
 @ARGV = @after_bot;
 $bot_key = '' unless defined $bot_key;
 
+# TGT-211 (found via a scheduled JOB-004 improvement hunt): argv-shape
+# validation now runs BEFORE storage resolution, matching the majority
+# sibling family (cli/whoami.pl, cli/text-only-replies.pl, cli/unread.pl,
+# cli/status.pl) - previously this ran after, so a caller with BOTH a
+# bad --db alias and malformed positional args got an inconsistent
+# exit 1/storage-error instead of the exit 2/Usage: every majority
+# sibling gives for the same class of double-invalid-input.
+if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
+    print STDERR "Usage: d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]\n";
+    exit 2;
+}
+
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 eval { D2TG::Config::require_existing_base_dir($base_dir) };
 if ($@) {
     print STDERR $@;
     exit 1;
-}
-
-if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
-    print STDERR "Usage: d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]\n";
-    exit 2;
 }
 
 my $chat_id = $ARGV[0];
@@ -133,6 +140,14 @@ nothing changed, exits 1 with a message on STDERR distinguishing the two
 ways that can happen: the chat id is already allowed under this bot
 (nothing to do), or it was never pending under this bot at all (never
 messaged this specific bot, so there's nothing to approve).
+
+C<chat_id>'s shape (numeric, exit 2 Usage otherwise) is now checked
+before C<--db> storage resolution (TGT-211, found via a scheduled
+improvement hunt) - matching the majority sibling family (C<cli/
+whoami.pl>, C<cli/text-only-replies.pl>, C<cli/unread.pl>, C<cli/
+status.pl>), so a caller giving both a bad C<--db> and a malformed
+C<chat_id> gets a consistent exit 2/Usage rather than an exit
+1/storage-error.
 
 The C<approve>/C<is_allowed> calls themselves (TGT-195, found via a
 repo-wide grep sweep done as part of a Codex QA-stage review on

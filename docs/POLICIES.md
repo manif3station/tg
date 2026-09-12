@@ -2862,3 +2862,47 @@ pending chat id - confirmed genuinely red against the pre-fix `SYNOPSIS`
 existing sibling tests (`t/114-approve-usage-pod-parity.t`,
 `t/75-multi-bot-allow-list-scoping.t`) re-run clean alongside it
 (27/27 total). Full suite re-run clean at 1531/1531.
+
+## TGT-211: cli/*.pl scripts checked storage vs. argv shape in inconsistent order
+
+Found via a scheduled JOB-004 improvement hunt. Two families of
+`cli/*.pl` scripts perform the same 3 checks (extract `--db`, validate
+positional/usage args, resolve+require the storage dir) but in
+different orders: `cli/whoami.pl`, `cli/text-only-replies.pl`,
+`cli/unread.pl`, `cli/status.pl` validate argv shape FIRST (exit 2,
+`Usage:`) then resolve storage; `cli/attachment.pl`,
+`cli/retry-download.pl`, `cli/approve.pl` resolved storage FIRST (exit
+1 on a missing/invalid storage location) then validated argv shape -
+confirmed by direct source read (`cli/unread.pl` checks argv at lines
+17-25 then storage at line 27; `cli/attachment.pl` resolved storage at
+line 17 then checked argv at line 25).
+
+When BOTH the storage location is missing/invalid AND positional args
+are malformed at the same time, a caller got an inconsistent signal -
+exit 1/storage-error from one family, exit 2/`Usage:` from the other -
+depending only on which sibling command they happened to call, not on
+anything about the actual input. No test in the suite ever exercised
+this compound case: every existing `*-usage-pod-parity.t` test uses
+`Test::MandatoryDb::setup_mandatory_db_env`, which always resolves
+`--db`/`D2TG_DB` to a real, existing directory, so the interaction
+between a bad storage location and bad argv was never both true in any
+test.
+
+Fixed by reordering `cli/attachment.pl`, `cli/retry-download.pl`, and
+`cli/approve.pl` to validate argv shape before resolving storage,
+matching the majority sibling family (chosen as canonical since
+resolving storage is the more expensive/environment-dependent step) -
+a pure block-reorder, no new logic. New test
+`t/211-cli-usage-checked-before-storage-resolution.t` exercises all 3
+reordered scripts with a compound invalid-storage + malformed-argv
+invocation, using `setup_mandatory_db_env`'s own fake
+`Developer::Dashboard` pointed at a directory that is deliberately
+never created (rather than `--db <bogus-alias>`, which needs a real
+Developer Dashboard install this container doesn't have - see
+`t/42-db-flag-cli-integration.t`'s own skip-guard for that same
+limitation) - confirmed genuinely red against the pre-fix code (9/9
+subtests failed: all 3 scripts exited 1 with a storage-resolution error
+instead of 2 with `Usage:`), confirmed green after the fix (9/9), and
+every existing sibling/parity test for the 3 reordered scripts re-run
+clean alongside it (38 + 114 = 152 additional tests, all passing). Full
+suite re-run clean at 1540/1540.

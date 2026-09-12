@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+1.67  2026-09-12
+      - CONSISTENCY FIX (TGT-211, found via a scheduled JOB-004
+        improvement hunt): cli/attachment.pl, cli/retry-download.pl, and
+        cli/approve.pl checked --db storage resolution BEFORE
+        positional-argument shape, the opposite order used by their
+        siblings cli/whoami.pl, cli/text-only-replies.pl, cli/unread.pl,
+        and cli/status.pl. When both a bad --db alias/storage location
+        AND malformed positional args were given at once, a caller got
+        an inconsistent signal - exit 1/storage-error from one family,
+        exit 2/Usage: from the other - depending only on which sibling
+        command they happened to call. Reordered all 3 to validate argv
+        shape first, matching the majority family. The
+        single-invalid-input cases (bad --db alone, or malformed args
+        alone) are unaffected; only the compound bad-storage+bad-argv
+        case now behaves consistently across every cli/*.pl script in
+        this family.
+
 1.66  2026-09-12
       - DOC FIX (TGT-210, found via a scheduled JOB-003 hourly bug hunt):
         cli/history.pl's sibling cli/approve.pl had its own SYNOPSIS and
