@@ -2820,3 +2820,45 @@ this project. Verified instead by direct source review confirming every
 branch of the new validation (malformed `--since`, malformed `--until`,
 well-formed date-only, well-formed full-timestamp) has a corresponding
 test assertion.
+
+## TGT-210: cli/approve.pl's SYNOPSIS/Usage documented an unusable --bot position
+
+Found via a scheduled JOB-003 hourly bug hunt. `cli/approve.pl`'s own
+POD `SYNOPSIS` and printed `Usage:` message both showed:
+
+    d2 tg.approve <chat_id> [--db <alias> | -d <alias>] [--bot <token>]
+
+with `--bot <token>` documented *after* the positional `<chat_id>`. But
+`D2TG::Reply::extract_bot_flag` only ever recognizes `--bot` when it is
+the very first argument - the same leading-position shape `cli/reply.pl`'s
+own `--bot` uses (TGT-057) - and it is called on `@ARGV` before
+`<chat_id>` is parsed at all. The same file's own POD `DESCRIPTION`
+section already correctly said `--bot` uses "the same leading-position
+shape `cli/reply.pl`'s own `--bot` uses" - a direct self-contradiction
+one paragraph below its own `SYNOPSIS`. `docs/commands.md`'s own command
+header carried the identical trailing-position mistake, one paragraph
+above a correct leading-position description.
+
+A caller following the documented `SYNOPSIS`/`Usage` form literally
+(e.g. `d2 tg.approve 12345 --bot mytoken`) left 3 unconsumed `@ARGV`
+elements after `extract_bot_flag` ran (since `$args[0]` was `'12345'`,
+not `--bot`), so the `@ARGV != 1` guard fired and the command exited 2 -
+printing the exact `Usage:` line that had just shown this invocation as
+valid. Not a behavior bug: the leading-position implementation itself
+is correct and already consistent with `cli/reply.pl`; only the
+`SYNOPSIS`/`Usage` text (and `docs/commands.md`'s matching header) were
+wrong.
+
+Fixed by correcting both to
+`d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]` -
+a documentation-only change. New test
+`t/210-approve-bot-position-documented-correctly.t` derives the
+documented `--bot`/`<chat_id>` order directly from `cli/approve.pl`'s
+own `SYNOPSIS` text (rather than hardcoding an expected order), then
+actually invokes the command in that exact order against a seeded
+pending chat id - confirmed genuinely red against the pre-fix `SYNOPSIS`
+(3/3 subtests failed: exit 2 instead of 0, `Usage:` text instead of
+`Approved 2000`), confirmed green after the fix (3/3), and the two
+existing sibling tests (`t/114-approve-usage-pod-parity.t`,
+`t/75-multi-bot-allow-list-scoping.t`) re-run clean alongside it
+(27/27 total). Full suite re-run clean at 1531/1531.

@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.66  2026-09-12
+      - DOC FIX (TGT-210, found via a scheduled JOB-003 hourly bug hunt):
+        cli/history.pl's sibling cli/approve.pl had its own SYNOPSIS and
+        printed Usage message documenting --bot <token> in a trailing
+        position (after <chat_id>) that D2TG::Reply::extract_bot_flag
+        never accepted - it only recognizes --bot as the first argument,
+        the same leading-position shape cli/reply.pl's own --bot uses
+        (TGT-057). The file's own POD DESCRIPTION already correctly said
+        so; only the SYNOPSIS/Usage text was wrong. A caller following
+        the documented order literally got an unconditional refusal,
+        with the refusal's own Usage line showing that exact broken
+        order as valid. SYNOPSIS/Usage now correctly show
+        "d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d
+        <alias>]" - a documentation-only fix, no behavior change.
+
 1.65  2026-09-12
       - BUG FIX (TGT-209, found via a scheduled JOB-003 hourly bug hunt,
         reproduced live): cli/history.pl's --since/--until flags only

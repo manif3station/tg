@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.65).** BUG FIX (TGT-209, found via a
+**Status: early implementation (v1.66).** DOC FIX (TGT-210, found via a
+scheduled JOB-003 hourly bug hunt): `cli/approve.pl`'s own SYNOPSIS/Usage
+text documented `--bot <token>` in a trailing position (after
+`<chat_id>`) that the implementation never accepted - it only recognizes
+`--bot` as the first argument, matching `cli/reply.pl`'s own leading
+position (TGT-057). A caller following the documented order literally
+got refused, with the refusal's own Usage line showing that exact broken
+order as valid. Corrected to
+`d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]` -
+documentation-only, no behavior change.
+
+BUG FIX (TGT-209, found via a
 scheduled JOB-003 hourly bug hunt, reproduced live): `d2 tg.history`'s
 `--since`/`--until` values are now validated against `YYYY-MM-DD` or
 `YYYY-MM-DDTHH:MM:SS` right after extraction - a malformed value (e.g.

@@ -33,7 +33,7 @@ if ($@) {
 }
 
 if ( @ARGV != 1 || $ARGV[0] !~ /^-?\d+$/ ) {
-    print STDERR "Usage: d2 tg.approve <chat_id> [--db <alias> | -d <alias>] [--bot <token>]\n";
+    print STDERR "Usage: d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 
@@ -98,7 +98,7 @@ approve - move a pending chat id into the allow-list, dispatched as C<d2 tg.appr
 
 =head1 SYNOPSIS
 
-    d2 tg.approve <chat_id> [--db <alias> | -d <alias>] [--bot <token>]
+    d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]
 
 =head1 DESCRIPTION
 
@@ -110,7 +110,14 @@ rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>)
 
 C<--bot <token>> (TGT-098) scopes the approval to that bot, using
 L<D2TG::Reply/extract_bot_flag> - the same leading-position shape
-C<cli/reply.pl>'s own C<--bot> uses (TGT-057). Omitting it approves
+C<cli/reply.pl>'s own C<--bot> uses (TGT-057). The SYNOPSIS/Usage text
+now shows this leading position correctly (TGT-210, found via a
+scheduled bug-hunt): both previously showed C<--bot> after C<<chat_id>>,
+a position C<extract_bot_flag> never accepted (it only recognizes
+C<--bot> as the very first argument) - a caller following the
+documented order literally got an unconditional refusal, with the
+refusal's own Usage line showing that exact broken order as valid.
+Omitting it approves
 under the empty-string sentinel, matching every existing single-bot
 install's behavior exactly - only a multi-bot setup where a Telegram
 GROUP is shared by more than one of this skill's own configured bots

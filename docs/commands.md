@@ -334,7 +334,7 @@ times out, transcription automatically retries at the next faster tier
 (`medium` → `small` → `base`) instead of failing outright - only a
 timeout at `base` itself produces a final `TRANSCRIBE ERROR`.
 
-## `d2 tg.approve <chat_id> [--db <alias> | -d <alias>] [--bot <token>]`
+## `d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
 and exits 0 on success. Exits 1 (message on STDERR) if `chat_id` was
@@ -342,8 +342,12 @@ already allowed under the resolved bot, or was never pending under it at
 all. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s does.
 
 `--bot <token>` (TGT-098) scopes the approval to that bot - the same
-leading-position shape as `d2 tg.reply`'s own `--bot` (TGT-057).
-Omitting it approves under the single-bot sentinel, unchanged from
+leading-position shape as `d2 tg.reply`'s own `--bot` (TGT-057). The
+command's own header above previously showed `--bot` in a trailing
+position that was never actually accepted (TGT-210, found via a
+scheduled bug-hunt) - fixed to match this section's own (already
+correct) description. Omitting it approves under the single-bot
+sentinel, unchanged from
 before this ticket for every existing single-bot install. Only needed
 when a Telegram *group* is shared by more than one of this skill's
 configured bots - a group's `chat_id` is the same for every bot that's
