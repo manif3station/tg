@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.67).** CONSISTENCY FIX (TGT-211,
+**Status: early implementation (v1.68).** DOC FIX (TGT-212, found via a
+scheduled JOB-005 doc-accuracy hunt): SKILLS.md's onboarding overview
+said `d2 tg.status` flags the heartbeat "stale past 20 minutes
+(TGT-116)" - the original flat threshold, superseded by TGT-147, which
+replaced it with one derived from `D2TG::Transcribe`'s own timeout
+constants (currently 14400s/4h) so it can never silently drift out of
+sync with the real transcription timeout again. `cli/status.pl`'s own
+POD and `docs/commands.md` already described this correctly; only
+SKILLS.md was never updated. Corrected to match - no code behavior
+change.
+
+CONSISTENCY FIX (TGT-211,
 found via a scheduled JOB-004 improvement hunt): `cli/attachment.pl`,
 `cli/retry-download.pl`, and `cli/approve.pl` checked `--db` storage
 resolution before positional-argument shape - the opposite order their

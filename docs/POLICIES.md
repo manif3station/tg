@@ -2906,3 +2906,34 @@ instead of 2 with `Usage:`), confirmed green after the fix (9/9), and
 every existing sibling/parity test for the 3 reordered scripts re-run
 clean alongside it (38 + 114 = 152 additional tests, all passing). Full
 suite re-run clean at 1540/1540.
+
+## TGT-212: SKILLS.md stated a superseded heartbeat-staleness threshold
+
+Found via a scheduled JOB-005 doc-accuracy hunt. SKILLS.md's onboarding
+overview said `d2 tg.status` flags the heartbeat "stale past 20 minutes
+(TGT-116)". TGT-116 did originally set a flat 1200s (20-minute)
+threshold, but TGT-147 (a later scheduled bug hunt) replaced it with one
+DERIVED from `D2TG::Transcribe`'s own `$TIMEOUT_CEILING` (3600) and
+`@MODEL_TIERS` (3 entries: medium/small/base) constants -
+`int(3600 * 3 * 4/3) = 14400` seconds = 4 hours - specifically so the
+threshold could never silently drift out of sync with the real
+transcription timeout again (TGT-140's own duration-scaled
+transcription timeout made the old flat 20-minute figure stale the
+moment it shipped). `cli/status.pl`'s own POD and `docs/commands.md`'s
+`d2 tg.status` entry both already correctly described the derived
+14400s/4h value and TGT-147 - only SKILLS.md's onboarding overview was
+never updated after that change, creating a self-contradiction between
+the onboarding doc and both the real code and the command reference
+describing the exact same command.
+
+Fixed by correcting SKILLS.md's sentence to describe the real, current
+derived threshold and cite TGT-147 - a wording-only change, no code
+touched. New test `t/212-skills-md-status-threshold-accurate.t`
+computes the real threshold directly from `D2TG::Transcribe`'s own
+constants (never a re-typed literal, so the test itself can't silently
+go stale the same way SKILLS.md did) and checks SKILLS.md's wording
+against it - confirmed genuinely red against the pre-fix wording (3/3
+subtests failed: still said 20 minutes/TGT-116, no 4 hours/TGT-147
+mention), confirmed green after the fix (3/3), and the existing sibling
+`t/98-skills-md-cli-list-current.t` re-run clean alongside it (17/17
+total). Full suite re-run clean at 1543/1543.

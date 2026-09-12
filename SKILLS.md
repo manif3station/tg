@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v1.67).** This file is a procedure to
+**Status: early implementation (v1.68).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -32,9 +32,13 @@ a photo or document, the outbound counterpart to inbound media (which
 already worked fully). `d2 tg.status` (TGT-111) reports the installed
 version and whether the poller is currently alive, without reaching into
 Tira job metadata from outside - and also its heartbeat age, flagged
-stale past 20 minutes (TGT-116), since "alive" and "still genuinely
-cycling" turned out to be different questions after a real 80+ minute
-silent-message-loss incident. `d2 tg.poller` also warns on stderr if it
+stale past a threshold derived from `D2TG::Transcribe`'s own timeout
+constants (currently 4 hours, TGT-147 - not a flat literal, so it can't
+silently drift out of sync with the real transcription timeout the way
+TGT-116's original flat 20-minute figure did the moment TGT-140 shipped
+a duration-scaled transcription timeout), since "alive" and "still
+genuinely cycling" turned out to be different questions after a real
+80+ minute silent-message-loss incident. `d2 tg.poller` also warns on stderr if it
 detects another live process whose command line looks like a poller
 instance (TGT-113) - a real incident where a poller
 crashed mid-restart, left an orphaned second instance running under a
