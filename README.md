@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.64).** RELIABILITY FIX (TGT-204, a
+**Status: early implementation (v1.65).** BUG FIX (TGT-209, found via a
+scheduled JOB-003 hourly bug hunt, reproduced live): `d2 tg.history`'s
+`--since`/`--until` values are now validated against `YYYY-MM-DD` or
+`YYYY-MM-DDTHH:MM:SS` right after extraction - a malformed value (e.g.
+`not-a-date`) previously reached `D2TG::Store::messages_in_range`'s own
+SQL comparison unvalidated, where it sorted lexicographically after
+every real timestamp and silently excluded every message, printing the
+same misleading `No messages found.` as an empty-but-valid range. Now
+exits 2 with a message naming the bad value and the expected format
+instead.
+
+RELIABILITY FIX (TGT-204, a
 real live-reported incident): a queued failed media download used to
 produce no proactive signal at all - the poller now also prints a
 `NEW TG MEDIA FAILED` stdout line naming the recovery command

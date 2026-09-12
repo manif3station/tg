@@ -33,6 +33,27 @@ my ( $since, $until );
                 print STDERR "d2 tg.history: $@";
                 exit 2;
             }
+            # TGT-209 (found via a scheduled JOB-003 hourly bug hunt,
+            # reproduced live): a value that IS present but doesn't look
+            # like a date at all used to be accepted with no shape check
+            # at all and passed straight into
+            # D2TG::Store::messages_in_range's own lexicographic SQL
+            # comparison - a malformed value like "not-a-date" sorts
+            # lexicographically AFTER every real ISO8601 timestamp, so a
+            # ">=" comparison against it silently excludes every real
+            # message, producing the exact same misleading "No messages
+            # found." TGT-070 already fixed for the missing-value case,
+            # but for a wrong-shaped value instead. Accepts both a
+            # date-only value and a full ISO8601 date+time value (the
+            # documented usage form), matching created_at's own stored
+            # shape closely enough to catch real typos without rejecting
+            # anything this command has ever documented as valid.
+            if ( $value !~ /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?$/ ) {
+                print STDERR "d2 tg.history: $arg value '$value' is not a "
+                  . "valid ISO8601 date (expected YYYY-MM-DD or "
+                  . "YYYY-MM-DDTHH:MM:SS)\n";
+                exit 2;
+            }
             if ( $arg eq '--since' ) { $since = $value }
             else                     { $until = $value }
         }
@@ -124,6 +145,16 @@ running the query unscoped or mis-scoped to match nothing. This
 validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072),
 shared with C<--db>/C<-d>'s own validation and C<D2TG::Config::bot_groups>'s
 C<--chat_id> validation.
+
+C<--since>/C<--until> also validate the *shape* of their value (TGT-209,
+found via a scheduled hourly bug-hunt): a value that doesn't match
+C<YYYY-MM-DD> or C<YYYY-MM-DDTHH:MM:SS> exits 2 with a message naming the
+malformed value and the expected format, instead of being passed
+straight into L<D2TG::Store/messages_in_range>'s own SQL comparison,
+where a value like C<not-a-date> sorts lexicographically after every
+real timestamp and silently excludes every message - the same
+misleading C<No messages found.> outcome TGT-070 fixed for a missing
+value, but for a wrong-shaped one.
 
 Any other unrecognized flag or leftover positional argument also exits
 2 with a C<Usage:> message (TGT-122, found via a scheduled hourly

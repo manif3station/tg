@@ -782,8 +782,15 @@ side is omitted. Prints `No messages found.` and exits 0 when nothing
 matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
 does. `--since`/`--until` with no value following it (or immediately
 followed by the other flag) exits 2 with a clear message instead of
-silently running unscoped or matching nothing (TGT-070). Any other
-unrecognized flag or leftover positional argument also exits 2 with a
+silently running unscoped or matching nothing (TGT-070). `--since`/
+`--until` also validate the *shape* of their value (TGT-209, found via a
+scheduled bug-hunt): a value that doesn't match `YYYY-MM-DD` or
+`YYYY-MM-DDTHH:MM:SS` exits 2 naming the malformed value and the
+expected format, instead of reaching `D2TG::Store::messages_in_range`'s
+own SQL comparison, where a value like `not-a-date` sorts
+lexicographically after every real timestamp and silently excludes
+every message. Any other unrecognized flag or leftover positional
+argument also exits 2 with a
 `Usage:` message (TGT-122, found via a scheduled bug-hunt) - previously
 silently ignored, exiting 0 as if the (mistyped) invocation had
 succeeded - reproduced as `No messages found.` when nothing happened

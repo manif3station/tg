@@ -2767,3 +2767,56 @@ failed - no STDOUT event, no recovery command named), confirmed green
 with the fix restored, and includes an explicit regression check that
 a successful download's own existing `NEW TG MEDIA` line and STDERR
 silence are completely unaffected.
+
+## TGT-209: cli/history.pl accepted a malformed --since/--until value silently
+
+Found via a scheduled JOB-003 hourly bug hunt, reproduced live inside a
+`developer-dashboard:latest` container. `TGT-070`/`TGT-071` only ever
+validated that `--since`/`--until` had *a* value present
+(`D2TG::Config::shift_flag_value`) - never that the value looked like a
+date. `D2TG::Store::messages_in_range` builds its `WHERE` clause with a
+plain lexicographic string comparison against the stored `created_at`
+column (SQLite's `CURRENT_TIMESTAMP` default, space-separated, e.g.
+`2026-09-12 00:01:41`): `created_at >= ?` / `created_at <= ?`, bound
+directly to the raw CLI string with no parsing at all.
+
+A malformed `--since` value such as `not-a-date` sorts lexicographically
+*after* every real ISO8601 timestamp (`'n' > '2'`), so `created_at >= ?`
+silently excludes every real message - the command still exits 0 and
+prints `No messages found.`, exactly the same misleading-silence outcome
+`TGT-070` already fixed for a missing value, but for a wrong-shaped one
+instead. A differently-malformed value (e.g. `2020/01/01`, slashes
+instead of dashes) can silently include or exclude messages depending on
+where it happens to sort, rather than being rejected or behaving as the
+date it looks like it should mean.
+
+Fixed in `cli/history.pl` alone (deliberately excluded from scope:
+`D2TG::Store::messages_in_range`'s own SQL comparison logic - validating
+at the CLI boundary is sufficient, and rewriting the storage layer's
+date handling is a separate, larger decision): right after
+`shift_flag_value` extracts the `--since`/`--until` value, it is checked
+against `qr/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?$/` - accepting
+both a date-only value (`YYYY-MM-DD`) and the full ISO8601 date+time
+form already used throughout this command's own documented usage
+(`YYYY-MM-DDTHH:MM:SS`). A value that doesn't match either shape exits 2
+with a message naming the exact bad value and the expected format,
+before the query ever reaches the store.
+
+Extended the existing `t/58-history-since-until-validation.t` (rather
+than a new file, since it already owns this exact `--since`/`--until`
+validation surface from `TGT-070`/`071`) with new blocks: confirmed
+genuinely red against the pre-fix code (`prove -l
+t/58-history-since-until-validation.t` failed 5/14 subtests - lines
+8-12, `--since not-a-date` and `--until 2020/01/01` both exited 0 and
+printed `No messages found.`), confirmed green after the fix (14/14),
+and added an explicit date-only regression case
+(`--since 2026-01-01 --until 2026-02-01`) alongside the pre-existing
+full-timestamp regression case, so both accepted shapes stay covered.
+Full suite re-run clean at 1528/1528. Coverage note: `cli/history.pl` is
+invoked via subprocess (`qx{}`/backticks) in every test that exercises
+it, so `Devel::Cover` cannot instrument it directly across the process
+boundary - the same limitation applies to every `cli/*.pl` script in
+this project. Verified instead by direct source review confirming every
+branch of the new validation (malformed `--since`, malformed `--until`,
+well-formed date-only, well-formed full-timestamp) has a corresponding
+test assertion.

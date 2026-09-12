@@ -43,4 +43,41 @@ $ENV{D2TG_CHAT_ID} = '999999';
     like( $out, qr/No messages found\./, 'a normal range with no matching messages still reports the expected clean message' );
 }
 
+# TGT-209 (found via a scheduled JOB-003 hourly bug hunt, reproduced
+# live): a value that IS present but doesn't look like a date at all
+# used to be accepted silently and passed straight into
+# D2TG::Store::messages_in_range's own lexicographic SQL comparison -
+# a malformed value like 'not-a-date' sorts lexicographically AFTER
+# every real ISO8601 timestamp, so a >= comparison against it silently
+# excludes every real message, producing the exact same misleading
+# "No messages found." this project's own TGT-070 already fixed for
+# the missing-value case, but for a wrong-shaped value instead.
+{
+    my $out = `$history_cli --since not-a-date 2>&1`;
+    my $rc  = $? >> 8;
+
+    isnt( $rc, 0, 'cli/history --since not-a-date refuses instead of silently running a wrong query' );
+    like( $out, qr/--since.*(?:ISO8601|date|format)|Usage/i, 'the message names the actual problem (a malformed date), not a generic error' );
+    unlike( $out, qr/^No messages found\.$/m, 'never silently claims a scoped-but-empty result for a malformed date value' );
+}
+
+{
+    my $out = `$history_cli --until 2020/01/01 2>&1`;
+    my $rc  = $? >> 8;
+
+    isnt( $rc, 0, 'cli/history --until 2020/01/01 (slashes, not dashes) refuses instead of silently misbehaving' );
+    like( $out, qr/--until.*(?:ISO8601|date|format)|Usage/i, 'the message names the actual problem' );
+}
+
+# Regression: a date-only value (no time component) must still work,
+# matching the solution's own documented ISO8601-date-or-datetime
+# shape.
+{
+    my $out = `$history_cli --since 2026-01-01 --until 2026-02-01 2>&1`;
+    my $rc  = $? >> 8;
+
+    is( $rc, 0, 'a date-only --since/--until pair (no time component) still exits 0' );
+    like( $out, qr/No messages found\./, 'a date-only range with no matching messages still reports the expected clean message' );
+}
+
 done_testing();

@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+1.65  2026-09-12
+      - BUG FIX (TGT-209, found via a scheduled JOB-003 hourly bug hunt,
+        reproduced live): cli/history.pl's --since/--until flags only
+        checked that a value was present (TGT-070), never that it looked
+        like a date. A malformed value such as "not-a-date" sorted
+        lexicographically after every real stored timestamp in
+        D2TG::Store::messages_in_range's own SQL comparison, so it
+        silently excluded every real message instead of erroring -
+        producing the same misleading "No messages found." TGT-070 fixed
+        for a missing value, but for a wrong-shaped one. --since/--until
+        now validate their value against YYYY-MM-DD or
+        YYYY-MM-DDTHH:MM:SS and exit 2 with a message naming the bad
+        value and the expected format on a mismatch, before ever reaching
+        the store. A well-formed date-only or full-timestamp value is
+        unaffected.
+
 1.64  2026-09-11
       - RELIABILITY FIX (TGT-204, a real live-reported incident from
         the budget project's own agent): a queued failed media
