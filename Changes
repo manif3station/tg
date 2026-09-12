@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+1.72  2026-09-12
+      - DOC FIX (TGT-216, found via a scheduled JOB-005 doc-accuracy
+        hunt): D2TG::Config::write_heartbeat's own POD and 2 locations
+        in cli/poller.pl (a code comment and its own POD) all cited the
+        pre-TGT-140 flat 300s-per-tier / ~900s-total transcription
+        timeout figures for D2TG::Transcribe's medium->small->base
+        retry ladder - superseded when TGT-140 made each tier's timeout
+        duration-scaled (floored at 300s, capped at $TIMEOUT_CEILING,
+        currently 3600s per tier, up to 10800s for the full ladder).
+        This directly contradicted the already-correct post-TGT-140
+        figures documented in the same file's own heartbeat_age POD and
+        in cli/status.pl's POD. All 3 stale locations corrected to cite
+        the real, current figures. No code behavior change.
+
 1.71  2026-09-12
       - CONSISTENCY FIX (TGT-215, found via a scheduled JOB-004
         improvement hunt): D2TG::Store::pending_chat_ids was the sole

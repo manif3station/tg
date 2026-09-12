@@ -3070,3 +3070,43 @@ chat_id pending under two bot_keys was returned twice unscoped, and no
 (7/7), with the 3 existing sibling tests re-run clean alongside it
 (42/42 total). Full suite re-run clean at 1564/1564; 100%
 statement+subroutine coverage confirmed on `lib/D2TG/Store.pm`.
+
+## TGT-216: heartbeat docs cited the pre-TGT-140 flat transcription timeout
+
+Found via a scheduled JOB-005 doc-accuracy hunt. `D2TG::Config::write_heartbeat`'s
+own POD and `cli/poller.pl`'s matching TGT-116 code comment both said a
+single voice transcription's retry ladder (`D2TG::Transcribe`'s
+medium->small->base tiers) is "300s each" / "can take up to ~900s".
+TGT-140 replaced that flat per-tier timeout with a duration-scaled one:
+`D2TG::Transcribe::_scaled_timeout` computes `duration *
+$TIMEOUT_MULTIPLIER` (8), floored at `$TIMEOUT` (300) and capped at
+`$TIMEOUT_CEILING` (3600) - so each of the 3 tiers can now legitimately
+run up to 3600s, not a flat 300s; a full 3-tier retry ladder's worst
+case is up to 10800s, not ~900s. This directly contradicted the
+already-correct post-TGT-140 figures documented in the SAME file's own
+`heartbeat_age` POD and in `cli/status.pl`'s POD, both of which
+correctly cite the derived `STALE_THRESHOLD_SECONDS` formula
+(`$TIMEOUT_CEILING * scalar(@MODEL_TIERS) * 4/3` = `3600*3*4/3` =
+14400s/4h) - a formula that only makes sense if the worst case per tier
+is 3600s.
+
+While writing the red test, a THIRD stale occurrence (missed by the
+original hunt) was found: `cli/poller.pl`'s own `=head1 DESCRIPTION`
+POD (separate from the TGT-116 code comment) also said "medium->small->base
+tiers, up to ~900s total". All 3 locations were corrected together.
+
+New test `t/216-heartbeat-doc-timeout-figures-accurate.t`: computes the
+real current worst-case figures directly from `D2TG::Transcribe`'s own
+`$TIMEOUT_CEILING`/`@MODEL_TIERS` constants (never a re-typed literal,
+so the test itself can't silently go stale the same way the docs did)
+and scans both files for the stale figures (absent) and the correct
+ones (present) - confirmed genuinely red against the pre-fix text (8/8
+subtests failed across all 3 real occurrences), confirmed green after
+the fix (8/8). Full suite re-run clean at 1572/1572 (one unrelated,
+confirmed-transient flake in `t/54-lock-acquire-race.t` - passed
+cleanly in isolation and on re-run, matching this project's established
+host-load flakiness pattern, unrelated to this diff). 100%
+statement+subroutine coverage confirmed on `lib/D2TG/Config.pm`;
+`cli/poller.pl` is a subprocess-invoked CLI script, the same
+`Devel::Cover` instrumentation limitation documented for every other
+`cli/*.pl` fix this session.

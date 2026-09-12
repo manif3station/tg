@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.71).** CONSISTENCY FIX (TGT-215,
+**Status: early implementation (v1.72).** DOC FIX (TGT-216, found via a
+scheduled JOB-005 doc-accuracy hunt): `D2TG::Config::write_heartbeat`'s
+own POD and 2 locations in `cli/poller.pl` (a code comment and its own
+POD) all cited the pre-TGT-140 flat 300s-per-tier / ~900s-total
+transcription timeout figures - superseded when TGT-140 made each tier's
+timeout duration-scaled (currently 3600s per tier, up to 10800s for the
+full medium->small->base ladder), directly contradicting the
+already-correct figures documented in the same file's own
+`heartbeat_age` POD. All 3 stale locations corrected; no code behavior
+change.
+
+CONSISTENCY FIX (TGT-215,
 found via a scheduled JOB-004 improvement hunt): `D2TG::Store::pending_chat_ids`
 was the sole `pending`/`allow_list`-table accessor never updated for
 TGT-098's `bot_key` migration - a chat_id pending under two different

@@ -979,8 +979,10 @@ timestamp. C<rename> on the same filesystem is atomic, so a reader never
 observes a partial write. Called by C<cli/poller.pl> after each bot/chat
 pair's own poll cycle completes, not once per full multi-pair cycle - a
 single voice transcription's retry ladder alone (L<D2TG::Transcribe>'s
-medium->small->base tiers, 300s each) can take up to ~900s, so writing
-only once per full cycle could report a healthy, actively-transcribing
+medium->small->base tiers, each up to C<$TIMEOUT_CEILING> - TGT-140
+made this duration-scaled rather than a flat 300s, currently 3600s per
+tier) can take up to 10800s for the full 3-tier ladder, so writing only
+once per full cycle could report a healthy, actively-transcribing
 poller as stale.
 
 If C<rename> itself fails (TGT-139), the staging temp file is unlinked

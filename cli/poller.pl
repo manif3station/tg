@@ -440,12 +440,14 @@ until ($shutting_down) {
 
         # TGT-116 (Codex review finding): written after EACH pair, not
         # once after the whole for-loop - a single voice transcription
-        # can legitimately take up to 900s on its own (D2TG::Transcribe's
-        # 3-tier retry ladder, 300s per tier), and multiple pairs are
-        # processed serially in one cycle. Writing only once per full
-        # cycle could report a healthy, actively-working poller as STALE
-        # during exactly the kind of long-running work this project has
-        # already hit live (TGT-100).
+        # can legitimately take up to 10800s on its own (D2TG::Transcribe's
+        # medium->small->base retry ladder, each tier duration-scaled up
+        # to $TIMEOUT_CEILING since TGT-140 - currently 3600s per tier,
+        # not the flat 300s this comment originally cited), and multiple
+        # pairs are processed serially in one cycle. Writing only once
+        # per full cycle could report a healthy, actively-working poller
+        # as STALE during exactly the kind of long-running work this
+        # project has already hit live (TGT-100).
         D2TG::Config::write_heartbeat($heartbeat_path);
     }
     D2TG::Download::prune_vault($attachments_dir);
@@ -642,10 +644,11 @@ silently wedged", per a real 80+ minute incident where a poller held its
 lock and stayed alive but produced no output and silently lost a
 message. The write happens per pair, not once after the whole
 C<for>-loop finishes, because a single slow voice transcription's own
-retry ladder (L<D2TG::Transcribe>'s medium->small->base tiers, up to
-~900s total) can by itself exceed a naive once-per-full-cycle
-heartbeat's staleness threshold even while the poller is healthy - a gap
-a Codex review caught.
+retry ladder (L<D2TG::Transcribe>'s medium->small->base tiers, each
+duration-scaled up to C<$TIMEOUT_CEILING> since TGT-140 - currently
+3600s per tier, up to 10800s total for all 3) can by itself exceed a
+naive once-per-full-cycle heartbeat's staleness threshold even while the
+poller is healthy - a gap a Codex review caught.
 
 After every poll cycle, C<D2TG::Download::prune_vault> (TGT-052) keeps
 the attachment vault at or under a 100MB cap, deleting the oldest files
