@@ -3024,3 +3024,49 @@ subtests failed), confirmed green after the fix (6/6), with `t/39` and
 `t/58`'s own existing suites re-run clean alongside it (29/29 total).
 Full suite re-run clean at 1557/1557; 100% statement+subroutine
 coverage confirmed on `lib/D2TG/Store.pm`.
+
+## TGT-215: pending_chat_ids was the sole accessor never updated for TGT-098's bot_key migration
+
+Found via a scheduled JOB-004 improvement hunt. TGT-098 gave the
+`pending` table a composite `PRIMARY KEY (chat_id, bot_key)`
+specifically so the same Telegram chat_id can be legitimately pending
+under more than one configured bot (a shared group chat). Every sibling
+accessor on this table (`is_allowed`, `add_pending`, `approve`) and the
+equivalent `sent_replies` accessors were updated to take/scope by
+`bot_key` - `pending_chat_ids` alone was missed: it ran a bare
+`SELECT chat_id FROM pending` with no `bot_key` parameter, no `bot_key`
+in the `SELECT`, and no `DISTINCT`. Confirmed by reading `_ensure_schema`'s
+`pending` table DDL (composite PK) against `pending_chat_ids`'s own
+implementation and POD (which documented no `bot_key` parameter at all,
+unlike `text_only_replies`'s own POD). In a genuine multi-bot config, a
+chat_id pending under two different bots would produce two identical,
+indistinguishable rows.
+
+Confirmed via `grep` that this method has no production `cli/*.pl`
+caller today (only exercised by `t/05-access-control.t`,
+`t/06-approve.t`, `t/111-reaction-access-control.t`, and named in
+`D2TG::Store`'s own top-level `SYNOPSIS`) - a latent gap in a
+documented public API, not yet a live incident.
+
+Drafting-stage correction (before any implementation started, recorded
+in a ticket comment): the first-drafted solution assumed the unscoped
+case should switch to returning `DISTINCT (chat_id, bot_key)` hashref
+pairs, matching `text_only_replies`'s own unscoped return shape - but
+the 3 existing test files all depend on the CURRENT flat
+chat_id-scalar-list shape via `is_deeply`/`scalar`/list-index
+assertions, which a shape change would break, directly contradicting
+this ticket's own regression requirement. Corrected: added an optional
+`bot_key` filter (returns the same flat shape, scoped); the unscoped
+case keeps its exact existing flat-list shape unchanged, only adding
+`SELECT DISTINCT` to close the duplicate-row bug. Full per-bot-key
+visibility for the unscoped case (returning which bot(s) each chat_id
+is pending under) is a larger API-shape change deliberately left out of
+this narrow fix.
+
+New test `t/215-pending-chat-ids-bot-key-scoping.t`: confirmed
+genuinely red against the pre-fix code (3/7 subtests failed - a
+chat_id pending under two bot_keys was returned twice unscoped, and no
+`bot_key` filtering existed at all), confirmed green after the fix
+(7/7), with the 3 existing sibling tests re-run clean alongside it
+(42/42 total). Full suite re-run clean at 1564/1564; 100%
+statement+subroutine coverage confirmed on `lib/D2TG/Store.pm`.

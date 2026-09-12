@@ -333,10 +333,26 @@ sub set_offset {
 }
 
 sub pending_chat_ids {
-    my ($self) = @_;
+    my ( $self, %args ) = @_;
+
+    # TGT-215 (found via a scheduled JOB-004 improvement hunt): the sole
+    # pending/allow_list accessor never updated for TGT-098's bot_key
+    # migration - added an optional bot_key filter matching every
+    # sibling accessor's own established pattern. The unscoped case
+    # deliberately keeps its existing flat chat_id-list return shape
+    # (t/05-access-control.t/t/06-approve.t/t/111-reaction-access-
+    # control.t all depend on it) - only adding DISTINCT so a chat_id
+    # pending under multiple bots is never listed more than once.
+    if ( defined $args{bot_key} ) {
+        my $rows = $self->{dbh}->selectcol_arrayref(
+            'SELECT chat_id FROM pending WHERE bot_key = ? ORDER BY chat_id',
+            undef, $args{bot_key},
+        );
+        return @$rows;
+    }
 
     my $rows = $self->{dbh}->selectcol_arrayref(
-        'SELECT chat_id FROM pending ORDER BY chat_id'
+        'SELECT DISTINCT chat_id FROM pending ORDER BY chat_id'
     );
 
     return @$rows;
@@ -725,9 +741,19 @@ error is re-thrown, so the Store's connection is never left in a
 dangling open-transaction state - a subsequent C<approve> call on the
 same object still works normally.
 
-=head2 pending_chat_ids
+=head2 pending_chat_ids(bot_key => $bot_key)
 
-Returns the list of chat ids currently pending, ordered.
+Returns the list of chat ids currently pending, ordered. C<bot_key> is
+optional (TGT-215, found via a scheduled improvement hunt, matching the
+same optional-C<bot_key>-filter pattern every sibling accessor on this
+table already uses) - when given, only that bot's pending chat ids are
+returned. Omitting it returns every pending chat id regardless of bot,
+C<DISTINCT> (a chat_id pending under more than one bot - the exact
+scenario the C<pending> table's own composite C<PRIMARY KEY (chat_id,
+bot_key)> exists to allow, TGT-098 - is listed exactly once, not once
+per bot); this keeps the return shape unchanged from before this fix,
+which only added C<DISTINCT> to close a genuine duplicate-row bug for
+that case.
 
 =head2 get_offset($bot_key)
 

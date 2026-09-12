@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.70).** BUG FIX (TGT-214, found via a
+**Status: early implementation (v1.71).** CONSISTENCY FIX (TGT-215,
+found via a scheduled JOB-004 improvement hunt): `D2TG::Store::pending_chat_ids`
+was the sole `pending`/`allow_list`-table accessor never updated for
+TGT-098's `bot_key` migration - a chat_id pending under two different
+configured bots (a legitimate case the table's own composite key exists
+to allow) produced two identical, unlabeled rows. Added an optional
+`bot_key` filter matching every sibling accessor's own pattern; the
+unscoped case keeps its existing return shape, only adding `DISTINCT`
+to close the duplicate-row bug. No production `cli/*.pl` caller uses
+this method today.
+
+BUG FIX (TGT-214, found via a
 scheduled JOB-003 hourly bug hunt, live-verified against a real SQLite
 comparison): `d2 tg.history --since`/`--until` with the exact
 documented, TGT-209-validated T-separated time form silently excluded

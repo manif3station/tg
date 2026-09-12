@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.71  2026-09-12
+      - CONSISTENCY FIX (TGT-215, found via a scheduled JOB-004
+        improvement hunt): D2TG::Store::pending_chat_ids was the sole
+        pending/allow_list-table accessor never updated for TGT-098's
+        bot_key migration - it had no bot_key filter and no DISTINCT,
+        so a chat_id pending under two different configured bots (a
+        legitimate case the pending table's own composite PRIMARY KEY
+        exists to allow) produced two identical, unlabeled rows in its
+        result. Added an optional bot_key parameter matching every
+        sibling accessor's own established pattern; the unscoped case
+        keeps its existing flat chat_id-list return shape unchanged,
+        only adding DISTINCT to close the duplicate-row bug. No
+        production cli/*.pl caller uses this method today - a latent
+        gap in a documented public API, not yet a live incident.
+
 1.70  2026-09-12
       - BUG FIX (TGT-214, found via a scheduled JOB-003 hourly bug hunt,
         live-verified against a real SQLite comparison): d2 tg.history
