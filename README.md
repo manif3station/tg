@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.69).** RELIABILITY FIX (TGT-213,
+**Status: early implementation (v1.70).** BUG FIX (TGT-214, found via a
+scheduled JOB-003 hourly bug hunt, live-verified against a real SQLite
+comparison): `d2 tg.history --since`/`--until` with the exact
+documented, TGT-209-validated T-separated time form silently excluded
+every message from the same calendar day, regardless of actual time -
+`created_at`'s real stored format is space-separated, and a plain
+string comparison sorted the T-form after every same-day row.
+`D2TG::Store::messages_in_range` now wraps both sides of the comparison
+in SQLite's own `datetime()` function, comparing by true chronological
+value instead of raw string ordering.
+
+RELIABILITY FIX (TGT-213,
 found via a scheduled JOB-004 improvement hunt): `D2TG::Config::bot_groups`'s
 TGT-202 duplicate-pair guard only caught the exact same `(chat_id, bot
 token)` pair declared twice - it never caught the same bot token reused

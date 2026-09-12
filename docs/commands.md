@@ -801,10 +801,19 @@ wording as permanent too).
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without `--since`/`--until`
 (TGT-048), shows the 10 most recent messages. With either or both given
-(ISO 8601 timestamps, matching `created_at`'s own stored format), shows
-every message in that range instead - an open-ended range on whichever
-side is omitted. Prints `No messages found.` and exits 0 when nothing
-matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
+(ISO 8601 timestamps), shows every message in that range instead - an
+open-ended range on whichever side is omitted. The comparison is done
+via SQLite's own `datetime()` function (TGT-214, found via a scheduled
+bug hunt, live-verified) rather than a raw string comparison against
+`created_at`'s own stored (space-separated) format - a `--since`/
+`--until` value with a `T`-separated time component previously sorted
+after every same-day row and silently excluded it, regardless of the
+message's actual time; `datetime()` normalizes both sides before
+comparing, so results reflect true chronological order. A date-only
+`--until` still normalizes to midnight of that date (not the end of the
+day) - unchanged by this fix, a separate question from the separator
+mismatch it addresses. Prints `No messages found.` and exits 0 when
+nothing matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
 does. `--since`/`--until` with no value following it (or immediately
 followed by the other flag) exits 2 with a clear message instead of
 silently running unscoped or matching nothing (TGT-070). `--since`/

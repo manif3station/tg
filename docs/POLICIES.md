@@ -2970,3 +2970,57 @@ exact-duplicate case plus both genuinely-distinct-configuration cases
 re-run clean alongside `t/202-duplicate-bot-pair-refused.t` (16/16
 total). Full suite re-run clean at 1551/1551; 100% statement+subroutine
 coverage confirmed on `lib/D2TG/Config.pm`.
+
+## TGT-214: d2 tg.history silently excluded same-day messages with a T-separated time
+
+Found via a scheduled JOB-003 hourly bug hunt, live-verified against a
+real SQLite comparison (not just read - actually run against an
+in-memory database). `D2TG::Store::messages_in_range` compared
+`--since`/`--until` against `created_at` with a plain SQL string
+comparison (`created_at >= ?` / `<= ?`). `created_at`'s real stored
+format is SQLite's own `CURRENT_TIMESTAMP` default, space-separated
+(e.g. `"2026-09-01 08:00:00"`), while `cli/history.pl`'s own documented
+and TGT-209-validated `--since`/`--until` form uses a `'T'` separator
+(e.g. `"2026-09-01T00:00:00"`) - the exact form shown in its own
+SYNOPSIS/usage text and required to pass TGT-209's own shape-validation
+regex. Since `'T'` (`0x54`) sorts lexicographically after a space
+(`0x20`), a `--since` value carrying a time-of-day component became
+greater than every `created_at` row sharing that same calendar date,
+regardless of the row's actual time - live-verified: rows at
+`"2026-09-01 08:00:00"` and `"2026-09-01 20:00:00"` (both genuinely at
+or after midnight that day) both failed to match
+`created_at >= '2026-09-01T00:00:00'`, returning zero rows.
+
+This is exactly the gap TGT-209 explicitly scoped out of its own fix
+("`D2TG::Store::messages_in_range`'s own SQL comparison logic -
+validating at the CLI boundary is sufficient") - TGT-209 only validated
+the CLI-supplied value's *shape*, never whether it compares correctly
+against the stored format, and this ticket closes that separate gap.
+`t/39-message-history-range.t`'s own existing coverage never caught
+this because it manually writes `created_at` using the SAME `'T'`
+separator as its `since`/`until` values - consistently T-separated on
+both sides, so the mismatch never surfaced.
+
+Fixed by wrapping both sides of the comparison in SQLite's own
+`datetime()` function (`datetime(created_at) >= datetime(?)`), which
+normalizes any of its accepted input shapes (bare date, space-
+separated, `'T'`-separated) to one canonical form before comparing -
+comparing by true chronological value rather than raw string ordering.
+A side discovery during implementation: a date-only `--until` value was
+ALSO already broken pre-fix in the opposite direction (excluded
+same-day timestamped rows, since a bare date string is a lexicographic
+prefix of - and thus "less than" - a longer timestamp string) - this is
+a separate, pre-existing question about whether date-only `--until`
+should mean "start of day" or "end of day" inclusive, deliberately left
+unchanged and out of this ticket's own narrow scope (the separator
+mismatch only); raised in a ticket comment as a candidate for its own
+future ticket with Michael's input, not decided unilaterally here.
+
+New test `t/214-history-range-separator-mismatch.t`, using realistic
+space-separated `created_at` values (matching what `CURRENT_TIMESTAMP`/
+`record_message` actually store, unlike `t/39`'s own T-separated
+fixtures): confirmed genuinely red against the pre-fix code (5/6
+subtests failed), confirmed green after the fix (6/6), with `t/39` and
+`t/58`'s own existing suites re-run clean alongside it (29/29 total).
+Full suite re-run clean at 1557/1557; 100% statement+subroutine
+coverage confirmed on `lib/D2TG/Store.pm`.

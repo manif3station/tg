@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+1.70  2026-09-12
+      - BUG FIX (TGT-214, found via a scheduled JOB-003 hourly bug hunt,
+        live-verified against a real SQLite comparison): d2 tg.history
+        --since/--until with the exact documented, TGT-209-validated
+        T-separated time form (e.g. "2026-09-01T00:00:00") silently
+        excluded every message from the SAME calendar day, regardless
+        of the message's actual time. created_at is stored SQLite-
+        CURRENT_TIMESTAMP-style, space-separated ("2026-09-01
+        08:00:00"), and a plain string comparison sorted the T-form
+        after every same-day space-separated row. D2TG::Store::
+        messages_in_range now wraps both sides of the comparison in
+        SQLite's own datetime() function, which normalizes any accepted
+        input shape (bare date, space-separated, T-separated) before
+        comparing, so results reflect true chronological order rather
+        than raw string ordering. A date-only --until value's own
+        pre-existing start-of-day (not end-of-day-inclusive) behavior
+        is unchanged by this fix - a separate question from the
+        separator mismatch this ticket addresses.
+
 1.69  2026-09-12
       - RELIABILITY FIX (TGT-213, found via a scheduled JOB-004
         improvement hunt): D2TG::Config::bot_groups' TGT-202 duplicate-

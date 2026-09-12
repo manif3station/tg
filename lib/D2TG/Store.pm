@@ -429,12 +429,29 @@ sub messages_in_range {
     my @where;
     my @bind;
 
+    # TGT-214 (found via a scheduled JOB-003 hourly bug hunt, live-
+    # verified): a plain string comparison against the raw --since/
+    # --until value used to silently exclude same-day messages -
+    # created_at is stored SQLite-CURRENT_TIMESTAMP-style, space-
+    # separated ('2026-09-01 08:00:00'), but cli/history.pl's own
+    # documented/TGT-209-validated form uses a 'T' separator
+    # ('2026-09-01T00:00:00'); since 'T' (0x54) sorts after a space
+    # (0x20), a since value with a time component compared greater
+    # than every same-day row regardless of actual time-of-day.
+    # SQLite's own datetime() normalizes any of its several accepted
+    # input formats (date-only, space-separated, T-separated) to one
+    # canonical form before comparing, so wrapping both sides in it
+    # compares by real chronological value instead of raw string
+    # ordering - deliberately applied to both the column and the bound
+    # value, not just one side, so a canonical date-only value (which
+    # datetime() expands to midnight) still compares correctly against
+    # a full timestamp on either side of the comparison.
     if ( defined $args{since} ) {
-        push @where, 'created_at >= ?';
+        push @where, 'datetime(created_at) >= datetime(?)';
         push @bind,  $args{since};
     }
     if ( defined $args{until} ) {
-        push @where, 'created_at <= ?';
+        push @where, 'datetime(created_at) <= datetime(?)';
         push @bind,  $args{until};
     }
 
@@ -797,6 +814,24 @@ C<since> and C<until> inclusive, oldest first - same C<message_id>
 same-second tiebreaker as L</unread_messages> (TGT-075). Either bound
 may be omitted (an open-ended range on that side); omitting both
 returns every stored message, oldest first.
+
+The comparison wraps both C<created_at> and the bound value in SQLite's
+own C<datetime()> function (TGT-214, found via a scheduled hourly bug
+hunt, live-verified) - C<created_at> is stored space-separated
+(SQLite's C<CURRENT_TIMESTAMP> default, e.g. C<"2026-09-01 08:00:00">)
+while C<cli/history.pl>'s own documented/validated C<--since>/C<--until>
+form uses a C<'T'> separator (e.g. C<"2026-09-01T00:00:00">); a plain
+string comparison previously sorted the C<'T'> form after every
+same-day space-separated row (C<'T'> is C<0x54>, a space is C<0x20>),
+silently excluding messages from the same calendar day as C<since>
+regardless of their actual time. C<datetime()> normalizes any of its
+accepted input shapes (bare date, space-separated, C<'T'>-separated) to
+one canonical form before comparing, so the result reflects true
+chronological order. A date-only C<until> value is normalized to
+midnight of that date (C<datetime()>'s own expansion of a bare date) -
+it does not include the rest of that same day; this narrower behavior
+predates this fix and is unchanged by it, a separate question from the
+separator mismatch this fix addresses.
 
 =head2 record_failed_download($chat_id, $message_id, $file_id, sender => $s, media_kind => $k, caption_note => $c, error => $e)
 
