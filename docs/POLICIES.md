@@ -3151,3 +3151,49 @@ confirmed green after the fix (4/4), with `t/129`'s own existing 7
 assertions re-run clean alongside it (11/11 total). Full suite re-run
 clean at 1576/1576. 100% statement+subroutine coverage confirmed on
 `lib/D2TG/Poller.pm`.
+
+## TGT-218: --chat_id accepted a non-canonical value and silently locked out the owner
+
+Found via a scheduled JOB-003 hourly bug hunt. `D2TG::Config::require_chat_id_or_warn`
+(TGT-155/164) validates `D2TG_CHAT_ID` against Telegram's own canonical
+chat-id shape (`^-?\d+$`) before the poller starts, specifically
+because a mangled value can never string-eq match a real inbound
+`chat_id`, silently locking the owner out forever with zero warning.
+`D2TG::Config::bot_groups`'s own `--chat_id` handling never got the
+same check - it built each group's `chat_id` straight from
+`shift_flag_value`, which only rejects a missing/empty/flag-looking
+value, never a present-but-non-numeric one. `cli/poller.pl`'s own
+TGT-164 re-validation only ever re-checks `D2TG_CHAT_ID` when it is
+*also* set alongside CLI-declared `--chat_id` groups - it never
+re-validates the CLI-declared value itself, a gap TGT-164's own comment
+explicitly describes as out of its narrower scope.
+
+`d2 tg.poller --chat_id ' 12345'` (or any other non-canonical value -
+whitespace-padded, non-digit) previously started up cleanly with no
+refusal and no warning. `D2TG::Store::_seed_admin` inserts the
+malformed value into `allow_list`'s `chat_id` column, and since every
+real inbound Telegram message carries a genuine numeric `chat_id`,
+`is_allowed`'s `WHERE chat_id = ?` lookup can never match it - the
+owner is invisibly locked out, every message from them queuing as
+pending forever, exactly the failure mode TGT-155/164 exist to
+eliminate for `D2TG_CHAT_ID`, just reachable through the `--chat_id`
+CLI flag instead. `t/44-bot-groups.t` and
+`t/126-poller-cli-groups-env-chat-id-validation.t` only test missing/
+empty/duplicate `--chat_id` and env-var shape mismatches - neither
+exercises a non-numeric-but-non-empty CLI `--chat_id` value.
+
+Fixed by reusing `require_chat_id_or_warn`'s own identical
+`/^-?\d+$/` check inside `bot_groups`' own `--chat_id` handling,
+refusing (dying) with a clear message naming the malformed value -
+closing the gap at its source so every caller benefits automatically.
+New test `t/218-bot-groups-chat-id-shape-validation.t`: confirmed
+genuinely red against the pre-fix code (4/6 subtests failed - no
+refusal at all for either malformed value), confirmed green after the
+fix (6/6), with `t/44-bot-groups.t` and
+`t/126-poller-cli-groups-env-chat-id-validation.t`'s own existing 27
+assertions re-run clean alongside it (33/33 total). Full suite re-run
+clean at 1582/1582 (one unrelated, confirmed-transient flake in
+`t/66-lock-last-poller-wins.t` observed during this session, passed
+cleanly on isolated re-run, matching this project's established
+host-load flakiness pattern). 100% statement+subroutine coverage
+confirmed on `lib/D2TG/Config.pm`.

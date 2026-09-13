@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.73).** RELIABILITY FIX (TGT-217,
+**Status: early implementation (v1.74).** RELIABILITY FIX (TGT-218,
+found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`
+(TGT-155/164) validates `D2TG_CHAT_ID` against Telegram's own
+canonical chat-id shape before the poller starts, since a mangled
+value can never match a real inbound chat_id, silently locking the
+owner out forever. `bot_groups`'s own `--chat_id` handling never got
+the same check - a whitespace-padded or non-digit `--chat_id` value
+was accepted silently, and `cli/poller.pl`'s own re-validation only
+ever re-checked `D2TG_CHAT_ID` when set alongside CLI groups, never the
+CLI-declared value itself. `bot_groups` now validates `--chat_id`
+against the identical canonical shape.
+
+RELIABILITY FIX (TGT-217,
 found via a scheduled JOB-003 hourly bug hunt): every actionable
 inbound-message branch in `D2TG::Poller::run_once` (message/media/voice/
 document/photo) prints a `REPLY WITH: d2 tg.reply ...` template right

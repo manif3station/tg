@@ -324,6 +324,22 @@ sub bot_groups {
 
         if ( $arg eq '--chat_id' ) {
             my $value = shift_flag_value( \@argv, '--chat_id' );
+
+            # TGT-218 (found via a scheduled JOB-003 hourly bug hunt):
+            # require_chat_id_or_warn (TGT-155/164) already validates
+            # D2TG_CHAT_ID against Telegram's own canonical chat-id
+            # shape - a mangled value can never string-eq match a real
+            # inbound chat_id, silently locking the owner out forever
+            # with zero warning. That same check never ran for a
+            # CLI-declared --chat_id value; shift_flag_value only
+            # rejects missing/empty/flag-looking values, never a
+            # present-but-non-numeric one. Reusing the identical regex
+            # here closes the gap at its source.
+            die "D2TG::Config::bot_groups: --chat_id value '$value' is not "
+              . "Telegram's canonical numeric chat-id shape (bare digits, "
+              . "or a leading '-' for a group/supergroup/channel)\n"
+              unless $value =~ /^-?\d+$/;
+
             $current = { chat_id => $value, bots => [] };
             push @groups, $current;
         }
@@ -823,6 +839,17 @@ folded in - so two groups sharing a token would still race the same
 offset row even though their C<(chat_id, token)> pairs differ. The
 message names the masked token (never the raw value) and both
 conflicting C<chat_id>s.
+
+Also dies (TGT-218, found via a scheduled JOB-003 hourly bug hunt) if a
+C<--chat_id> value doesn't match Telegram's own canonical chat-id shape
+(C<^-?\d+$> - bare digits, or a leading C<-> for a group/supergroup/
+channel), reusing the identical check L</require_chat_id_or_warn>
+already enforces for C<D2TG_CHAT_ID> (TGT-155/164) - a mangled value
+can never string-eq match a real inbound C<chat_id>, so it previously
+started the poller successfully while silently locking the owner out
+forever, since C<cli/poller.pl>'s own re-validation only ever re-checked
+C<D2TG_CHAT_ID> when set alongside CLI groups, never the CLI-declared
+value itself.
 
 =head2 resolve_alias_dir(alias => $alias, paths => \%paths)
 
