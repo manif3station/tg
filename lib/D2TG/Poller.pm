@@ -227,6 +227,18 @@ sub run_once {
 
             print "$ts NEW TG EDIT [$chat_id] $sender: $safe_text (msg #$message_id, edited)\n";
 
+            # TGT-217 (found via a scheduled JOB-003 hourly bug hunt):
+            # every other actionable branch (message/media/voice/
+            # document/photo) calls _print_reply_template right after
+            # its own NEW TG ... line - this branch was the sole
+            # actionable one missing it, leaving an edited message
+            # announced with no ready-to-run reply command, unlike
+            # every other event type. Printed for both the text-edit
+            # and caption/media-only-edit cases - only the store
+            # recording below is conditional on having real text, not
+            # this announcement.
+            _print_reply_template( $chat_id, $message_id, $bot_token );
+
             # Codex review finding: a caption/media-only edit (no
             # $edited->{text} at all - a text edit is the only kind
             # this narrow ticket handles) would otherwise overwrite an
@@ -1022,7 +1034,13 @@ C<record_message>, so C<d2 tg.history> reflects it - a caption/media-
 only edit (no text) is still announced but deliberately NOT recorded,
 to avoid overwriting an already-correct history summary with nothing
 useful; recording those too is a narrower follow-up, out of this
-ticket's own scope. Deletion of an ordinary chat message cannot be
+ticket's own scope. Also prints a C<REPLY WITH> template (TGT-217,
+found via a scheduled hourly bug hunt) for both the text-edit and
+caption/media-only-edit cases, matching every other actionable branch's
+own C<_print_reply_template> call - this branch was the sole actionable
+one missing it, leaving an edited message with no ready-to-run reply
+command, unlike every other event type this poller announces. Deletion
+of an ordinary chat message cannot be
 detected at all - the Bot API has no update for that (a separate,
 business-connection-scoped C<deleted_business_messages> update exists
 for an unrelated feature this project doesn't use) - a hard platform

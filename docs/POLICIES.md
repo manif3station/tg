@@ -3110,3 +3110,44 @@ statement+subroutine coverage confirmed on `lib/D2TG/Config.pm`;
 `cli/poller.pl` is a subprocess-invoked CLI script, the same
 `Devel::Cover` instrumentation limitation documented for every other
 `cli/*.pl` fix this session.
+
+## TGT-217: edited_message branch never printed a REPLY WITH template
+
+Found via a scheduled JOB-003 hourly bug hunt. Every other actionable
+inbound-message branch in `D2TG::Poller::run_once` (message/media/
+voice/document/photo) calls `_print_reply_template($chat_id,
+$message_id, $bot_token)` right after its own `NEW TG ...` line,
+printing the `REPLY WITH: d2 tg.reply <chat_id> "..." --bot <masked>
+--reply-to-message-id <id>` line the whole bridge-notification
+architecture depends on (`.claude/rules/tg-skill-design.md`'s Q-004
+decision: "The poller's own stdout line for a new inbound message must
+carry ... a ready-to-run reply command template"). Confirmed by direct
+`grep` that `_print_reply_template` is called at exactly 4 sites
+(message/voice/document/photo branches) - the `edited_message` branch
+(TGT-169) was the sole actionable branch missing it: it printed only a
+`NEW TG EDIT [...] ...` line and fell through to `next` without ever
+calling `_print_reply_template`, for either the text-edit or the
+caption/media-only-edit case.
+
+Any Telegram user in an allow-listed chat editing a previously-sent
+message (a common, real action) triggers this gap every time - the
+monitoring agent sees the edited content but has no ready-to-run reply
+command for it, breaking the same convenience/consistency the Q-004
+architecture decision and the project's own `always-reply-on-tg` rule
+both depend on. `t/129-edited-message-detection.t`'s own existing
+coverage never caught this - it only asserts the `NEW TG EDIT` line's
+own content, never presence/absence of a `REPLY WITH` line.
+
+Fixed by adding the missing `_print_reply_template` call right after
+the existing `NEW TG EDIT` print line, matching every sibling branch's
+own placement exactly - printed for both the text-edit and caption/
+media-only-edit sub-cases, since both are announced (only the store
+recording is conditionally skipped for the no-text case, not the
+announcement). New test `t/217-edited-message-reply-template.t`, using
+`Fake::Telegram`/`Fake::Store` fixtures matching `t/129`'s own
+established style: confirmed genuinely red against the pre-fix code
+(2/4 subtests failed - no `REPLY WITH` line for either edit case),
+confirmed green after the fix (4/4), with `t/129`'s own existing 7
+assertions re-run clean alongside it (11/11 total). Full suite re-run
+clean at 1576/1576. 100% statement+subroutine coverage confirmed on
+`lib/D2TG/Poller.pm`.

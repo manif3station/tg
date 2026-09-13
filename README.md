@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.72).** DOC FIX (TGT-216, found via a
+**Status: early implementation (v1.73).** RELIABILITY FIX (TGT-217,
+found via a scheduled JOB-003 hourly bug hunt): every actionable
+inbound-message branch in `D2TG::Poller::run_once` (message/media/voice/
+document/photo) prints a `REPLY WITH: d2 tg.reply ...` template right
+after its own `NEW TG ...` line - the `edited_message` branch (TGT-169)
+was the sole actionable branch missing it, leaving an edited message
+announced with no ready-to-run reply command, unlike every other event
+type. Now prints the template for both the text-edit and caption/
+media-only-edit cases, matching every sibling branch.
+
+DOC FIX (TGT-216, found via a
 scheduled JOB-005 doc-accuracy hunt): `D2TG::Config::write_heartbeat`'s
 own POD and 2 locations in `cli/poller.pl` (a code comment and its own
 POD) all cited the pre-TGT-140 flat 300s-per-tier / ~900s-total

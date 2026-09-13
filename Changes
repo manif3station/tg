@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+1.73  2026-09-13
+      - RELIABILITY FIX (TGT-217, found via a scheduled JOB-003 hourly
+        bug hunt): every actionable inbound-message branch in
+        D2TG::Poller::run_once (message/media/voice/document/photo)
+        prints a REPLY WITH: d2 tg.reply ... template right after its
+        own NEW TG ... line - the edited_message branch (TGT-169) was
+        the sole actionable branch missing it, leaving an edited
+        message announced with no ready-to-run reply command for the
+        monitoring agent, unlike every other event type. Now prints the
+        template for both the text-edit and caption/media-only-edit
+        cases, matching every sibling branch.
+
 1.72  2026-09-12
       - DOC FIX (TGT-216, found via a scheduled JOB-005 doc-accuracy
         hunt): D2TG::Config::write_heartbeat's own POD and 2 locations
