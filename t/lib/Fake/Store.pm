@@ -67,6 +67,12 @@ sub record_failed_download {
         media_kind   => $args{media_kind},
         caption_note => $args{caption_note},
         error        => $args{error},
+
+        # TGT-219: captured so a test can assert the caller's own
+        # bot_token was actually threaded through to this call, not
+        # silently dropped - undef when a caller doesn't pass one,
+        # matching every pre-TGT-219 call site's own real behavior.
+        bot_key      => $args{bot_key},
     };
     return $id;
 }

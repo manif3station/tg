@@ -138,6 +138,59 @@ sub _ensure_schema {
     }
     die $@ if $@ && $@ !~ /duplicate column name/;
 
+    # TGT-219 (found via a scheduled JOB-004 improvement hunt):
+    # failed_downloads was the sole per-chat table never given the
+    # bot_key treatment TGT-098 already applied to allow_list/pending -
+    # keyed only on (chat_id, message_id), so the same message_id
+    # failing under two different bots in a multi-bot config collapsed
+    # into one row via record_failed_download's own ON CONFLICT clause,
+    # and Telegram's own file_id values are bot-token-scoped, so a
+    # retry using the wrong bot's token can never succeed. A UNIQUE
+    # constraint change can't be done via ALTER TABLE in SQLite, so
+    # this is the same rename/create/copy/drop migration TGT-098
+    # already established for allow_list/pending, run inside one
+    # transaction so a crash mid-migration can never orphan the old
+    # data. Existing rows migrate to bot_key='' (the single-bot/
+    # unscoped sentinel), matching every sibling table's own migration.
+    {
+        my $cols = $self->{dbh}->selectall_arrayref( 'PRAGMA table_info(failed_downloads)', { Slice => {} } );
+        if ( !grep { $_->{name} eq 'bot_key' } @$cols ) {
+            $self->{dbh}->begin_work;
+            eval {
+                $self->{dbh}->do('ALTER TABLE failed_downloads RENAME TO failed_downloads_pre_tgt219');
+                $self->{dbh}->do(
+                    'CREATE TABLE failed_downloads (
+                         id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                         chat_id      INTEGER NOT NULL,
+                         bot_key      TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
+                         message_id   INTEGER NOT NULL,
+                         file_id      TEXT NOT NULL,
+                         sender       TEXT,
+                         media_kind   TEXT,
+                         caption_note TEXT,
+                         error        TEXT,
+                         created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                         local_path   TEXT,
+                         UNIQUE (chat_id, bot_key, message_id)
+                     )'
+                );
+                $self->{dbh}->do(
+                    'INSERT INTO failed_downloads
+                         (id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path)
+                     SELECT id, chat_id, \'' . DEFAULT_BOT_KEY . '\', message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
+                     FROM failed_downloads_pre_tgt219'
+                );
+                $self->{dbh}->do('DROP TABLE failed_downloads_pre_tgt219');
+                $self->{dbh}->commit;
+            };
+            if ($@) {
+                my $error = $@;
+                eval { $self->{dbh}->rollback };
+                die $error;
+            }
+        }
+    }
+
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
     # send_voice failure after that point can leave a reply text-only,
@@ -485,20 +538,24 @@ sub record_failed_download {
 
     my ( $sender, $media_kind, $caption_note, $error ) =
       @args{qw(sender media_kind caption_note error)};
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
-    # ON CONFLICT (chat_id, message_id): Telegram's at-least-once
-    # delivery can reprocess the same update (e.g. the poller crashes
-    # after this call but before its offset advances) - refresh the
-    # existing row's file_id/error/timestamp instead of inserting a
-    # second queue entry for the same failed media.
+    # ON CONFLICT (chat_id, bot_key, message_id) - TGT-219 added bot_key
+    # to this key so the same message_id failing under two different
+    # bots in a multi-bot config queues two independent rows, not one
+    # collapsed into the other. Telegram's own at-least-once delivery
+    # can still reprocess the same update under the SAME bot (e.g. the
+    # poller crashes after this call but before its offset advances) -
+    # that case still refreshes the existing row's file_id/error/
+    # timestamp instead of inserting a second queue entry.
     $self->{dbh}->do(
-        'INSERT INTO failed_downloads (chat_id, message_id, file_id, sender, media_kind, caption_note, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, message_id) DO UPDATE SET
+        'INSERT INTO failed_downloads (chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
              file_id = excluded.file_id, sender = excluded.sender,
              media_kind = excluded.media_kind, caption_note = excluded.caption_note,
              error = excluded.error, created_at = CURRENT_TIMESTAMP',
-        undef, $chat_id, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
+        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
     );
 
     my $row = $self->{dbh}->selectrow_hashref(
@@ -510,10 +567,22 @@ sub record_failed_download {
 }
 
 sub failed_downloads {
-    my ($self) = @_;
+    my ( $self, %args ) = @_;
+
+    # TGT-219: optional bot_key filter, matching pending_chat_ids' own
+    # established pattern - the unscoped case keeps its existing shape
+    # (now also naming each row's own bot_key, so a caller can tell
+    # which bot queued it even without filtering).
+    if ( defined $args{bot_key} ) {
+        return $self->{dbh}->selectall_arrayref(
+            'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
+             FROM failed_downloads WHERE bot_key = ? ORDER BY id',
+            { Slice => {} }, $args{bot_key},
+        );
+    }
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
+        'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
          FROM failed_downloads ORDER BY id',
         { Slice => {} }
     );
@@ -859,31 +928,42 @@ it does not include the rest of that same day; this narrower behavior
 predates this fix and is unchanged by it, a separate question from the
 separator mismatch this fix addresses.
 
-=head2 record_failed_download($chat_id, $message_id, $file_id, sender => $s, media_kind => $k, caption_note => $c, error => $e)
+=head2 record_failed_download($chat_id, $message_id, $file_id, sender => $s, media_kind => $k, caption_note => $c, error => $e, bot_key => $b)
 
 Persists a failed inbound photo/document download for later retry
 (TGT-104) - C<D2TG::Poller> calls this when C<download_media> dies and a
 store is present, instead of only printing the error and forgetting it.
-Upserts on C<(chat_id, message_id)> - Telegram's own at-least-once
-delivery can reprocess the same update, and a second call for the same
-pair refreshes the existing row's C<file_id>/C<sender>/C<media_kind>/
+C<bot_key> is optional (TGT-219, found via a scheduled improvement hunt,
+matching every sibling per-chat table's own established pattern -
+defaults to the single-bot sentinel). Upserts on C<(chat_id, bot_key,
+message_id)> - Telegram's own at-least-once delivery can reprocess the
+same update under the SAME bot, and a second call for the same triple
+refreshes the existing row's C<file_id>/C<sender>/C<media_kind>/
 C<caption_note>/C<error>/timestamp rather than inserting a duplicate (a
-Codex review finding). Returns the row's id (new or existing). The
+Codex review finding); the same C<message_id> failing under two
+DIFFERENT bots in a multi-bot config now queues two independent rows
+instead of colliding into one - Telegram's own C<file_id> values are
+bot-token-scoped, so retrying under the wrong bot's token could never
+have succeeded anyway. Returns the row's id (new or existing). The
 C<UPDATE SET> clause deliberately does not assign C<local_path> (TGT-196)
 - a redelivery of the same failed-download event must not clobber a
 C<local_path> already persisted by L</mark_failed_download_downloaded>
 back to C<NULL>.
 
-=head2 failed_downloads
+=head2 failed_downloads(bot_key => $b)
 
-Returns every queued failed download (TGT-104), ordered by C<id> (not
+Returns queued failed downloads (TGT-104), ordered by C<id> (not
 C<created_at>, whose second precision isn't a reliable tiebreaker - a
 Codex review finding) - each a hashref of C<id>, C<chat_id>,
-C<message_id>, C<file_id>, C<sender>, C<media_kind>, C<caption_note>,
-C<error>, C<created_at>, C<local_path> (TGT-196, C<undef> until a
-retry's own C<record_message> fails after a successful download - see
-L</mark_failed_download_downloaded>). C<cli/retry-download.pl> lists
-and acts on this.
+C<bot_key> (TGT-219), C<message_id>, C<file_id>, C<sender>,
+C<media_kind>, C<caption_note>, C<error>, C<created_at>, C<local_path>
+(TGT-196, C<undef> until a retry's own C<record_message> fails after a
+successful download - see L</mark_failed_download_downloaded>).
+C<bot_key> is optional - when given, only that bot's own queued
+entries are returned; omitting it lists every bot's, each row naming
+its own C<bot_key> (matching L</pending_chat_ids>' own established
+optional-C<bot_key>-filter pattern). C<cli/retry-download.pl> lists and
+acts on this.
 
 =head2 mark_failed_download_downloaded($id, $local_path)
 

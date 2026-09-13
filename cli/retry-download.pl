@@ -11,10 +11,25 @@ use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Telegram;
 use D2TG::Download;
+use D2TG::Reply;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
+
+# TGT-219 (found via a scheduled JOB-004 improvement hunt): matching
+# cli/approve.pl/cli/reply.pl's own established --bot flag (Telegram's
+# file_id values are bot-token-scoped, so a queued failure recorded
+# under a non-default bot must be retried as that same bot). Leading
+# position, same as D2TG::Reply::extract_bot_flag's every other caller.
+my ( $bot_token, @after_bot );
+eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_bot;
+my $bot_key = defined $bot_token ? $bot_token : '';
 
 # TGT-211 (found via a scheduled JOB-004 improvement hunt): argv-shape
 # validation now runs BEFORE storage resolution, matching the majority
@@ -24,7 +39,7 @@ my ( $db_alias, @rest );
 # exit 1/storage-error instead of the exit 2/Usage: every majority
 # sibling gives for the same class of double-invalid-input.
 if ( @ARGV > 1 || ( @ARGV == 1 && $ARGV[0] ne '--all' && $ARGV[0] !~ /^\d+$/ ) ) {
-    print STDERR "Usage: d2 tg.retry-download [--db <alias> | -d <alias>] [<id> | --all]\n";
+    print STDERR "Usage: d2 tg.retry-download [--bot <token>] [--db <alias> | -d <alias>] [<id> | --all]\n";
     exit 2;
 }
 
@@ -53,7 +68,7 @@ my $store = D2TG::Poller::open_store_or_die(
 );
 
 if ( !@ARGV ) {
-    my $queued = $store->failed_downloads;
+    my $queued = $store->failed_downloads( bot_key => $bot_key );
     if ( !@$queued ) {
         print "No failed downloads queued.\n";
         exit 0;
@@ -70,11 +85,11 @@ my $attachments_dir = D2TG::Config::attachments_dir(
     base_dir      => $base_dir,
 );
 
-my $telegram = D2TG::Telegram->new( token => D2TG::Config::token() );
+my $telegram = D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D2TG::Config::token() );
 
 my @to_retry;
 if ( $ARGV[0] eq '--all' ) {
-    @to_retry = @{ $store->failed_downloads };
+    @to_retry = @{ $store->failed_downloads( bot_key => $bot_key ) };
     if ( !@to_retry ) {
         print "No failed downloads queued.\n";
         exit 0;
@@ -82,7 +97,7 @@ if ( $ARGV[0] eq '--all' ) {
 }
 else {
     my $id = $ARGV[0];
-    my ($row) = grep { $_->{id} == $id } @{ $store->failed_downloads };
+    my ($row) = grep { $_->{id} == $id } @{ $store->failed_downloads( bot_key => $bot_key ) };
     if ( !$row ) {
         print STDERR "No queued failed download with id $id.\n";
         exit 1;
@@ -126,11 +141,20 @@ retry-download - list and retry queued failed media downloads, dispatched as C<d
 
 =head1 SYNOPSIS
 
-    d2 tg.retry-download [--db <alias> | -d <alias>]
-    d2 tg.retry-download [--db <alias> | -d <alias>] <id>
-    d2 tg.retry-download [--db <alias> | -d <alias>] --all
+    d2 tg.retry-download [--bot <token>] [--db <alias> | -d <alias>]
+    d2 tg.retry-download [--bot <token>] [--db <alias> | -d <alias>] <id>
+    d2 tg.retry-download [--bot <token>] [--db <alias> | -d <alias>] --all
 
 =head1 DESCRIPTION
+
+C<--bot <token>> (TGT-219, found via a scheduled improvement hunt)
+scopes both listing and retrying to that bot, using
+L<D2TG::Reply/extract_bot_flag> - the same leading-position shape
+C<cli/reply.pl>/C<cli/approve.pl>'s own C<--bot> use. Telegram's own
+C<file_id> values are bot-token-scoped, so a failure queued under a
+non-default bot in a multi-bot config must be retried as that same
+bot; omitting it acts on the single-bot sentinel, matching every
+existing single-bot install's behavior exactly.
 
 TGT-104 (user-supplied feature-gap analysis): a transient inbound photo/
 document download failure (a network hiccup mid-transfer, a momentary

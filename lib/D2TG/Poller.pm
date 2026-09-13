@@ -434,6 +434,16 @@ sub run_once {
                             media_kind   => $media_kind,
                             caption_note => $caption_note,
                             error        => $result_or_error,
+
+                            # TGT-219 (found via a scheduled JOB-004
+                            # improvement hunt): $bot_token was already
+                            # in scope here (used above for is_allowed/
+                            # _print_reply_template) but never threaded
+                            # through - Telegram's own file_id values
+                            # are bot-token-scoped, so a multi-bot
+                            # config's retry would silently use the
+                            # wrong bot without this.
+                            bot_key => $bot_token,
                         );
                     };
                     if ($@) {

@@ -3197,3 +3197,62 @@ clean at 1582/1582 (one unrelated, confirmed-transient flake in
 cleanly on isolated re-run, matching this project's established
 host-load flakiness pattern). 100% statement+subroutine coverage
 confirmed on `lib/D2TG/Config.pm`.
+
+## TGT-219: failed_downloads queue was not bot-scoped
+
+Found via a scheduled JOB-004 improvement hunt. Every other per-chat
+`D2TG::Store` table (`allow_list`, `pending`, `sent_replies`, and the
+offset meta keys) carries a `bot_key` column so a multi-bot config
+(`bot_groups`, hardened by TGT-098/202/213/218) stays correctly scoped
+- `failed_downloads` was the sole exception, keyed only on `(chat_id,
+message_id)`. Confirmed by direct source read: `D2TG::Poller::run_once`
+already has `$bot_token` in scope at the failure site (used two lines
+earlier for `is_allowed`/`_print_reply_template`) but the
+`record_failed_download` call never passed it through -
+`D2TG::Store::record_failed_download`'s own signature didn't even
+accept a `bot_key` argument. Downstream, `cli/retry-download.pl` built
+its Telegram client unconditionally with the single default token, no
+`--bot` flag at all - unlike its siblings `cli/approve.pl`/
+`cli/reply.pl`, which both support `--bot <token>` specifically so a
+caller can act as the correct bot in a multi-bot group.
+
+Telegram's own `file_id` values are bot-token-scoped - a `file_id`
+obtained by bot A cannot be resolved via bot B's `getFile`. In any
+`bot_groups` configuration with more than one `--bot` under a
+`--chat_id` group (a configuration this codebase explicitly builds,
+validates, and tests elsewhere), a media-download failure recorded by
+a non-default bot would be retried using the wrong bot's token -
+Telegram would refuse the retry, with no `--bot` override to work
+around it, unlike the analogous `approve`/`reply` commands.
+
+Fixed by: (1) adding a `bot_key` column to `failed_downloads` via the
+same rename/create/copy/drop migration TGT-098 already established for
+`allow_list`/`pending` (a `UNIQUE` constraint change can't be done via
+a bare `ALTER TABLE ADD COLUMN` in SQLite), changing the uniqueness key
+to `(chat_id, bot_key, message_id)`; (2) `record_failed_download` and
+`failed_downloads` both take an optional `bot_key` (mirroring
+`pending_chat_ids`' own TGT-215 backward-compatible pattern - the
+unscoped case keeps listing every bot's entries, each now naming its
+own `bot_key`); (3) `D2TG::Poller::run_once` threads its already-in-
+scope `$bot_token` through to `record_failed_download`; (4)
+`cli/retry-download.pl` gains a `--bot <token>` flag (via
+`D2TG::Reply::extract_bot_flag`, matching `cli/approve.pl`/
+`cli/reply.pl`'s own leading-position pattern) to scope both listing
+and retrying to the correct bot.
+
+New test `t/219-failed-downloads-bot-scoping.t` (with
+`t/lib/Fake/Store.pm` extended to capture `bot_key` so `D2TG::Poller`'s
+own call site is independently verifiable): confirmed genuinely red
+against the pre-fix code (3/9 subtests failed - the same message_id
+under two bot_keys collapsed via `ON CONFLICT` into one row, and
+`run_once` never threaded `$bot_token` through), confirmed green after
+the fix (9/9 + a migration-failure regression test added afterward to
+close a coverage gap the fix itself introduced, matching
+`t/75-multi-bot-allow-list-scoping.t`'s own established mid-migration-
+failure precedent - 11/11 total), with the 5 existing sibling test
+files (`t/83`, `t/104`, `t/119`, `t/186`, `t/194`) re-run clean
+alongside it (125/125 total; `t/119-retry-download-usage-pod-parity.t`
+caught the new `--bot` flag missing from the POD `SYNOPSIS`, fixed in
+the same pass, not scope creep). Full suite re-run clean at 1595/1595.
+100% statement+subroutine coverage confirmed on both `lib/D2TG/Store.pm`
+and `lib/D2TG/Poller.pm`.
