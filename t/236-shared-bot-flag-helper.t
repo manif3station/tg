@@ -1,9 +1,28 @@
 use strict;
 use warnings;
+
+# TGT-236: same CORE::GLOBAL::exit interception technique t/177/t/230/
+# t/172/t/186 already established - a bare `exit` call's binding is
+# decided at compile time, so the override must be installed before
+# D2TG::Reply is loaded, to exercise extract_bot_flag_or_die's own
+# die-branch in-process (a subprocess call, as the regression tests
+# below use, is invisible to this file's own Devel::Cover run).
+our $captured_exit;
+our $intercept_exit;
+
+BEGIN {
+    *CORE::GLOBAL::exit = sub {
+        if ($intercept_exit) {
+            $captured_exit = $_[0] // 0;
+            die "TGT236-TEST-EXIT\n";
+        }
+        return CORE::exit(@_);
+    };
+}
+
 use Test::More;
 use FindBin qw($Bin);
 use File::Spec;
-use File::Temp;
 use lib "$Bin/../lib";
 
 require File::Spec->catfile( $Bin, 'lib', 'Test', 'CaptureStdio.pm' );
@@ -36,17 +55,29 @@ require D2TG::Reply;
 }
 
 # The helper's own die path exits 1 with a clear STDERR message
-# instead of propagating a raw exception - exercised via a tiny
-# one-liner since extract_bot_flag_or_die calls exit() directly.
+# instead of propagating a raw exception - exercised in-process via
+# the CORE::GLOBAL::exit interception above (a subprocess-invoking
+# regression test, like the ones below, would be invisible to this
+# file's own Devel::Cover coverage of D2TG::Reply.pm).
 {
-    my $libdir = File::Spec->catfile( $Bin, '..', 'lib' );
-    my ( undef, $probe ) = File::Temp::tempfile( SUFFIX => '.pl', UNLINK => 1 );
-    open my $fh, '>', $probe or die $!;
-    print $fh "use lib '$libdir';\nrequire D2TG::Reply;\nD2TG::Reply::extract_bot_flag_or_die('--bot', '-x');\n";
-    close $fh;
-    my ( $out, $rc, $err ) = run_capturing_stderr( $^X, $probe );
-    is( $rc, 1, "extract_bot_flag_or_die's own die path exits 1, not a raw uncaught exception" );
-    like( $err, qr/--bot requires a value/, "extract_bot_flag_or_die's own die path prints extract_bot_flag's error to STDERR" );
+    local $captured_exit;
+    local $intercept_exit = 1;
+
+    my $stderr = '';
+    open my $stderr_fh, '>', \$stderr or die $!;
+    local *STDERR = $stderr_fh;
+
+    my $direct_error;
+    { eval { D2TG::Reply::extract_bot_flag( '--bot', '-x' ) }; $direct_error = $@; }
+
+    my $survived = eval { D2TG::Reply::extract_bot_flag_or_die( '--bot', '-x' ); 1 };
+    my $catch_error = $@;
+    close $stderr_fh;
+
+    ok( !$survived, 'extract_bot_flag_or_die does not return on failure - the sentinel exception propagated out of eval' );
+    is( $catch_error, "TGT236-TEST-EXIT\n", 'the override intercepted the exit() call, confirming interception actually happened' );
+    is( $captured_exit, 1, "extract_bot_flag_or_die's own die path exits 1, not a raw uncaught exception" );
+    is( $stderr, $direct_error, 'extract_bot_flag_or_die prints exactly the same error to STDERR that extract_bot_flag itself dies with - byte-for-byte' );
 }
 
 # Regression: all 7 scripts now call the shared helper instead of
