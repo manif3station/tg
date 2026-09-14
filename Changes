@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+1.86  2026-09-14
+      - FEATURE (TGT-233, fast-follow from TGT-232's own scope
+        decision): cli/history.pl, cli/unread.pl, and
+        cli/attachment.pl now accept a --bot <token> flag, matching
+        cli/retry-download.pl's own established leading-position,
+        eval-wrapped extract_bot_flag convention. TGT-232 made
+        D2TG::Store's messages table bot_key-aware but none of these
+        3 scripts had any --bot flag at all, so they could never
+        actually exercise that scoping - always operating on the
+        default-bot sentinel's own messages. Omitting --bot preserves
+        today's exact default behavior unchanged. New test:
+        t/233-cli-bot-flag-message-scoping.t.
+
 1.85  2026-09-14
       - RELIABILITY FIX (TGT-232, found via a scheduled JOB-004
         improvement hunt): D2TG::Store's messages table was the one

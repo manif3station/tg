@@ -694,7 +694,7 @@ itself, so that needs either a second always-running watchdog process or
 a Tira-scheduled job to do the restarting, an operational decision
 flagged as a follow-up rather than built unilaterally.
 
-## `d2 tg.unread [--db <alias> | -d <alias>]`
+## `d2 tg.unread [--bot <token>] [--db <alias> | -d <alias>]`
 
 Lists every stored message (TGT-038) not yet marked read (TGT-046),
 oldest first: chat id, message id, sender, timestamp, and the stored
@@ -720,9 +720,16 @@ non-default-bot row) - each row shows its own bot (masked) when more
 than one bot's queue is present, and one `RETRY WITH: d2
 tg.retry-download --all [--bot <masked-token>]` line is printed per
 distinct bot found; single-bot installs see the exact same output as
-before.
+before. `--bot <token>` (TGT-233, fast-follow from TGT-232's own scope
+decision) now scopes the unread listing itself to that bot's own
+messages, using the same leading-position, eval-wrapped
+`extract_bot_flag` convention as `cli/retry-download.pl`; omitting it
+preserves today's exact default-bot behavior unchanged. TGT-232 made
+`D2TG::Store`'s `messages` table `bot_key`-aware, but until now this
+command had no `--bot` flag at all, so it could never actually exercise
+that scoping.
 
-## `d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]`
+## `d2 tg.attachment [--bot <token>] <chat_id> <message_id> [--db <alias> | -d <alias>]`
 
 TGT-133 (live Telegram request): writes a previously-downloaded
 attachment's raw bytes to stdout - the real on-disk path is never
@@ -741,7 +748,12 @@ scheduled improvement hunt, reordered from checking storage first),
 matching the majority sibling family so a caller with both a bad `--db`
 and malformed positional args gets a consistent exit 2/Usage rather
 than an exit 1/storage-error. `--db`/`-d` (TGT-051) resolves the same
-way `d2 tg.poller`'s does.
+way `d2 tg.poller`'s does. `--bot <token>` (TGT-233, fast-follow from
+TGT-232) scopes the attachment lookup to that bot's own recorded
+`(chat_id, message_id)` row, matching `cli/retry-download.pl`'s own
+established leading-position, eval-wrapped `extract_bot_flag`
+convention; omitting it preserves today's exact default-bot lookup
+unchanged.
 
 **Fetching is not permanently guaranteed** (TGT-134): a stored
 `local_path` never expires from the database, but the file itself can
@@ -838,7 +850,7 @@ occurred - deliberately NOT for "file is temporarily unavailable" (a
 Codex review caught an earlier draft treating that transient-sounding
 wording as permanent too).
 
-## `d2 tg.history [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
+## `d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without `--since`/`--until`
@@ -856,7 +868,15 @@ comparing, so results reflect true chronological order. A date-only
 day) - unchanged by this fix, a separate question from the separator
 mismatch it addresses. Prints `No messages found.` and exits 0 when
 nothing matches. `--db`/`-d` (TGT-051) resolves the same way `d2 tg.poller`'s
-does. `--since`/`--until` with no value following it (or immediately
+does. `--bot <token>` (TGT-233, fast-follow from TGT-232's own scope
+decision) scopes both the default recent-10 listing and the
+`--since`/`--until` range listing to that bot's own messages, matching
+`cli/retry-download.pl`'s own established leading-position,
+eval-wrapped `extract_bot_flag` convention; omitting it preserves
+today's exact default-bot behavior unchanged. TGT-232 made
+`D2TG::Store`'s `messages` table `bot_key`-aware, but until now this
+command had no `--bot` flag at all, so it could never actually exercise
+that scoping. `--since`/`--until` with no value following it (or immediately
 followed by the other flag) exits 2 with a clear message instead of
 silently running unscoped or matching nothing (TGT-070). `--since`/
 `--until` also validate the *shape* of their value (TGT-209, found via a

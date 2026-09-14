@@ -9,10 +9,24 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Store;
+use D2TG::Reply;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
+
+# TGT-233 (fast-follow from TGT-232's own scope decision): TGT-232 made
+# D2TG::Store's messages table bot_key-aware, but this script had no
+# --bot flag at all - matching cli/retry-download.pl's own established
+# leading-position, eval-wrapped extract_bot_flag convention.
+my ( $bot_token, @after_bot );
+eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_bot;
+my $bot_key = defined $bot_token ? $bot_token : '';
 
 # TGT-211 (found via a scheduled JOB-004 improvement hunt): argv-shape
 # validation now runs BEFORE storage resolution, matching the majority
@@ -22,7 +36,7 @@ my ( $db_alias, @rest );
 # exit 1/storage-error instead of the exit 2/Usage: every majority
 # sibling gives for the same class of double-invalid-input.
 if ( @ARGV != 2 || $ARGV[0] !~ /^-?\d+$/ || $ARGV[1] !~ /^\d+$/ ) {
-    print STDERR "Usage: d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]\n";
+    print STDERR "Usage: d2 tg.attachment [--bot <token>] <chat_id> <message_id> [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 my ( $chat_id, $message_id ) = @ARGV;
@@ -47,7 +61,7 @@ my $store = D2TG::Poller::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-my $local_path = $store->get_attachment_path( $chat_id, $message_id );
+my $local_path = $store->get_attachment_path( $chat_id, $message_id, bot_key => $bot_key );
 if ( !defined $local_path ) {
     print STDERR "d2 tg.attachment: no attachment recorded for chat $chat_id message $message_id\n";
     exit 1;
@@ -113,7 +127,7 @@ attachment - stream a downloaded attachment's raw bytes to stdout, dispatched as
 
 =head1 SYNOPSIS
 
-    d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]
+    d2 tg.attachment [--bot <token>] <chat_id> <message_id> [--db <alias> | -d <alias>]
 
 =head1 DESCRIPTION
 
@@ -122,6 +136,11 @@ fallback) resolves the same way C<d2 tg.poller>'s does - see
 L<D2TG::Config/resolve_alias_dir>. The resolved directory (or a
 C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
 rather than creating it (TGT-090).
+
+C<--bot <token>> (TGT-233) scopes the lookup to that bot's own recorded
+row, matching C<d2 tg.retry-download>'s established C<--bot>
+convention; omitting it preserves the default-bot lookup below
+unchanged.
 
 TGT-133: looks up C<local_path> for the given C<(chat_id, message_id)>
 pair via L<D2TG::Store/get_attachment_path> and writes its raw bytes

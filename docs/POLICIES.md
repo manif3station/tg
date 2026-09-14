@@ -3856,3 +3856,64 @@ row survives), plus two new subtests exercising `recent_messages(bot_
 key => ...)` and `messages_in_range(bot_key => ...)` directly.
 Re-confirmed 100%/100%/100% on `lib/D2TG/Store.pm`, `lib/D2TG/Poller.pm`,
 and `lib/D2TG/Reply.pm` after the fix.
+
+## TGT-233: cli/history.pl, cli/unread.pl, cli/attachment.pl had no --bot flag at all
+
+Fast-follow ticket filed immediately during TGT-232 (per this project's
+own file-ticket-before-resuming-work rule), not found via a scheduled
+job. TGT-232 made `D2TG::Store`'s `messages` table `bot_key`-aware end
+to end, but 3 of the CLI scripts that read from it had no `--bot`/
+`bot_key` awareness in their own argv parsing at all - `cli/history.pl`,
+`cli/unread.pl`, and `cli/attachment.pl` could only ever operate on the
+default-bot sentinel's own messages, so a multi-bot install's new
+per-bot scoping was real in the schema but unreachable from any of these
+3 commands.
+
+Fixed by adding `--bot <token>` to all 3 scripts, matching
+`cli/retry-download.pl`'s own established leading-position, eval-wrapped
+`extract_bot_flag` convention exactly:
+```perl
+my ( $bot_token, @after_bot );
+eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_bot;
+my $bot_key = defined $bot_token ? $bot_token : '';
+```
+inserted right after each script's own `--db` extraction. `cli/unread.pl`
+now calls `$store->unread_messages( bot_key => $bot_key )`;
+`cli/attachment.pl` now calls `$store->get_attachment_path( $chat_id,
+$message_id, bot_key => $bot_key )`; `cli/history.pl` now calls
+`$store->messages_in_range( ..., bot_key => $bot_key )` /
+`$store->recent_messages( 10, bot_key => $bot_key )`. Omitting `--bot`
+on any of the 3 preserves today's exact default-bot behavior unchanged.
+
+Two pre-existing usage/POD-parity tests (`t/117-attachment-usage-pod-
+parity.t`, `t/124-unread-usage-pod-parity.t`) caught the first round of
+gaps - the scripts' own `Usage:` strings gained `--bot` but the POD
+`SYNOPSIS` lines hadn't, failing parity. A third, previously-unnoticed
+parity test (`t/118-history-usage-pod-parity.t`) then failed in the
+reverse direction - the SYNOPSIS (updated first, with a new `--bot`
+example line) mentioned it but `history.pl`'s own printed `Usage:`
+string did not. Both directions fixed so all 3 scripts' `Usage:`
+string and POD `SYNOPSIS` agree.
+
+New test `t/233-cli-bot-flag-message-scoping.t`: confirmed genuinely red
+against the pre-fix code (5/10 subtests failed - each of the 3 scripts
+returned the wrong bot's messages when both a default-bot and a
+named-bot row existed for the same chat_id), confirmed green after the
+fix (10/10). Full suite re-run clean at 1683/1683 afterward, including
+the 2 parity-test fixes. `cli/*.pl` scripts remain outside
+`Devel::Cover`'s direct instrumentation (tests invoke them via
+subprocess) - an accepted, previously-documented limitation, not new to
+this ticket.
+
+Codex adversarial review attempted twice (`timeout 15 codex exec`):
+both attempts hung and were killed by timeout, the same near-universal
+unavailability seen throughout this session. Fell back to independent
+verification: diffed each script's new `--bot` block character-for-
+character against `cli/retry-download.pl`'s own already-proven pattern,
+and confirmed via the new test file that default (no `--bot`) behavior
+is byte-identical to pre-fix output for all 3 scripts.

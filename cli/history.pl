@@ -9,10 +9,24 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Store;
+use D2TG::Reply;
 
 my ( $db_alias, @after_db );
 ( $db_alias, @after_db ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @after_db;
+
+# TGT-233 (fast-follow from TGT-232's own scope decision): TGT-232 made
+# D2TG::Store's messages table bot_key-aware, but this script had no
+# --bot flag at all - matching cli/retry-download.pl's own established
+# leading-position, eval-wrapped extract_bot_flag convention.
+my ( $bot_token, @after_bot );
+eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_bot;
+my $bot_key = defined $bot_token ? $bot_token : '';
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
@@ -68,7 +82,7 @@ my ( $since, $until );
 # found." when nothing happened to match, but a query that happened
 # to match real history would have printed it instead).
 if (@ARGV) {
-    print STDERR "Usage: d2 tg.history [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]\n";
+    print STDERR "Usage: d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 
@@ -90,8 +104,8 @@ my $store = D2TG::Poller::open_store_or_die(
 
 my @messages =
   ( defined $since || defined $until )
-  ? $store->messages_in_range( since => $since, until => $until )
-  : reverse $store->recent_messages(10);
+  ? $store->messages_in_range( since => $since, until => $until, bot_key => $bot_key )
+  : reverse $store->recent_messages( 10, bot_key => $bot_key );
 
 if ( !@messages ) {
     print "No messages found.\n";
@@ -114,6 +128,7 @@ history - view past messages by date range, dispatched as C<d2 tg.history>
     d2 tg.history --since 2026-09-01T00:00:00 --until 2026-09-07T23:59:59
     d2 tg.history --db <alias>
     d2 tg.history -d <alias>
+    d2 tg.history --bot <token>
 
 =head1 DESCRIPTION
 
@@ -122,6 +137,11 @@ fallback) resolves the same way C<d2 tg.poller>'s does - see
 L<D2TG::Config/resolve_alias_dir>. The resolved directory (or a
 C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
 rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>).
+
+C<--bot <token>> (TGT-233) scopes the listing to that bot's own
+messages, matching C<d2 tg.retry-download>'s established C<--bot>
+convention; omitting it preserves the default-bot behavior below
+unchanged.
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
 sender, timestamp, and the stored summary. Without C<--since>/C<--until>

@@ -1,6 +1,14 @@
 # tg
 
-**Status: early implementation (v1.85).** RELIABILITY FIX (TGT-232,
+**Status: early implementation (v1.86).** FEATURE (TGT-233, fast-follow
+from TGT-232): `d2 tg.history`, `d2 tg.unread`, and `d2 tg.attachment`
+now accept a `--bot <token>` flag, matching `d2 tg.retry-download`'s own
+established convention. TGT-232 made `D2TG::Store`'s `messages` table
+bot_key-aware, but none of these 3 commands could actually exercise
+that scoping - always operating on the default-bot sentinel's own
+messages. Omitting `--bot` preserves today's exact default behavior.
+
+RELIABILITY FIX (TGT-232,
 found via a scheduled JOB-004 improvement hunt): `D2TG::Store`'s
 `messages` table was the one remaining per-chat table never given the
 `bot_key` scoping TGT-098/219 already applied elsewhere - keyed only on

@@ -9,10 +9,24 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Store;
+use D2TG::Reply;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
+
+# TGT-233 (fast-follow from TGT-232's own scope decision): TGT-232 made
+# D2TG::Store's messages table bot_key-aware, but this script had no
+# --bot flag at all - matching cli/retry-download.pl's own established
+# leading-position, eval-wrapped extract_bot_flag convention.
+my ( $bot_token, @after_bot );
+eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
+if ($@) {
+    print STDERR $@;
+    exit 1;
+}
+@ARGV = @after_bot;
+my $bot_key = defined $bot_token ? $bot_token : '';
 
 # TGT-149 (found via a scheduled hourly bug-hunt): every sibling
 # command in this exact family (cli/status.pl, cli/history.pl -
@@ -20,7 +34,7 @@ my ( $db_alias, @rest );
 # unrecognized flag or leftover positional argument instead of
 # silently ignoring it - this command was the one missing it.
 if (@ARGV) {
-    print STDERR "Usage: d2 tg.unread [--db <alias> | -d <alias>]\n";
+    print STDERR "Usage: d2 tg.unread [--bot <token>] [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 
@@ -44,7 +58,7 @@ my $store = D2TG::Poller::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-my @unread = $store->unread_messages;
+my @unread = $store->unread_messages( bot_key => $bot_key );
 
 if ( !@unread ) {
     print "No unread messages.\n";
@@ -108,7 +122,7 @@ unread - list new/non-replied messages, dispatched as C<d2 tg.unread>
 
 =head1 SYNOPSIS
 
-    d2 tg.unread [--db <alias> | -d <alias>]
+    d2 tg.unread [--bot <token>] [--db <alias> | -d <alias>]
 
 =head1 DESCRIPTION
 
@@ -117,6 +131,11 @@ fallback) resolves the same way C<d2 tg.poller>'s does - see
 L<D2TG::Config/resolve_alias_dir>. The resolved directory (or a
 C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
 rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>).
+
+C<--bot <token>> (TGT-233) scopes the listing to that bot's own
+messages, matching C<d2 tg.retry-download>'s established C<--bot>
+convention; omitting it preserves the default-bot behavior below
+unchanged.
 
 Lists every message L<D2TG::Store> has recorded (TGT-038) that has not
 been marked read (TGT-046, via a successful C<d2 tg.reply
