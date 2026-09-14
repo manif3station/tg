@@ -253,6 +253,27 @@ sub _ensure_schema {
         }
     }
 
+    # TGT-237: mirrors failed_downloads' own shape, but a fresh table
+    # created with bot_key from the start (unlike failed_downloads,
+    # which needed TGT-219's own rename/create/copy/drop migration to
+    # retrofit it) - no local_path/caption_note equivalent, since a
+    # transcription failure's transient download is always unlinked
+    # immediately (never lands in the shared attachments vault) and
+    # there is no caption for a voice message.
+    $self->{dbh}->do(
+        'CREATE TABLE IF NOT EXISTS failed_transcriptions (
+             id         INTEGER PRIMARY KEY AUTOINCREMENT,
+             chat_id    INTEGER NOT NULL,
+             bot_key    TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
+             message_id INTEGER NOT NULL,
+             file_id    TEXT NOT NULL,
+             sender     TEXT,
+             error      TEXT,
+             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+             UNIQUE (chat_id, bot_key, message_id)
+         )'
+    );
+
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
     # send_voice failure after that point can leave a reply text-only,
@@ -679,6 +700,60 @@ sub remove_failed_download {
     my ( $self, $id ) = @_;
 
     $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
+
+    return;
+}
+
+# TGT-237: mirrors record_failed_download/failed_downloads/
+# remove_failed_download's own shape exactly (upsert on
+# (chat_id, bot_key, message_id), optional bot_key filter on listing) -
+# see that trio's own comments above for the redelivery-refresh and
+# multi-bot-isolation rationale, unchanged here.
+sub record_failed_transcription {
+    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
+
+    my ( $sender, $error ) = @args{qw(sender error)};
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
+
+    $self->{dbh}->do(
+        'INSERT INTO failed_transcriptions (chat_id, bot_key, message_id, file_id, sender, error)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
+             file_id = excluded.file_id, sender = excluded.sender,
+             error = excluded.error, created_at = CURRENT_TIMESTAMP',
+        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $error,
+    );
+
+    my $row = $self->{dbh}->selectrow_hashref(
+        'SELECT id FROM failed_transcriptions WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
+    );
+
+    return $row->{id};
+}
+
+sub failed_transcriptions {
+    my ( $self, %args ) = @_;
+
+    if ( defined $args{bot_key} ) {
+        return $self->{dbh}->selectall_arrayref(
+            'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at
+             FROM failed_transcriptions WHERE bot_key = ? ORDER BY id',
+            { Slice => {} }, $args{bot_key},
+        );
+    }
+
+    return $self->{dbh}->selectall_arrayref(
+        'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at
+         FROM failed_transcriptions ORDER BY id',
+        { Slice => {} }
+    );
+}
+
+sub remove_failed_transcription {
+    my ( $self, $id ) = @_;
+
+    $self->{dbh}->do( 'DELETE FROM failed_transcriptions WHERE id = ?', undef, $id );
 
     return;
 }

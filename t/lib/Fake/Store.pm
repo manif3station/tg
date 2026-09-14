@@ -82,6 +82,36 @@ sub failed_downloads {
     return $self->{failed_downloads} || [];
 }
 
+# TGT-237: mirrors record_failed_download/failed_downloads' own shape.
+sub record_failed_transcription {
+    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
+
+    my ($existing) = grep { $_->{chat_id} == $chat_id && $_->{message_id} == $message_id }
+      @{ $self->{failed_transcriptions} || [] };
+
+    if ($existing) {
+        @{$existing}{qw(file_id sender error)} = ( $file_id, @args{qw(sender error)} );
+        return $existing->{id};
+    }
+
+    my $id = ++$self->{_next_failed_transcription_id};
+    push @{ $self->{failed_transcriptions} }, {
+        id         => $id,
+        chat_id    => $chat_id,
+        message_id => $message_id,
+        file_id    => $file_id,
+        sender     => $args{sender},
+        error      => $args{error},
+        bot_key    => $args{bot_key},
+    };
+    return $id;
+}
+
+sub failed_transcriptions {
+    my ($self) = @_;
+    return $self->{failed_transcriptions} || [];
+}
+
 1;
 
 =head1 NAME

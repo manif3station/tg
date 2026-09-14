@@ -385,6 +385,42 @@ sub run_once {
                     _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
                 }
             }
+            elsif ( $store && defined $message_id && defined $file_id ) {
+
+                # TGT-237 (found via a scheduled JOB-003 hourly bug
+                # hunt): a failed transcription used to be reported once
+                # (TRANSCRIBE ERROR, STDERR only) and permanently lost -
+                # no queue, no retry, unlike failed_downloads (TGT-104).
+                # Mirrors that established queue-write pattern exactly,
+                # including its own non-fatal eval-wrap (a locked/full
+                # SQLite database must not turn an already-non-fatal
+                # transcription error into a poll-cycle failure).
+                eval {
+                    $store->record_failed_transcription(
+                        $chat_id, $message_id, $file_id,
+                        sender  => $sender,
+                        error   => $transcript,
+                        bot_key => $bot_token,
+                    );
+                };
+                if ($@) {
+                    my $queue_error = $@;
+                    $queue_error =~ s/\n\z//;
+                    print STDERR "TRANSCRIBE ERROR [$chat_id] $sender: "
+                      . "failed to queue for retry too: $queue_error\n";
+                }
+                else {
+                    # TGT-204's own stdout-visibility precedent: the
+                    # TRANSCRIBE ERROR line above goes to STDERR only,
+                    # which never reaches the monitor job's stdout-fed
+                    # tira.policy.bridge stream - printed only when the
+                    # queue write itself succeeded, naming the exact
+                    # recovery command, matching NEW TG MEDIA FAILED.
+                    print "$ts NEW TG VOICE FAILED [$chat_id] $sender: "
+                      . "transcription failed - queued for retry, "
+                      . "RETRY WITH: d2 tg.retry-transcription --all" . _bot_flag($bot_token) . "\n";
+                }
+            }
         }
         elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
             my $file_id   = _media_file_id( $message, $media_kind );

@@ -8,6 +8,7 @@ use File::Spec;
 use Digest::SHA qw(sha256_hex);
 use D2TG::Config;
 use D2TG::Poller;
+use D2TG::Transcribe;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
 
@@ -186,6 +187,56 @@ sub retry_failed_download {
     }
 
     return ( 1, $local_path );
+}
+
+# TGT-237: retry_failed_download's own analogue for a queued failed
+# voice transcription. Re-downloads the voice file transiently (never
+# passed a `dir`, matching D2TG::Poller's own $transcribe_voice
+# coderef - this download must never land in the shared, deduplicated
+# attachments vault, and is always unlinked immediately below,
+# regardless of outcome) and re-attempts D2TG::Transcribe::transcribe;
+# on success, restores the message into D2TG::Store history via
+# record_message (mirroring retry_failed_download's own TGT-104 Codex
+# finding - a retry success must not only clear the queue row, leaving
+# nothing for d2 tg.history/d2 tg.unread to show) and only then
+# removes the queue row via D2TG::Poller::store_write_safe, the same
+# established non-fatal store-write pattern; a record_message failure
+# leaves the row queued rather than silently losing the transcript a
+# second time.
+sub retry_failed_transcription {
+    my ( $telegram, $store, $row, %args ) = @_;
+
+    my $local_path = eval { download_file( $telegram, $row->{file_id}, ua => $args{ua} ) };
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        return ( 0, $error );
+    }
+
+    my $transcript = eval { D2TG::Transcribe::transcribe($local_path) };
+    my $transcribe_error = $@;
+    unlink $local_path;
+
+    if ($transcribe_error) {
+        my $error = $transcribe_error;
+        $error =~ s/\n\z//;
+        return ( 0, $error );
+    }
+
+    my ($record_ok) = D2TG::Poller::store_write_safe(
+        $row->{chat_id}, 'record_message',
+        sub { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $transcript ) }
+    );
+
+    if ($record_ok) {
+        D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_transcription', sub { $store->remove_failed_transcription( $row->{id} ) } );
+    }
+    else {
+        print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
+          . "a future retry can still restore history for this message, without re-transcribing\n";
+    }
+
+    return ( 1, $transcript );
 }
 
 sub prune_vault {

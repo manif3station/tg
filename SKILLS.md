@@ -272,11 +272,13 @@ captured at launch.
 
 Every `cli/*` entrypoint file carries a `.pl` extension internally
 (`cli/approve.pl`, `cli/attachment.pl`, `cli/help.pl`, `cli/history.pl`,
-`cli/poller.pl`, `cli/reply.pl`, `cli/retry-download.pl`, `cli/send.pl`,
-`cli/status.pl`, `cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
+`cli/poller.pl`, `cli/reply.pl`, `cli/retry-download.pl`,
+`cli/retry-transcription.pl`, `cli/send.pl`, `cli/status.pl`,
+`cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
 `cli/whoami.pl` - TGT-093; TGT-123 kept this list current after 5 later
 entrypoints were added, TGT-130 added the one that had shipped in
-between and been missed, and TGT-133 added `attachment.pl`;
+between and been missed, TGT-133 added `attachment.pl`, and TGT-237
+added `retry-transcription.pl`;
 `t/98-skills-md-cli-list-current.t` checks this list against the real
 `cli/*.pl` file list so a future drift fails the suite instead of
 silently accumulating again).
