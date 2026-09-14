@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.90  2026-09-14
+      - FEATURE (TGT-237, found via a scheduled JOB-003 hourly bug
+        hunt): D2TG::Poller's voice transcription branch had no
+        analogue of the photo/document branch's failed_downloads
+        queue - a transcribe_voice failure was reported once
+        (TRANSCRIBE ERROR, STDERR only) and permanently lost, with no
+        retry path, unlike failed_downloads/d2 tg.retry-download
+        (TGT-104). New D2TG::Store::failed_transcriptions table +
+        accessors mirror failed_downloads' own shape. run_once's voice
+        failure path now queues the failure (eval-wrapped, non-fatal)
+        and prints a NEW TG VOICE FAILED line to STDOUT (TGT-204's own
+        visibility precedent) instead of only STDERR. New
+        D2TG::Download::retry_failed_transcription re-downloads the
+        voice file transiently and re-attempts transcription,
+        restoring history on success. New cli/retry-transcription.pl
+        (d2 tg.retry-transcription) lists and retries the queue. New
+        test: t/237-failed-transcription-queue.t.
+
 1.89  2026-09-14
       - REFACTOR (TGT-236, found via a scheduled JOB-004 improvement
         hunt): 7 cli/*.pl scripts (history, attachment, unread,

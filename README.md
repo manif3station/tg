@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v1.90).** FEATURE (TGT-237, found via
+a scheduled JOB-003 hourly bug hunt): a failed voice transcription
+used to be permanently lost with no retry path - `D2TG::Poller`'s
+voice branch had no analogue of the photo/document branch's
+`failed_downloads` queue. New `D2TG::Store::failed_transcriptions`
+table, `run_once`'s voice failure path now queues the failure and
+prints `NEW TG VOICE FAILED` to STDOUT, and `d2 tg.retry-transcription`
+retries queued rows - mirroring `failed_downloads`/
+`d2 tg.retry-download`'s own established pattern.
+
 **Status: early implementation (v1.89).** REFACTOR (TGT-236, found via
 a scheduled JOB-004 improvement hunt): 7 `cli/*.pl` scripts each
 duplicated the identical eval-wrap-print-STDERR-exit-1 idiom around

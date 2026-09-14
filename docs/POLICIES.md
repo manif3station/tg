@@ -4132,3 +4132,102 @@ version line-by-line to confirm only the eval-wrap lines were replaced
 (no other logic touched), and confirmed the full pre-existing `--bot`
 test suite passes unmodified as the strongest evidence the refactor is
 behavior-preserving.
+
+## TGT-237: a failed voice transcription was a permanent, silent message loss
+
+Found via a scheduled JOB-003 hourly bug-hunt fork. `D2TG::Poller::run_once`'s
+voice branch called `transcribe_voice` via `_run_non_fatal`; on failure
+it printed a `TRANSCRIBE ERROR` line to STDERR (never reaching the
+monitor job's own stdout-fed `tira.policy.bridge` stream) and the loop
+simply continued - no `record_message` call, no `failed_downloads`-style
+queue row. Photo/document downloads get exactly this failure mode
+fixed already (`failed_downloads` + `d2 tg.retry-download`, TGT-104;
+STDOUT visibility, TGT-204) but the voice transcription path was never
+given the same treatment - a genuine, real asymmetric gap in an area
+(message-loss prevention) this project has otherwise been extremely
+rigorous about (TGT-132/165/166/178/191/192 all exist specifically to
+stop exactly this shape of silent loss for other paths).
+`t/17-voice-transcription.t`'s own existing failure test only asserted
+the STDERR text and the absence of a stdout transcript line - zero
+assertion about persistence or recoverability, so this gap had no
+regression coverage.
+
+Fixed by adding a `failed_transcriptions` table (a fresh table, unlike
+`failed_downloads` which needed TGT-219's own rename/create/copy/drop
+migration to retrofit `bot_key` onto a table that predated it - this
+one is `bot_key`-aware from creation) plus `record_failed_transcription`/
+`failed_transcriptions`/`remove_failed_transcription` accessors,
+mirroring `failed_downloads`' own shape and upsert-on-redelivery
+behavior exactly (no `local_path`/`caption_note` equivalent - a
+transcription's transient download is always unlinked immediately and
+a voice message carries no caption). `run_once`'s voice failure branch
+now queues the failure (eval-wrapped/non-fatal, matching the download
+branch's own established non-fatal queue-write pattern) and prints
+`NEW TG VOICE FAILED ... RETRY WITH: d2 tg.retry-transcription --all
+[--bot ...]` to STDOUT only when the queue write itself succeeds,
+matching `NEW TG MEDIA FAILED`'s own TGT-204/TGT-220 precedent exactly.
+
+**Offset handling note**: the ticket's own acceptance criteria allowed
+either an offset-cap fix or "an equivalent persisted-recorded state" -
+investigation confirmed `failed_downloads`' own established behavior
+is the latter: a download failure does NOT hold the offset back
+either, since recovery already doesn't depend on Telegram's redelivery
+(the retry command re-fetches using the saved `file_id` directly, any
+time later). The same reasoning applies identically to transcription,
+so no offset-cap change was needed or made - matching the proven
+precedent exactly rather than introducing new, untested offset-cap
+logic into a message-loss-prevention code path.
+
+New `D2TG::Download::retry_failed_transcription` (living in
+`D2TG::Download` alongside `retry_failed_download`, using
+`D2TG::Transcribe::transcribe` internally, matching the established
+"retry_failed_X lives with the download logic" convention) re-downloads
+the voice file transiently (never passed a `dir`, so it never lands in
+the shared attachments vault, and is always `unlink`ed regardless of
+outcome, matching `cli/poller.pl`'s own `$transcribe_voice` coderef
+exactly) and re-attempts transcription; on success, restores the
+message into `D2TG::Store` history via `record_message` before
+removing the queue row via the established `D2TG::Poller::store_write_safe`
+pattern - a `record_message` failure leaves the row queued rather than
+losing the transcript a second time, matching `retry_failed_download`'s
+own TGT-104 Codex-review precedent. New `cli/retry-transcription.pl`
+(`d2 tg.retry-transcription`) lists and retries the queue, mirroring
+`cli/retry-download.pl`'s own shape and `--bot` scoping exactly.
+
+New test `t/237-failed-transcription-queue.t`: confirmed genuinely red
+against the pre-fix code (`failed_transcriptions` method did not
+exist), confirmed green after the fix (50/50) - covering Store-level
+CRUD + redelivery-refresh + bot_key multi-bot isolation, poller-level
+wiring (queued exactly once, STDOUT visibility, a successful
+transcription is never queued, a queue-write failure itself is
+non-fatal), `retry_failed_transcription`'s full branch set (download
+failure, transcribe failure after a successful download, a successful
+retry, and a `record_message` failure after a successful transcription
+- the last two added specifically to close a self-caught coverage
+gap, see below), and CLI-level list/retry/usage-refusal behavior. Full
+suite re-run clean at 1778/1778. 100% statement+subroutine coverage
+confirmed on all 3 touched modules (`lib/D2TG/Store.pm`,
+`lib/D2TG/Poller.pm`, `lib/D2TG/Download.pm`).
+
+Self-caught coverage gap during the QA stage: `lib/D2TG/Download.pm`
+came in at 96.9% statement (not the mandatory 100%) on the first
+coverage run, traced to `retry_failed_transcription`'s own
+transcribe-error branch and its `record_message`-failure branch,
+neither exercised by the original test file. Fixed by adding the two
+subtests named above. Re-confirmed 100%/100%/100% on all 3 touched
+modules after the fix.
+
+A real, self-caught regression during implementation: `t/98-skills-md-cli-list-current.t`
+failed after `cli/retry-transcription.pl` was added, since `SKILLS.md`'s
+own hardcoded `cli/*.pl` inventory list (checked against the real file
+list by that test, per its own TGT-093/123/130/133 precedent) hadn't
+been updated. Fixed by adding `retry-transcription.pl` to that list.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: diffed
+the new voice-failure branch line-by-line against the already-proven
+photo/document failure branch immediately above it in the same file to
+confirm the queue-write/STDOUT-visibility shape is structurally
+identical, and confirmed the full pre-existing `t/17`/`t/83` test
+suites pass unmodified.

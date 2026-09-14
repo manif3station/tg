@@ -850,6 +850,51 @@ occurred - deliberately NOT for "file is temporarily unavailable" (a
 Codex review caught an earlier draft treating that transient-sounding
 wording as permanent too).
 
+## `d2 tg.retry-transcription [--bot <token>] [--db <alias> | -d <alias>] [<id> | --all]`
+
+TGT-237 (found via a scheduled JOB-003 hourly bug hunt): `d2 tg.poller`
+now persists each failed voice transcription (chat_id, message_id, the
+Telegram `file_id`, sender, the original error) to `D2TG::Store`'s
+`failed_transcriptions` queue instead of only printing a
+`TRANSCRIBE ERROR` line and losing the voice note forever - mirrors
+`d2 tg.retry-download`'s own established `failed_downloads` pattern
+(TGT-104) exactly, including the eval-wrapped non-fatal queue write and
+`--bot <token>` scoping (Telegram's own `file_id` values are
+bot-token-scoped, so a queued failure recorded under a non-default bot
+must be retried as that same bot).
+
+With no positional argument, lists every currently-queued failed
+transcription - id, chat_id, message_id, file_id, the original error,
+when it was queued - or `No failed transcriptions queued.` when empty.
+Argv-shape validation runs before `--db` storage resolution, matching
+`d2 tg.retry-download`'s own established ordering.
+
+With a numeric `id`, retries exactly that entry via
+`D2TG::Download::retry_failed_transcription` - re-downloads the voice
+file transiently (never landing in the shared attachments vault,
+matching `d2 tg.poller`'s own `$transcribe_voice` coderef, and always
+unlinked afterward regardless of outcome) and re-attempts
+transcription. A successful retry restores the message into
+`D2TG::Store`'s own history via `record_message` before removing the
+queue entry, and prints `RETRY OK` naming the recovered transcript
+text directly (unlike `d2 tg.retry-download`'s own `RETRY OK`, which
+deliberately never prints a real local filesystem path - a transcript
+is text, not a path, so no equivalent leak risk exists here). With
+`--all`, retries every currently-queued entry in turn - one failure
+doesn't stop the rest. A failed retry is reported on STDERR (`RETRY
+FAILED`, or `RETRY EXPIRED` for Telegram's own permanently-gone-`file_id`
+shape via `D2TG::Config::is_expired_file_error`, matching `d2
+tg.retry-download`'s own distinction) and the entry stays queued
+untouched.
+
+The poller's own `NEW TG VOICE FAILED [chat_id] sender: transcription
+failed - queued for retry, RETRY WITH: d2 tg.retry-transcription --all
+[--bot <masked-token>]` stdout line (TGT-204's own visibility
+precedent for downloads, now also applied to transcription) names this
+exact recovery command - previously a transcription failure was only
+ever visible via `TRANSCRIBE ERROR` on STDERR, which never reaches the
+monitor job's own stdout-fed `tira.policy.bridge` notification stream.
+
 ## `d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,
