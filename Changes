@@ -1,5 +1,31 @@
 Revision history for the tg skill
 
+1.98  2026-09-14
+      - BUGFIX (TGT-247, found via a scheduled JOB-003 hourly bug hunt,
+        live-reproduced in a developer-dashboard:latest container):
+        cli/retry-download.pl's retry loop discarded
+        D2TG::Download::retry_failed_download's 3rd return value
+        ($still_queued, added by TGT-244) entirely. When a queued
+        download's file transfer succeeded but the follow-up
+        record_message write then failed (e.g. a transient locked/busy
+        database), the row was deliberately left queued in
+        failed_downloads (never removed) and no row was ever written
+        into the messages table - yet the script still printed the
+        ordinary "RETRY OK ... - GET ATTACHMENT WITH: d2 tg.attachment
+        <chat_id> <message_id>" line. That exact printed follow-up
+        command is guaranteed to fail, since D2TG::Store::get_attachment_path
+        reads local_path from the messages table, which was never
+        written in this case.
+      - cli/retry-download.pl now branches on $still_queued: when true,
+        it prints "RETRY PARTIAL" instead of "RETRY OK", explains the
+        history record could not be written yet, names the row as still
+        queued for automatic or manual retry, and sets a non-zero exit
+        code - instead of falsely claiming full success. Added
+        t/247-retry-download-still-queued-message.t (a source-inspection
+        regression test, matching t/104-retry-download-cli-no-raw-path.t's
+        own established precedent for this script, which has no
+        injectable HTTP seam for a full functional test).
+
 1.97  2026-09-14
       - BUGFIX (TGT-246, found via a scheduled JOB-003 hourly bug hunt):
         D2TG::Download::auto_retry_failed_downloads (TGT-221) gave

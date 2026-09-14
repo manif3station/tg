@@ -4679,3 +4679,74 @@ no other caller in this module needed the same fix, and the new
 red/green test directly exercising the real code paths (a genuine
 SQLite-backed `D2TG::Store`, not a mock) rather than a synthetic
 reproduction of the symptom.
+
+## TGT-247: cli/retry-download.pl claimed RETRY OK even when the retry was only partially complete
+
+Found via a scheduled JOB-003 hourly bug hunt, live-reproduced end to
+end in a `developer-dashboard:latest` container. `D2TG::Download::retry_failed_download`
+returns a 3rd value, `$still_queued` (added by TGT-244 for
+`auto_retry_failed_downloads`'s own internal throttle logic) - true
+when the download itself succeeded but the follow-up `record_message`
+write then failed (a transient locked/busy database, TGT-194's own
+documented scenario). In that state the row is deliberately left
+queued in `failed_downloads` (never removed) and no row was ever
+written into the `messages` table.
+
+`cli/retry-download.pl`'s own retry loop only ever captured `($ok,
+$result_or_error)` from that call, silently discarding `$still_queued`
+entirely - so its success branch printed the ordinary
+`RETRY OK [id] chat_id=X message_id=Y - GET ATTACHMENT WITH: d2
+tg.attachment X Y` line unconditionally whenever `$ok` was true, even
+in the partial-success case. That printed follow-up command is
+guaranteed to fail: `D2TG::Store::get_attachment_path` reads
+`local_path` from the `messages` table, which was never written in
+this case, so `d2 tg.attachment` exits 1 with "no attachment recorded
+for chat X message Y" - directly contradicting the "RETRY OK" claim
+that preceded it, and giving the operator/agent no indication the row
+was, in fact, still sitting in the retry queue.
+
+Live-reproduced in this session: a fake `D2TG::Store` whose
+`record_message` always dies makes `retry_failed_download` return
+`(1, $local_path, 1)` - confirmed against the actual unmodified
+`cli/retry-download.pl` source that the script would still take the
+`RETRY OK`/`GET ATTACHMENT WITH` branch, and confirmed
+`get_attachment_path` on that same store returns `undef` for the pair.
+
+Fixed by capturing all 3 return values and branching: when
+`$still_queued` is true, the script now prints `RETRY PARTIAL` instead
+of `RETRY OK`, explains that the history record could not be written
+yet, names the row as still queued (retried automatically, or via
+`d2 tg.retry-download <id>` again), and sets a non-zero exit code -
+matching `D2TG::Download`'s own `STORE ERROR ... queue row not
+removed` STDERR line (which was the only place this gap was ever
+visible before this fix). The fully-successful case (`$still_queued`
+false) is completely unchanged - still `RETRY OK`/`GET ATTACHMENT
+WITH`, still never printing the raw local path (TGT-146).
+
+New test `t/247-retry-download-still-queued-message.t` - a
+structural/source-inspection regression test, matching this project's
+own established precedent for this exact script
+(`t/104-retry-download-cli-no-raw-path.t`, `t/195-approve-store-calls-classified-not-raw.t`):
+`cli/retry-download.pl` has no injectable seam for mocking
+`D2TG::Telegram`'s HTTP calls through its own real
+`D2TG::Poller::open_store_or_die`/real SQLite `D2TG::Store`
+construction, so a full functional black-box test isn't practical here
+either. Asserts the retry loop captures `$still_queued` from
+`retry_failed_download`, that the loop body inspects `$still_queued`
+around the `RETRY OK` print (not just `$ok`), and that a
+still-queued-specific message actually exists in the script's own
+output text. Confirmed genuinely red against the pre-fix code (3 of 4
+assertions failed); confirmed green after the fix (4/4). Full suite
+re-run clean in the `perl-test` container: 186 files, 1850 tests (one
+unrelated pre-existing test, `t/00-scaffold.t`'s own hardcoded
+`VERSION=1.97` string match, updated to `1.98` as part of this
+release's routine version bump - not itself a behavior fix).
+
+perlsec.pl-style vulnerability-scan audit: pure in-process control-flow
+change (one new `if ($still_queued) { ... }` branch reading a return
+value already produced by existing, unchanged code, printing only
+already-safe values - `$row->{id}`, `$row->{chat_id}`,
+`$row->{message_id}`, none of which are attacker-controlled beyond
+what every other line in this script already prints) - no new shell
+invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

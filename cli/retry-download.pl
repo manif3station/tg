@@ -100,7 +100,7 @@ else {
 
 my $exit_code = 0;
 for my $row (@to_retry) {
-    my ( $ok, $result_or_error ) =
+    my ( $ok, $result_or_error, $still_queued ) =
       D2TG::Download::retry_failed_download( $telegram, $store, $row, $attachments_dir );
 
     if ( !$ok ) {
@@ -111,6 +111,29 @@ for my $row (@to_retry) {
         else {
             print STDERR "RETRY FAILED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $result_or_error\n";
         }
+        $exit_code = 1;
+        next;
+    }
+
+    # TGT-247 (found via a scheduled JOB-003 hourly bug hunt,
+    # live-reproduced): $ok alone does not mean the retry fully
+    # completed. D2TG::Download::retry_failed_download's own 3rd return
+    # value, $still_queued (TGT-244), is true when the download itself
+    # succeeded but the follow-up record_message write then failed - the
+    # row is deliberately left in the failed_downloads queue (never
+    # removed) and NO row was ever written into the messages table, so
+    # D2TG::Store::get_attachment_path has nothing to return yet. Printing
+    # the ordinary RETRY OK/GET ATTACHMENT WITH line in this state told
+    # the caller to run a d2 tg.attachment command that is guaranteed to
+    # fail ("no attachment recorded"), with no indication anything was
+    # still incomplete - retry_failed_download's own STORE ERROR STDERR
+    # line (from D2TG::Download itself) is the only place that gap was
+    # ever visible before this fix.
+    if ($still_queued) {
+        print "RETRY PARTIAL [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
+          . "download succeeded but the history record could not be written yet; "
+          . "the entry remains queued (still queued) and will be retried automatically, "
+          . "or retry again with d2 tg.retry-download $row->{id}\n";
         $exit_code = 1;
         next;
     }
@@ -201,5 +224,21 @@ genuinely, permanently gone.
 
 C<--db>/C<-d> (or C<D2TG_DB>) and C<D2TG_TOKEN> resolve exactly as every
 other C<d2 tg.*> command's do.
+
+TGT-247 (found via a scheduled JOB-003 hourly bug hunt, live-reproduced
+in a C<developer-dashboard:latest> container): C<RETRY OK> is only ever
+printed once a retry is genuinely fully complete. Before this fix, the
+retry loop discarded C<retry_failed_download>'s 3rd return value
+(C<$still_queued>, TGT-244) entirely - so when the download itself
+succeeded but the follow-up C<record_message> write then failed (a
+transient locked/busy database), this script still printed the ordinary
+C<RETRY OK .../GET ATTACHMENT WITH: d2 tg.attachment ...> line, even
+though that exact command is guaranteed to fail (C<D2TG::Store::get_attachment_path>
+reads C<local_path> from the C<messages> table, which was never written
+in this case) and the row was, in fact, still sitting in the
+C<failed_downloads> queue (never removed). This case now prints
+C<RETRY PARTIAL> instead - naming the row as still queued for a future
+automatic or manual (C<d2 tg.retry-download E<lt>idE<gt>>) retry - and
+sets a non-zero exit code, rather than falsely claiming full success.
 
 =cut

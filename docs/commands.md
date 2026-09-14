@@ -861,6 +861,22 @@ occurred - deliberately NOT for "file is temporarily unavailable" (a
 Codex review caught an earlier draft treating that transient-sounding
 wording as permanent too).
 
+TGT-247 (found via a scheduled JOB-003 hourly bug hunt, live-reproduced):
+`RETRY OK` is only printed once the retry is genuinely fully complete -
+the downloaded file AND the `messages` history row it depends on both
+exist. `D2TG::Download::retry_failed_download` can succeed at the
+download but still fail the follow-up `record_message` write (a
+transient locked/busy database); it reports this via its own 3rd return
+value, `$still_queued` (TGT-244) - the row stays queued in
+`failed_downloads` (never removed) and `d2 tg.attachment` has nothing to
+serve yet, since no `messages` row was ever written. This command now
+prints `RETRY PARTIAL` instead of `RETRY OK` for that case, naming the
+row as still queued (it is retried automatically, or manually via
+`d2 tg.retry-download <id>` again) rather than pointing at a
+`d2 tg.attachment` command that is guaranteed to fail. Before this fix,
+`$still_queued` was silently discarded and every download success - full
+or partial - printed the same `RETRY OK`/`GET ATTACHMENT WITH` line.
+
 ## `d2 tg.retry-transcription [--bot <token>] [--db <alias> | -d <alias>] [<id> | --all]`
 
 TGT-237 (found via a scheduled JOB-003 hourly bug hunt): `d2 tg.poller`

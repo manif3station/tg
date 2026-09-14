@@ -1,5 +1,21 @@
 # tg
 
+**Status: early implementation (v1.98).** BUGFIX (TGT-247, found via a
+scheduled JOB-003 hourly bug hunt, live-reproduced in a
+`developer-dashboard:latest` container): `cli/retry-download.pl`'s retry
+loop discarded `D2TG::Download::retry_failed_download`'s 3rd return
+value (`$still_queued`, TGT-244) entirely. When a queued download's file
+transfer succeeded but the follow-up `record_message` write then failed
+(e.g. a transient locked/busy database), the row was deliberately left
+queued (never removed from `failed_downloads`) and no row was ever
+written into the `messages` table - yet the script still printed the
+ordinary `RETRY OK ... - GET ATTACHMENT WITH: d2 tg.attachment ...`
+line, whose exact printed follow-up command is guaranteed to fail since
+`D2TG::Store::get_attachment_path` has nothing to return. The script now
+branches on `$still_queued`: prints `RETRY PARTIAL` instead, names the
+row as still queued for automatic/manual retry, and sets a non-zero exit
+code, instead of falsely claiming full success.
+
 **Status: early implementation (v1.97).** BUGFIX (TGT-246, found via a
 scheduled JOB-003 hourly bug hunt): `D2TG::Download::auto_retry_failed_downloads`
 (TGT-221) gave failed media downloads automatic background retry (every
