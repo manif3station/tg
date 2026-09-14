@@ -1,5 +1,29 @@
 Revision history for the tg skill
 
+1.96  2026-09-14
+      - BUGFIX (TGT-245, found via a scheduled JOB-003 hourly bug hunt):
+        D2TG::Download::retry_failed_download and
+        retry_failed_transcription both called $store->record_message
+        without a bot_key argument, even though the queue row they were
+        retrying (failed_downloads/failed_transcriptions, TGT-219/
+        TGT-237) already carried its own bot_key. TGT-232 migrated the
+        messages table to a (chat_id, message_id, bot_key) composite
+        key and threaded bot_key through every record_message call
+        site it enumerated, but never enumerated these two retry
+        functions. In a multi-bot config, a message that failed
+        download/transcription under a non-default bot and was later
+        successfully retried (manually via d2 tg.retry-download/
+        d2 tg.retry-transcription, or automatically via TGT-221's
+        auto_retry_failed_downloads) had its restored history recorded
+        under D2TG::Store::DEFAULT_BOT_KEY instead of the bot that
+        actually received it - invisible to
+        'd2 tg.history --bot <token>'/'d2 tg.unread --bot <token>' for
+        that bot, and able to silently ON CONFLICT-overwrite an
+        unrelated default-bot message sharing the same
+        (chat_id, message_id). Both record_message calls now pass
+        bot_key => $row->{bot_key}, matching every sibling call site.
+        New regression coverage: t/245-retry-record-message-bot-key.t.
+
 1.95  2026-09-14
       - BUGFIX (TGT-244, found via a scheduled JOB-003 hourly bug hunt):
         D2TG::Download::auto_retry_failed_downloads' own 60s auto-retry

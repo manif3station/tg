@@ -4530,3 +4530,66 @@ one new `if` condition that consumes it, a `grep` confirming
 `cli/retry-download.pl` is the only other caller and is unaffected, and
 the new red/green test itself directly exercising the real bug through
 the real code paths (not a mocked reproduction of the symptom).
+
+## TGT-245: retry_failed_download/retry_failed_transcription omitted bot_key from record_message, mis-attributing retried messages in a multi-bot config
+
+Found via a scheduled JOB-003 hourly bug hunt (2026-09-14), by reading
+`lib/D2TG/Download.pm` directly rather than trusting the ticket board's
+own claimed completeness.
+
+TGT-232 migrated the `messages` table to a composite `(chat_id,
+message_id, bot_key)` key and its own `solution_needed` text explicitly
+enumerated every call site that needed a `bot_key` parameter threaded
+through: `D2TG::Poller`'s `record_message`/`mark_read` calls,
+`cli/history.pl`, `cli/unread.pl`, `cli/attachment.pl`, `cli/reply.pl`.
+It never enumerated (and so never updated) `D2TG::Download`'s own two
+`record_message` callers - `retry_failed_download` and
+`retry_failed_transcription`. Both already had the exact value they
+needed sitting right there: `$row->{bot_key}`, since `failed_downloads`
+(TGT-219) and `failed_transcriptions` (TGT-237) were themselves already
+scoped by `bot_key` in an earlier round of this same multi-bot rollout.
+
+`D2TG::Store::record_message` defaults `bot_key` to
+`DEFAULT_BOT_KEY` (the empty-string sentinel) whenever the caller omits
+it. So a message originally received under a non-default bot, whose
+download or transcription failed and got correctly queued under that
+bot's own `bot_key`, would - once a later retry (manual `d2
+tg.retry-download`/`d2 tg.retry-transcription`, or the automatic
+TGT-221 `auto_retry_failed_downloads` poller loop) succeeded - have its
+restored history record silently written under the *default* bot's
+identity instead. Two concrete consequences: (1) `d2 tg.history --bot
+<token>`/`d2 tg.unread --bot <token>` for the bot that actually
+received the message would never show it - it only ever appears under
+the unscoped/default view; (2) since Telegram's `message_id` is its own
+per-bot counter (TGT-063), the retried write could `ON CONFLICT`
+silently overwrite an unrelated, legitimate message the default bot
+had genuinely recorded under the same `(chat_id, message_id)` pair.
+
+Fixed by passing `bot_key => $row->{bot_key}` into both `record_message`
+calls, exactly mirroring every other call site TGT-232 already
+threads it through. For the pre-existing single-bot case,
+`$row->{bot_key}` is already `''` (`DEFAULT_BOT_KEY`), so this is a
+strict no-op there - confirmed by the full suite staying green.
+
+New test `t/245-retry-record-message-bot-key.t`: two blocks, one per
+retry function, each queuing a row under a non-default `bot_key`
+(`'bot-B-token'`), retrying it against a real `D2TG::Store` (SQLite,
+not mocked) with a stubbed successful download/transcription, then
+asserting `$store->get_message($chat_id, $message_id, bot_key =>
+'bot-B-token')` finds the restored row while the default-`bot_key`
+lookup does not. Confirmed genuinely red against the pre-fix code (4/8
+subtests failed - both bot-B assertions in each block), confirmed
+green after the fix (8/8). Full suite re-run clean: 184 files, 1831
+tests. 100% statement+subroutine coverage confirmed on the touched
+module, `lib/D2TG/Download.pm`.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, consistent with this session's other attempts.
+Fell back to independent verification: a `git diff` review of the
+two-line change (each call site gains exactly one new `bot_key =>
+$row->{bot_key}` argument, nothing else touched), a `grep -rn
+bot_key lib/D2TG/Download.pm` confirming both call sites now use it and
+no other caller in this module needed the same fix, and the new
+red/green test directly exercising the real code paths (a genuine
+SQLite-backed `D2TG::Store`, not a mock) rather than a synthetic
+reproduction of the symptom.

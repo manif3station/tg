@@ -1,5 +1,17 @@
 # tg
 
+**Status: early implementation (v1.96).** BUGFIX (TGT-245, found via a
+scheduled JOB-003 hourly bug hunt): `D2TG::Download::retry_failed_download`
+and `retry_failed_transcription` both called `$store->record_message`
+without a `bot_key` argument, even though the queue row being retried
+already carried its own `bot_key` (TGT-219/TGT-237). TGT-232 migrated
+the `messages` table to a bot-scoped key and threaded `bot_key` through
+every `record_message` call site it enumerated, but missed these two
+retry functions - in a multi-bot config, a successfully retried message
+had its history recorded under the default bot's identity instead of
+the bot that actually received it. Both calls now pass
+`bot_key => $row->{bot_key}`.
+
 **Status: early implementation (v1.95).** BUGFIX (TGT-244, found via a
 scheduled JOB-003 hourly bug hunt): `D2TG::Download::auto_retry_failed_downloads`'
 own 60s auto-retry throttle (TGT-221) was silently bypassed for a

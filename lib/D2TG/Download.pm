@@ -166,9 +166,22 @@ sub retry_failed_download {
         # cli/unread.pl) must never contain the real local path - only
         # local_path (a separate, narrow-accessor-only column) does.
         my $summary = "$row->{media_kind}" . ( $row->{caption_note} // '' );
+        # TGT-245 (found via a scheduled JOB-003 hourly bug hunt):
+        # TGT-232 made the messages table bot_key-aware and threaded
+        # bot_key through every record_message call site it enumerated -
+        # this one was missed. $row->{bot_key} is already the exact
+        # value this queue row was recorded under (TGT-219); without it,
+        # record_message defaults to D2TG::Store::DEFAULT_BOT_KEY, so a
+        # retried message in a multi-bot config silently lands under the
+        # wrong bot's history instead of the one that actually received it.
         ($record_ok) = D2TG::Poller::store_write_safe(
             $row->{chat_id}, 'record_message',
-            sub { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary, local_path => $local_path ) }
+            sub {
+                $store->record_message(
+                    $row->{chat_id}, $row->{message_id}, $row->{sender}, $summary,
+                    local_path => $local_path, bot_key => $row->{bot_key},
+                );
+            }
         );
     }
 
@@ -280,9 +293,18 @@ sub retry_failed_transcription {
         return ( 0, $error );
     }
 
+    # TGT-245: same fast-follow gap as retry_failed_download's own
+    # record_message call above - $row->{bot_key} (TGT-237) must be
+    # threaded through, or the restored transcript lands under the
+    # default bot's history instead of the bot that actually received it.
     my ($record_ok) = D2TG::Poller::store_write_safe(
         $row->{chat_id}, 'record_message',
-        sub { $store->record_message( $row->{chat_id}, $row->{message_id}, $row->{sender}, $transcript ) }
+        sub {
+            $store->record_message(
+                $row->{chat_id}, $row->{message_id}, $row->{sender}, $transcript,
+                bot_key => $row->{bot_key},
+            );
+        }
     );
 
     if ($record_ok) {
@@ -429,7 +451,14 @@ On success, restores the message into C<$store>'s own history via
 C<record_message> when C<$row> carries a C<media_kind> (the same
 summary shape a first-time download success already builds - never the
 real C<$local_path>, passed instead as C<record_message>'s own
-C<local_path> argument, TGT-133), then removes the row via
+C<local_path> argument, TGT-133), passing C<< bot_key => $row->{bot_key} >>
+through unchanged (TGT-245, found via a scheduled JOB-003 hourly bug
+hunt: TGT-232 made C<messages> bot-scoped and threaded C<bot_key>
+through every C<record_message> call site it enumerated, but missed
+this one - C<$row>'s own C<bot_key>, already correct per TGT-219, was
+being silently discarded, so a retried message in a multi-bot config
+was recorded under the default bot's identity instead of the bot that
+actually received it), then removes the row via
 C<remove_failed_download> - in that order, so a
 crash between the two would at worst leave a harmless, already-restored
 row still in the queue rather than a message nowhere at all. On failure,
@@ -522,7 +551,10 @@ immediately afterward regardless of outcome. On success, restores the
 message into C<$store>'s own history via C<record_message> (the
 transcript itself as the summary - unlike C<retry_failed_download>,
 there is no real local path to hide, since a transcript is text, not a
-filesystem location) before removing the queue row via
+filesystem location), also passing C<< bot_key => $row->{bot_key} >>
+through (TGT-245 - the same missed-call-site fast-follow gap from
+TGT-232 that C<retry_failed_download> above had, fixed the same way)
+before removing the queue row via
 L<D2TG::Store/remove_failed_transcription> - both calls go through
 L<D2TG::Poller/store_write_safe>, matching C<retry_failed_download>'s
 own established non-fatal store-write pattern; a C<record_message>
