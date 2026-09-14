@@ -141,7 +141,7 @@ sub send_reply {
     }
 
     _store_write_safe( $chat_id, 'mark_read', sub {
-        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
+        $args{store}->mark_read( $chat_id, $args{reply_to_message_id}, bot_key => $args{bot_key} );
     } ) if $args{store} && defined $args{reply_to_message_id};
 
     return { text => $text_result, voice => $voice_result };
@@ -220,7 +220,7 @@ sub resend_voice {
     # actually succeeded (the round-5 finding above is exactly why this
     # now runs after, not before, the result-shape check).
     _store_write_safe( $chat_id, 'mark_read', sub {
-        $args{store}->mark_read( $chat_id, $args{reply_to_message_id} );
+        $args{store}->mark_read( $chat_id, $args{reply_to_message_id}, bot_key => $args{bot_key} );
     } ) if $args{store} && defined $args{reply_to_message_id};
 
     return { voice => $voice_result };

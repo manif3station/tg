@@ -72,6 +72,7 @@ sub _ensure_schema {
          )'
     );
 
+
     {
         local $self->{dbh}{PrintError} = 0;
         eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
@@ -88,6 +89,56 @@ sub _ensure_schema {
         eval { $self->{dbh}->do('ALTER TABLE messages ADD COLUMN local_path TEXT') };
     }
     die $@ if $@ && $@ !~ /duplicate column name/;
+
+    # TGT-232 (found via a scheduled JOB-004 improvement hunt): the
+    # messages table was the one remaining per-chat table never given
+    # the bot_key treatment TGT-098/219 already applied elsewhere -
+    # keyed only on (chat_id, message_id). Telegram's own message_id is
+    # a per-bot counter (TGT-063), so two different bots sharing a
+    # chat_id can legitimately produce colliding (chat_id, message_id)
+    # pairs, which record_message's own unscoped ON CONFLICT silently
+    # collapsed into one row. Same rename/create/copy/drop migration
+    # TGT-098/219 already established, run inside one transaction so a
+    # crash mid-migration can never orphan the old data - runs AFTER
+    # the read_at/local_path ALTER blocks above so an existing
+    # installation's own already-added columns are preserved in the
+    # copy (matching TGT-219's own precedent of copying local_path).
+    # Existing rows migrate to bot_key='' (the single-bot/unscoped
+    # sentinel).
+    {
+        my $cols = $self->{dbh}->selectall_arrayref( 'PRAGMA table_info(messages)', { Slice => {} } );
+        if ( !grep { $_->{name} eq 'bot_key' } @$cols ) {
+            $self->{dbh}->begin_work;
+            eval {
+                $self->{dbh}->do('ALTER TABLE messages RENAME TO messages_pre_tgt232');
+                $self->{dbh}->do(
+                    'CREATE TABLE messages (
+                         chat_id    INTEGER NOT NULL,
+                         bot_key    TEXT NOT NULL DEFAULT \'' . DEFAULT_BOT_KEY . '\',
+                         message_id INTEGER NOT NULL,
+                         sender     TEXT,
+                         summary    TEXT,
+                         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                         read_at    TEXT,
+                         local_path TEXT,
+                         PRIMARY KEY (chat_id, bot_key, message_id)
+                     )'
+                );
+                $self->{dbh}->do(
+                    'INSERT INTO messages (chat_id, bot_key, message_id, sender, summary, created_at, read_at, local_path)
+                     SELECT chat_id, \'' . DEFAULT_BOT_KEY . '\', message_id, sender, summary, created_at, read_at, local_path
+                     FROM messages_pre_tgt232'
+                );
+                $self->{dbh}->do('DROP TABLE messages_pre_tgt232');
+                $self->{dbh}->commit;
+            };
+            if ($@) {
+                my $error = $@;
+                eval { $self->{dbh}->rollback };
+                die $error;
+            }
+        }
+    }
 
     # TGT-104: a failed inbound photo/document download used to be
     # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
@@ -413,81 +464,95 @@ sub pending_chat_ids {
 
 sub record_message {
     my ( $self, $chat_id, $message_id, $sender, $summary, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     $self->{dbh}->do(
-        'INSERT INTO messages (chat_id, message_id, sender, summary, local_path) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, message_id) DO UPDATE SET sender = excluded.sender, summary = excluded.summary, local_path = COALESCE(excluded.local_path, messages.local_path)',
-        undef, $chat_id, $message_id, $sender, $summary, $args{local_path},
+        'INSERT INTO messages (chat_id, bot_key, message_id, sender, summary, local_path) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET sender = excluded.sender, summary = excluded.summary, local_path = COALESCE(excluded.local_path, messages.local_path)',
+        undef, $chat_id, $bot_key, $message_id, $sender, $summary, $args{local_path},
     );
 
     return;
 }
 
 sub get_message {
-    my ( $self, $chat_id, $message_id ) = @_;
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT sender, summary FROM messages WHERE chat_id = ? AND message_id = ?',
-        undef, $chat_id, $message_id,
+        'SELECT sender, summary FROM messages WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
     );
 
     return $row;
 }
 
 sub get_attachment_path {
-    my ( $self, $chat_id, $message_id ) = @_;
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT local_path FROM messages WHERE chat_id = ? AND message_id = ?',
-        undef, $chat_id, $message_id,
+        'SELECT local_path FROM messages WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
     );
 
     return $row ? $row->{local_path} : undef;
 }
 
 sub mark_read {
-    my ( $self, $chat_id, $message_id ) = @_;
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     $self->{dbh}->do(
-        'UPDATE messages SET read_at = CURRENT_TIMESTAMP WHERE chat_id = ? AND message_id = ?',
-        undef, $chat_id, $message_id,
+        'UPDATE messages SET read_at = CURRENT_TIMESTAMP WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
     );
 
     return;
 }
 
 sub is_read {
-    my ( $self, $chat_id, $message_id ) = @_;
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my ($read_at) = $self->{dbh}->selectrow_array(
-        'SELECT read_at FROM messages WHERE chat_id = ? AND message_id = ?',
-        undef, $chat_id, $message_id,
+        'SELECT read_at FROM messages WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
     );
 
     return defined $read_at ? 1 : 0;
 }
 
 sub unread_messages {
-    my ($self) = @_;
+    my ( $self, %args ) = @_;
 
-    my $rows = $self->{dbh}->selectall_arrayref(
-        'SELECT chat_id, message_id, sender, summary, created_at
-         FROM messages WHERE read_at IS NULL ORDER BY created_at, message_id',
-        { Slice => {} },
-    );
+    my $sql  = 'SELECT chat_id, message_id, sender, summary, created_at FROM messages WHERE read_at IS NULL';
+    my @bind;
+    if ( defined $args{bot_key} ) {
+        $sql .= ' AND bot_key = ?';
+        push @bind, $args{bot_key};
+    }
+    $sql .= ' ORDER BY created_at, message_id';
+
+    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
 
     return @$rows;
 }
 
 sub recent_messages {
-    my ( $self, $limit ) = @_;
+    my ( $self, $limit, %args ) = @_;
     $limit //= 10;
 
-    my $rows = $self->{dbh}->selectall_arrayref(
-        'SELECT chat_id, message_id, sender, summary, created_at
-         FROM messages ORDER BY created_at DESC, message_id DESC LIMIT ?',
-        { Slice => {} }, $limit,
-    );
+    my $sql = 'SELECT chat_id, message_id, sender, summary, created_at FROM messages';
+    my @bind;
+    if ( defined $args{bot_key} ) {
+        $sql .= ' WHERE bot_key = ?';
+        push @bind, $args{bot_key};
+    }
+    $sql .= ' ORDER BY created_at DESC, message_id DESC LIMIT ?';
+    push @bind, $limit;
+
+    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
 
     return @$rows;
 }
@@ -497,6 +562,11 @@ sub messages_in_range {
 
     my @where;
     my @bind;
+
+    if ( defined $args{bot_key} ) {
+        push @where, 'bot_key = ?';
+        push @bind,  $args{bot_key};
+    }
 
     # TGT-214 (found via a scheduled JOB-003 hourly bug hunt, live-
     # verified): a plain string comparison against the raw --since/
@@ -846,7 +916,7 @@ Persists C<$offset>, overwriting any previously saved value for that
 C<$bot_key> (see C<get_offset> above; omitting it is unchanged from
 before TGT-049).
 
-=head2 record_message($chat_id, $message_id, $sender, $summary, local_path => $optional_path)
+=head2 record_message($chat_id, $message_id, $sender, $summary, local_path => $optional_path, bot_key => $optional_bot_key)
 
 Records a short summary of a processed message (TGT-038) against its own
 C<chat_id>+C<message_id> - the message's own text for a text message, its
@@ -856,41 +926,50 @@ contain a real local filesystem path (TGT-133) - C<local_path> is stored
 in a separate column instead, reachable only via L</get_attachment_path>,
 so nothing that displays C<summary> (this module's own callers,
 C<cli/history.pl>, C<cli/unread.pl>) can ever leak it. Idempotent:
-recording the same C<chat_id>+C<message_id> again overwrites the
-previous C<sender>/C<summary>; omitting C<local_path> on a re-record
+recording the same C<chat_id>+C<bot_key>+C<message_id> again overwrites
+the previous C<sender>/C<summary>; omitting C<local_path> on a re-record
 preserves whichever one (if any) was already stored, rather than wiping
 it - only an explicitly-given C<local_path> ever replaces the existing
-one.
+one. C<bot_key> (TGT-232, found via a scheduled JOB-004 improvement
+hunt) defaults to the single-bot sentinel, matching every sibling
+per-chat table's own established pattern - Telegram's own C<message_id>
+is a per-bot counter (TGT-063), so two bots sharing a C<chat_id> can
+legitimately produce colliding C<(chat_id, message_id)> pairs; without
+this, one bot's row could silently overwrite another's.
 
-=head2 get_message($chat_id, $message_id)
+=head2 get_message($chat_id, $message_id, bot_key => $optional_bot_key)
 
 Returns C<{ sender => ..., summary => ... }> for a previously recorded
 message, or C<undef> if nothing was ever recorded for that
-C<chat_id>+C<message_id>. Deliberately never includes C<local_path> -
-see L</get_attachment_path>.
+C<chat_id>+C<bot_key>+C<message_id>. Deliberately never includes
+C<local_path> - see L</get_attachment_path>. C<bot_key> (TGT-232)
+defaults to the single-bot sentinel.
 
-=head2 get_attachment_path($chat_id, $message_id)
+=head2 get_attachment_path($chat_id, $message_id, bot_key => $optional_bot_key)
 
 TGT-133: the only accessor that ever returns a downloaded attachment's
 real local filesystem path - C<undef> if nothing was ever recorded, or
 if it was recorded without one (a text/voice message, or a photo/
 document recorded before this feature existed). Backs
 C<cli/attachment.pl> exclusively; no other code path in this skill
-should call it.
+should call it. C<bot_key> (TGT-232) defaults to the single-bot
+sentinel.
 
-=head2 mark_read($chat_id, $message_id)
+=head2 mark_read($chat_id, $message_id, bot_key => $optional_bot_key)
 
 Marks a previously recorded message read (TGT-046, stamps a
 C<read_at> timestamp). A no-op (no error) if no row exists yet for that
-C<chat_id>+C<message_id> - it simply updates zero rows.
+C<chat_id>+C<bot_key>+C<message_id> - it simply updates zero rows.
+C<bot_key> (TGT-232) defaults to the single-bot sentinel.
 
-=head2 is_read($chat_id, $message_id)
+=head2 is_read($chat_id, $message_id, bot_key => $optional_bot_key)
 
 Returns true if C<mark_read> has been called for that C<chat_id>+
-C<message_id>, false otherwise - including when no row was ever
-recorded for it at all (never dies on an unknown message).
+C<bot_key>+C<message_id>, false otherwise - including when no row was
+ever recorded for it at all (never dies on an unknown message).
+C<bot_key> (TGT-232) defaults to the single-bot sentinel.
 
-=head2 unread_messages
+=head2 unread_messages(bot_key => $optional_bot_key)
 
 Returns the list of all stored messages (TGT-047) not yet marked read
 (C<mark_read>), as a list of hashrefs C<{ chat_id, message_id, sender,
@@ -899,22 +978,29 @@ summary, created_at }>, ordered oldest first - ties on C<created_at>
 C<message_id> ascending (TGT-075, same reasoning C<recent_messages>
 already applies in the opposite direction), so a same-second burst
 never returns in SQLite's undefined tie-break order. Empty list if
-there are none - never dies on an empty store.
+there are none - never dies on an empty store. C<bot_key> (TGT-232) is
+optional - omitting it lists every bot's own entries (matching
+C<failed_downloads>'s own established convention), while passing one
+scopes to that bot only.
 
-=head2 recent_messages($limit = 10)
+=head2 recent_messages($limit = 10, bot_key => $optional_bot_key)
 
 Returns the C<$limit> most recently recorded messages (TGT-048), newest
 first, as a list of hashrefs C<{ chat_id, message_id, sender, summary,
 created_at }>. Returns fewer than C<$limit> (down to none) without
-error if the store has fewer rows than that.
+error if the store has fewer rows than that. C<bot_key> (TGT-232) is
+optional - omitting it considers every bot's own entries, matching
+C<unread_messages>'s own convention.
 
-=head2 messages_in_range(since => $iso8601, until => $iso8601)
+=head2 messages_in_range(since => $iso8601, until => $iso8601, bot_key => $optional_bot_key)
 
 Returns every stored message (TGT-048) with C<created_at> between
 C<since> and C<until> inclusive, oldest first - same C<message_id>
 same-second tiebreaker as L</unread_messages> (TGT-075). Either bound
 may be omitted (an open-ended range on that side); omitting both
-returns every stored message, oldest first.
+returns every stored message, oldest first. C<bot_key> (TGT-232) is
+optional - omitting it considers every bot's own entries, matching
+C<unread_messages>'s own convention.
 
 The comparison wraps both C<created_at> and the bound value in SQLite's
 own C<datetime()> function (TGT-214, found via a scheduled hourly bug

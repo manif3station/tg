@@ -1,5 +1,28 @@
 Revision history for the tg skill
 
+1.85  2026-09-14
+      - RELIABILITY FIX (TGT-232, found via a scheduled JOB-004
+        improvement hunt): D2TG::Store's messages table was the one
+        remaining per-chat table never given the bot_key scoping
+        TGT-098/219 already applied to allow_list/pending/
+        failed_downloads - keyed only on (chat_id, message_id).
+        Telegram's own message_id is a per-bot counter (TGT-063), so
+        two different bots sharing a chat_id could legitimately
+        produce colliding (chat_id, message_id) pairs, which
+        record_message's own unscoped ON CONFLICT silently collapsed
+        into one row. messages now carries a bot_key column (migrated
+        in place, preserving existing read_at/local_path data);
+        record_message, get_message, get_attachment_path, mark_read,
+        is_read, unread_messages, recent_messages, and
+        messages_in_range all accept an optional bot_key; every
+        D2TG::Poller/D2TG::Reply call site that already has a
+        bot_token/bot_key in scope now threads it through. Single-bot
+        installs are completely unaffected. cli/history.pl/unread.pl/
+        attachment.pl's own --bot flag support is deferred to a
+        fast-follow ticket (TGT-233), since none of them have any
+        bot_key awareness in argv today. New test:
+        t/232-messages-bot-key-scoping.t.
+
 1.84  2026-09-14
       - RELIABILITY FIX (TGT-231, found via a scheduled JOB-003 hourly
         bug hunt, live-reproduced): cli/reply.pl and cli/send.pl both

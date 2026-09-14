@@ -48,12 +48,20 @@ is( $call_site_count, 5, 'the new helper is called from exactly 5 places - one p
 # plain-text branch today, not voice/media/edited/fallback - a
 # pre-existing gap from TGT-178, out of this pure-refactor ticket's
 # own scope to close).
+# TGT-232 (found via a scheduled JOB-004 improvement hunt): each call
+# site now also passes bot_key => $bot_token (threading the poller's
+# own active bot token through to D2TG::Store's newly bot_key-scoped
+# messages table) - these regexes were widened to allow that trailing
+# argument without weakening what they actually check (the call site,
+# its arguments up to $safe_text/$safe_transcript/local_path, and its
+# surrounding branch-identifying context are all still asserted
+# exactly as before).
 my %expected_near = (
-    'edited text branch (has_text)' => qr/\$has_text \)\s*\{\s*\n\s*_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text\s*\)/,
-    'plain text branch'             => qr/NEW TG \[\$chat_id\] \$sender: \$safe_text.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text\s*\)/s,
-    'transcribed voice branch'      => qr/NEW TG VOICE \[\$chat_id\] \$sender: \$safe_transcript.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_transcript\s*\)/s,
-    'downloaded media branch (local_path)' => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*local_path\s*=>\s*\$local_path\s*\)/,
-    'fallback media branch'         => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note"\s*\)\s*;\s*\n\s*\}\s*\n\s*\}\s*\n\s*\}/,
+    'edited text branch (has_text)' => qr/\$has_text \)\s*\{\s*\n\s*_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
+    'plain text branch'             => qr/NEW TG \[\$chat_id\] \$sender: \$safe_text.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
+    'transcribed voice branch'      => qr/NEW TG VOICE \[\$chat_id\] \$sender: \$safe_transcript.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_transcript,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
+    'downloaded media branch (local_path)' => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*local_path\s*=>\s*\$local_path,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
+    'fallback media branch'         => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*bot_key\s*=>\s*\$bot_token\s*\)\s*;\s*\n\s*\}\s*\n\s*\}\s*\n\s*\}/,
 );
 
 for my $label ( sort keys %expected_near ) {

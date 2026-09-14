@@ -3757,3 +3757,85 @@ fix is a direct, minimal copy of `cli/approve.pl`/`cli/retry-
 download.pl`'s own already-working, already-tested pattern applied to
 two more call sites of the identical function - not a novel
 implementation requiring independent design review.
+
+## TGT-232: D2TG::Store's messages table was never bot-scoped like every other table
+
+Found via a scheduled JOB-004 improvement hunt. Every other
+`D2TG::Store` table that identifies a conversation participant was
+migrated to a composite `(chat_id, bot_key)` key during the TGT-098
+multi-bot rollout and its follow-ups: `allow_list`/`pending` both carry
+`bot_key` in their `PRIMARY KEY` (TGT-098), `pending_chat_ids` was
+updated to filter by it (TGT-215), `failed_downloads` was retrofitted
+with it (TGT-219/225), and `sent_replies`/`text_only_replies`/
+`is_recent_duplicate_reply` all take a `bot_key` argument. The
+`messages` table's own `CREATE TABLE` (`lib/D2TG/Store.pm`) was never
+touched by that migration - `record_message`, `get_message`,
+`get_attachment_path`, `mark_read`, `is_read`, `unread_messages`,
+`recent_messages`, and `messages_in_range` all keyed or filtered purely
+on `chat_id`/`message_id`, with no `bot_key` column or parameter
+anywhere in that call cluster. TGT-063 already documented that
+`message_id` is Telegram's own per-bot counter - precisely what makes
+an unscoped `(chat_id, message_id)` key collision-prone across two bots
+sharing a `chat_id`. `record_message`'s own `INSERT ... ON CONFLICT
+(chat_id, message_id) DO UPDATE` would silently overwrite one bot's
+stored `sender`/`summary`/`local_path` with another bot's row if their
+independent per-bot `message_id` counters ever collided for the same
+`chat_id`.
+
+Fixed by the same rename/create/copy/drop migration TGT-098/219 already
+established, run inside one transaction so a crash mid-migration can
+never orphan the old data - placed AFTER the existing `read_at`/
+`local_path` `ALTER TABLE ADD COLUMN` blocks so an existing
+installation's own already-added columns are preserved in the copy
+(the initial draft of this migration missed this ordering and would
+have silently dropped `read_at`/`local_path` data on any real upgrade -
+caught and fixed before implementation, not after). Existing rows
+migrate to `bot_key=''` (the single-bot/unscoped sentinel). All 8
+read/write subs now accept an optional `bot_key` (defaulting to the
+sentinel for the 5 single-row lookups/writes; the 3 listing functions -
+`unread_messages`/`recent_messages`/`messages_in_range` - filter only
+when a `bot_key` is explicitly given, matching `failed_downloads`'s own
+established convention of listing every bot's own entries when
+unscoped).
+
+Every call site with a bot token already in scope was updated to pass
+it through: `D2TG::Poller::run_once`'s 5 `_record_message_and_track_
+offset` sites (via a new trailing `bot_key => $bot_token` argument),
+its 2 `get_message` sites (the redelivery-dedup check and
+`_stored_summary`, the latter requiring `$bot_token` to be threaded
+through 2 additional helper signatures - `_reply_context_suffix` and
+`_stored_summary` itself), and `D2TG::Reply::send_reply`/`resend_voice`'s
+2 `mark_read` sites (`$args{bot_key}` was already available at both).
+
+**Scope decision, made during implementation (not before)**:
+`cli/history.pl`, `cli/unread.pl`, and `cli/attachment.pl` have no
+`--bot`/`bot_key` awareness in their own argv parsing at all today -
+giving them the ability to actually exercise this new scoping would
+mean adding a new CLI flag to each (parsing + tests + docs), a separate
+additive feature rather than the core data-integrity fix this ticket
+exists to deliver. Narrowed to the schema + all 8 subs + every call
+site that ALREADY has a bot token in scope; filed **TGT-233** as an
+immediate fast-follow for the 3 scripts' own `--bot` flag additions,
+per this project's own file-ticket-before-resuming-work rule, since
+that is genuinely new, distinct work discovered mid-ticket.
+
+New test `t/232-messages-bot-key-scoping.t`: confirmed genuinely red
+against the pre-fix code (5/16 subtests failed - two bots' rows
+collided/overwrote each other), confirmed green after the fix (16/16).
+The full suite caught one real regression during implementation:
+`t/181-record-message-offset-tracking-dedup.t`'s own source-text regex
+checks asserted the exact old call-site argument list with no
+`bot_key` argument - a legitimate test update (widening the regex to
+allow the new trailing argument, not weakening what it actually
+checks), not a sign of a broken fix. Full suite re-confirmed clean at
+1661/1661 after that fix. 100% statement+subroutine coverage confirmed
+on `lib/D2TG/Store.pm`.
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: the
+migration follows TGT-098/219's own already-proven rename/create/copy/
+drop pattern exactly, and the full existing test suite (which exercises
+every touched function extensively in the single-bot/unscoped case)
+passing unmodified is strong evidence the backward-compatible default
+path genuinely works as before.

@@ -1,6 +1,19 @@
 # tg
 
-**Status: early implementation (v1.84).** RELIABILITY FIX (TGT-231,
+**Status: early implementation (v1.85).** RELIABILITY FIX (TGT-232,
+found via a scheduled JOB-004 improvement hunt): `D2TG::Store`'s
+`messages` table was the one remaining per-chat table never given the
+`bot_key` scoping TGT-098/219 already applied elsewhere - keyed only on
+`(chat_id, message_id)`. Telegram's own `message_id` is a per-bot
+counter, so two different bots sharing a `chat_id` could legitimately
+collide, silently overwriting one bot's stored message with another's.
+`messages` now carries a `bot_key` column; every read/write function
+and every call site that already has a bot token in scope now threads
+it through. Single-bot installs are unaffected. CLI `--bot` flag
+support for `history`/`unread`/`attachment` is deferred to a
+fast-follow ticket.
+
+RELIABILITY FIX (TGT-231,
 found via a scheduled JOB-003 hourly bug hunt, live-reproduced):
 `cli/reply.pl` and `cli/send.pl` both called
 `D2TG::Reply::extract_bot_flag(@ARGV)` directly with no `eval` wrapper

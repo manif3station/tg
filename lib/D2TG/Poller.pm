@@ -248,7 +248,7 @@ sub run_once {
             # way, just not (yet) reflected in d2 tg.history when it's
             # a caption/media change.
             if ( $store && defined $message_id && $has_text ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text );
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
             }
 
             # TGT-178 KNOWN GAP (Codex review finding): this branch
@@ -320,7 +320,7 @@ sub run_once {
             }
         }
 
-        my $reply_ctx  = _reply_context_suffix( $message, $store, $chat_id );
+        my $reply_ctx  = _reply_context_suffix( $message, $store, $chat_id, $bot_token );
         my $message_id = $message->{message_id};
         my $msg_note   = defined $message_id ? " (msg #$message_id)" : '';
 
@@ -338,7 +338,7 @@ sub run_once {
         # way, matching this file's established degrade-not-crash
         # philosophy (TGT-165/166/167).
         if ( $store && defined $message_id ) {
-            my $already_recorded = eval { $store->get_message( $chat_id, $message_id ) };
+            my $already_recorded = eval { $store->get_message( $chat_id, $message_id, bot_key => $bot_token ) };
             next if !$@ && $already_recorded;
         }
 
@@ -358,7 +358,7 @@ sub run_once {
             print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
             if ( $store && defined $message_id ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text );
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
             }
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -382,7 +382,7 @@ sub run_once {
                 print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
                 if ( $store && defined $message_id ) {
-                    _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript );
+                    _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
                 }
             }
         }
@@ -405,7 +405,7 @@ sub run_once {
                     _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
                     if ( $store && defined $message_id ) {
-                        _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path );
+                        _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path, bot_key => $bot_token );
                     }
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
@@ -501,7 +501,7 @@ sub run_once {
             # d2 tg.history/d2 tg.unread afterward even though it was
             # printed to stdout in real time.
             if ( $store && defined $message_id ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note" );
+                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", bot_key => $bot_token );
             }
         }
     }
@@ -727,7 +727,7 @@ sub _display_name {
 }
 
 sub _reply_context_suffix {
-    my ( $message, $store, $chat_id ) = @_;
+    my ( $message, $store, $chat_id, $bot_token ) = @_;
 
     my $original = $message->{reply_to_message};
     return '' unless $original;
@@ -742,7 +742,7 @@ sub _reply_context_suffix {
     my $original_message_id = $original->{message_id};
     my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
 
-    my $what = _stored_summary( $store, $chat_id, $original_message_id );
+    my $what = _stored_summary( $store, $chat_id, $original_message_id, $bot_token );
 
     unless ( defined $what ) {
         my $original_text = $original->{text};
@@ -760,11 +760,11 @@ sub _reply_context_suffix {
 }
 
 sub _stored_summary {
-    my ( $store, $chat_id, $message_id ) = @_;
+    my ( $store, $chat_id, $message_id, $bot_token ) = @_;
 
     return undef unless $store && defined $chat_id && defined $message_id;
 
-    my $stored = $store->get_message( $chat_id, $message_id );
+    my $stored = $store->get_message( $chat_id, $message_id, bot_key => $bot_token );
 
     return $stored ? $stored->{summary} : undef;
 }
