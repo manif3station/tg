@@ -3524,3 +3524,63 @@ exercises the actual production parsing functions (`D2TG::Reply::
 extract_bot_flag`/`parse_cli_args`), not a reimplementation or mock of
 them - a passing assertion here is definitionally equivalent to the
 real `cli/reply.pl` behaving correctly on this exact input.
+
+## TGT-228: README.md's rolling changelog silently lost 5 tickets' write-ups
+
+Found via a scheduled JOB-005 doc-accuracy hunt. `README.md`'s
+top-of-file rolling changelog convention - each shipped ticket adds its
+own paragraph, the newest bolded as `**Status:**`, older ones retained
+below as plain paragraphs - is what every prior ticket in this session
+followed correctly (visible in the intact TGT-215→216→217→218 sequence
+still readable today). It broke for 5 consecutive commits in a row:
+TGT-220's own documentation-column commit (`e47805b`), and again for
+TGT-222 (`9fc52c7`), TGT-225 (`bb6701b`), TGT-226 (`5a9e134`), and
+TGT-227 (`73044cd`) - each one's `README.md` diff REPLACED the
+immediately-preceding ticket's whole paragraph instead of prepending a
+new one above it and keeping the old one as body text below.
+
+Net effect, confirmed by direct grep before this fix: none of
+`_bot_flag`, `RETRY WITH`, `HTTP::Tiny`, or `record_failed_download`
+appeared anywhere in `README.md` - a reader auditing this file alone
+would have learned nothing about the bot_key scoping fix in
+`failed_downloads` (TGT-219), the masked `--bot` flag added to the
+`NEW TG MEDIA FAILED` `RETRY WITH` hint (TGT-220), the `HTTP::Tiny` CVE
+investigation (TGT-222), the `record_failed_download` id-lookup
+bot_key-scoping fix (TGT-225), or the shared `_bot_flag` helper
+extraction (TGT-226). All 5 fixes were and remain correctly documented
+in `Changes` (versions 1.75-1.79) and in this file's own
+`## TGT-219/220/222/225/226` sections the whole time - this was pure
+prose loss in one file, never a functional/behavioral bug, and no
+code/test was ever affected. It also meant each of those 5 tickets' own
+`ticket.documentation` column gate was marked done despite the net
+result deleting the previous ticket's entry - the required action
+itself (add real prose, not just a version bump) was genuinely
+satisfied each time; the paragraphs were simply overwritten by the
+*next* ticket's own edit, a failure mode the gate has no way to detect
+after the fact.
+
+Fixed by restoring all 5 missing paragraphs into `README.md`, in their
+correct chronological position between the `TGT-227` and `TGT-218`
+paragraphs, using `Changes`/this file's own already-accurate write-ups
+as source material - no re-investigation of the 5 original fixes was
+needed or performed. Added a new structural regression test,
+`t/228-readme-ticket-history-not-lost.t`, asserting one distinguishing,
+code-accurate term per ticket (not just its bare ticket number, which
+could appear incidentally) still appears somewhere in `README.md` -
+confirmed genuinely red against the pre-fix file (5/5 subtests failed),
+confirmed green after restoration (5/5). This closes the specific gap
+the incident exposed: a future documentation-column commit that
+accidentally replaces instead of prepends will now fail the suite
+instead of silently recurring a 6th time.
+
+No `lib/`/`cli/` code was touched by this ticket - pure documentation
+restoration plus one new test file. Full suite re-run clean.
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: a
+direct `grep` for each of the 4 distinguishing terms in the restored
+`README.md` confirms all are present, and a manual read of the restored
+paragraph sequence (TGT-227 → 226 → 225 → 222 → 220 → 219 → 218)
+confirms correct newest-to-oldest chronological order with no content
+altered from `Changes`'s own accurate wording.

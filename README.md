@@ -1,6 +1,18 @@
 # tg
 
-**Status: early implementation (v1.80).** SECURITY FIX (TGT-227, found
+**Status: early implementation (v1.81).** DOC FIX (TGT-228, found via
+a scheduled JOB-005 doc-accuracy hunt): this file's own top-of-file
+rolling changelog broke for 5 consecutive commits - TGT-220/222/225/
+226/227's own documentation-column edits each REPLACED the
+immediately-preceding ticket's whole paragraph instead of prepending
+above it, silently erasing TGT-219/220/222/225/226's own fix write-ups
+from this file entirely (Changes and docs/POLICIES.md still had them
+correctly the whole time - pure prose loss here, no code/behavior
+impact). Restored all 5 paragraphs below; a new structural regression
+test (t/228-readme-ticket-history-not-lost.t) now catches a future
+replace-instead-of-prepend accident mechanically.
+
+SECURITY FIX (TGT-227, found
 via a scheduled JOB-003 hourly bug hunt): the poller's own `REPLY WITH`
 recovery-command template printed `--bot <token>` AFTER `chat_id` - a
 position `cli/reply.pl` never actually parses. A `--bot` flag there
@@ -10,6 +22,53 @@ token in place, as this module's own docs instruct, leaked the real
 credential into the sent message. Fixed by printing `--bot` BEFORE
 `chat_id`, matching `cli/reply.pl`'s own already-working leading-position
 parsing convention.
+
+REFACTOR (TGT-226, found via a scheduled JOB-004 improvement hunt): the
+masked `--bot <token>` flag fragment printed on both the `REPLY WITH`
+and `RETRY WITH` recovery templates was built via an identical
+duplicated ternary at two call sites in `D2TG::Poller`. Not a bug -
+extracted into a shared `_bot_flag($bot_token)` helper, matching this
+project's own established extract-once-duplicated precedent. No
+behavior change.
+
+RELIABILITY FIX (TGT-225, found via a scheduled JOB-003 hourly bug
+hunt): `D2TG::Store::record_failed_download`'s own id-lookup `SELECT`
+was never updated for TGT-219's own bot_key-scoped `UNIQUE` constraint
+- two rows sharing the same `chat_id`/`message_id` but different
+`bot_key` could make it return the wrong row's id. Fixed by scoping the
+`SELECT` by `bot_key` too, matching the `INSERT...ON CONFLICT` clause a
+few lines above it.
+
+SECURITY (TGT-222, found via TGT-220's own vulnerability-scan gate):
+`cpan-audit` flags 2 CVEs against `HTTP::Tiny`. Investigated and
+confirmed not exploitable through this codebase's own code - every
+HTTP call goes through `LWP::UserAgent` instead; `HTTP::Tiny` is a core
+Perl module never directly invoked anywhere in `lib/D2TG`. Documented
+as an accepted, non-applicable finding, with a new structural
+regression test guarding against a future accidental `HTTP::Tiny` call
+reopening the question.
+
+RELIABILITY FIX (TGT-220, found via a scheduled JOB-003 hourly bug
+hunt): `D2TG::Poller::run_once`'s own `NEW TG MEDIA FAILED` stdout line
+printed a hard-coded `RETRY WITH: d2 tg.retry-download --all` hint with
+no `--bot` flag, even though the bot token was already in scope at that
+print site. In a multi-bot config, following that command literally for
+a non-default-bot failure retried nothing. The line now appends a
+masked `--bot <token>` flag whenever a bot token is in play, matching
+the poller's own `REPLY WITH:` template convention. Single-bot mode is
+unchanged.
+
+RELIABILITY FIX (TGT-219, found via a scheduled JOB-004 improvement
+hunt): `D2TG::Store`'s `failed_downloads` queue was the sole per-chat
+table never given the `bot_key` scoping TGT-098 already applied to
+`allow_list`/`pending` - the same `message_id` failing under two
+different bots in a multi-bot config collapsed into one row, and
+Telegram's own `file_id` values are bot-token-scoped, so a retry with
+the wrong bot's token could never succeed. `failed_downloads` now
+carries a `bot_key` column (migrated in place); `D2TG::Poller::
+run_once` threads its own bot token through; `cli/retry-download.pl`
+gains a `--bot <token>` flag (matching `cli/approve.pl`/`cli/reply.pl`'s
+own pattern). Single-bot mode is completely unaffected.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`

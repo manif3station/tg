@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+1.81  2026-09-14
+      - DOC FIX (TGT-228, found via a scheduled JOB-005 doc-accuracy
+        hunt): README.md's top-of-file rolling changelog (each shipped
+        ticket adds its own paragraph, newest bolded as **Status:**,
+        older ones retained below as plain paragraphs) broke for 5
+        consecutive commits - TGT-220/222/225/226/227's own
+        documentation-column edits each REPLACED the immediately-
+        preceding ticket's whole paragraph instead of prepending above
+        it, silently erasing TGT-219/220/222/225/226's own fix
+        write-ups from README.md entirely (though Changes and
+        docs/POLICIES.md still had them correctly the whole time - no
+        code/test/behavior was ever affected, this was pure prose loss
+        in one file). Restored all 5 missing paragraphs in their
+        correct chronological position. New structural regression test
+        (t/228-readme-ticket-history-not-lost.t) asserts a
+        distinguishing term from each of those 5 tickets' own fixes
+        still appears in README.md, to catch a future
+        replace-instead-of-prepend accident mechanically instead of
+        relying on a doc-accuracy hunt to notice it eventually.
+
 1.80  2026-09-14
       - SECURITY FIX (TGT-227, found via a scheduled JOB-003 hourly
         bug hunt): the poller's own REPLY WITH recovery-command

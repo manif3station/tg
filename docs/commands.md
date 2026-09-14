@@ -987,3 +987,17 @@ this codebase. Documented as an accepted, non-applicable finding in
 `docs/POLICIES.md`'s own TGT-222 section; `t/222-no-http-tiny-usage.t`
 guards against a future change accidentally introducing a direct
 `HTTP::Tiny` call.
+
+### A shipped ticket's fix write-up is missing from README.md
+
+Should not happen (TGT-228, found via a scheduled JOB-005 doc-accuracy
+hunt): `README.md`'s own top-of-file rolling changelog convention
+(each shipped ticket adds its own paragraph, newest bolded as
+`**Status:**`, older ones retained below) was silently broken for 5
+consecutive commits when each one's documentation-column edit REPLACED
+the prior ticket's paragraph instead of prepending above it - always
+edit `README.md` by prepending a NEW paragraph above the current
+`**Status:**` line and demoting the old `**Status:**` paragraph to a
+plain paragraph, never by replacing the existing top paragraph's own
+text. `t/228-readme-ticket-history-not-lost.t` now catches a future
+recurrence of this specific mistake mechanically.
