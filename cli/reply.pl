@@ -26,7 +26,20 @@ while (@ARGV) {
     }
     elsif ( $ARGV[0] eq '--bot' ) {
         if ( @ARGV >= 2 ) {
-            ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag(@ARGV);
+
+            # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
+            # reproduced live): extract_bot_flag delegates to
+            # D2TG::Config::shift_flag_value, which dies when --bot is
+            # immediately followed by another flag - previously
+            # uncaught here, crashing with Perl's raw exit 255 instead
+            # of this project's own clean-refusal convention, matching
+            # cli/approve.pl/cli/retry-download.pl's own existing
+            # eval-wrap of this identical call.
+            ( $bot_token, @ARGV ) = eval { D2TG::Reply::extract_bot_flag(@ARGV) };
+            if ($@) {
+                print STDERR $@;
+                exit 1;
+            }
         }
         else {
             # A bare trailing --bot with no value can't be consumed by

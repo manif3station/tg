@@ -3693,3 +3693,67 @@ the full suite (which exercises every one of these 11 scripts via
 subprocess across dozens of existing test files) passed unmodified -
 proof the refactor is genuinely behavior-preserving, not just
 syntactically valid.
+
+## TGT-231: cli/reply.pl and cli/send.pl crashed with a raw uncaught die on a malformed --bot flag
+
+Found via a scheduled JOB-003 hourly bug hunt - live-reproduced, not
+merely read. `cli/reply.pl`'s and `cli/send.pl`'s own argv-parsing
+`while`-loop each called `D2TG::Reply::extract_bot_flag(@ARGV)`
+directly, with no `eval` wrapper, whenever `--bot` is immediately
+followed by another flag. `extract_bot_flag` delegates to
+`D2TG::Config::shift_flag_value`, which `die`s ("--bot requires a
+value\n") on exactly that shape (TGT-074's own validation). In both
+scripts that die propagated completely uncaught, since it happened
+inside the same unwrapped `while`-loop that owns `--bot` handling, with
+no surrounding `eval` anywhere between that call and Perl's own
+top-level default die handler.
+
+Reproduced live in the `perl-test` container:
+```
+$ perl cli/reply.pl --bot --caption hi 123 hello
+--bot requires a value
+$ echo $?
+255
+$ perl cli/send.pl --bot --caption hi 123 /etc/hostname
+--bot requires a value
+$ echo $?
+255
+```
+`cli/approve.pl` (line 19) and `cli/retry-download.pl` (line 26) already
+`eval`-wrap this exact same `extract_bot_flag(@ARGV)` call and print a
+clean, non-255 refusal - `reply.pl`/`send.pl` were the only two call
+sites in the `--bot` family that didn't. `t/62-bot-token-requires-
+value.t` only asserted the library-level die message/text from
+`extract_bot_flag`/`bot_groups` directly; `t/59-db-flag-requires-
+value.t`'s own `cli/reply.pl` case only covered `--db --bot ...` (bare
+`--db` swallowing `--bot`, a different, already-correctly-caught code
+path) - neither covered `--bot --db ...`/`--bot --caption ...`
+(`extract_bot_flag`'s own die), the gap this ticket closes. Not a
+path-leak: `shift_flag_value`'s die string already ends in `\n`, so
+Perl's default handler never appends its usual "at FILE line N" suffix
+- the defect was the non-standard exit code (255) and missing
+Usage-style STDERR framing, not credential/path disclosure.
+
+Fixed by `eval`-wrapping the `extract_bot_flag(@ARGV)` call in both
+scripts' own `--bot` branch, printing `$@` to STDERR and exiting 1 on
+failure - matching `cli/approve.pl`/`cli/retry-download.pl`'s existing
+pattern exactly, and matching `cli/reply.pl`'s own `--db` branch
+(exit 1) for internal consistency within the same file. No change to
+`extract_bot_flag` itself or its validation rules.
+
+New test `t/231-bot-flag-malformed-no-raw-die.t`: confirmed genuinely
+red against the pre-fix code (4/7 subtests failed - both scripts
+exited 255), confirmed green after the fix (7/7), with
+`t/59-db-flag-requires-value.t`, `t/62-bot-token-requires-value.t`,
+`t/34-reply-arg-parsing-trailing-flag.t`, `t/57-reply-bare-bot-flag-
+no-hang.t`, and `t/79-outbound-media-send.t` re-run clean alongside it
+(74/74 total) - proving every other malformed-flag/happy-path case on
+both scripts is unaffected.
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: the
+fix is a direct, minimal copy of `cli/approve.pl`/`cli/retry-
+download.pl`'s own already-working, already-tested pattern applied to
+two more call sites of the identical function - not a novel
+implementation requiring independent design review.

@@ -390,7 +390,13 @@ sent to Telegram verbatim, leaking the real token into the message if
 an operator substituted it in place per this module's own instructions,
 while the real send silently used the wrong bot). Always copy the
 printed template's own argument order exactly rather than reconstructing
-it by hand.
+it by hand. A `--bot` flag immediately followed by another flag (e.g.
+`--bot --db somealias ...`) is refused cleanly with a `--bot requires a
+value` message and exit 1 (TGT-231, found via a scheduled JOB-003
+hourly bug hunt, live-reproduced) - previously this crashed with Perl's
+raw, uncaught exit 255, since the underlying validation's own die was
+never caught here, unlike `d2 tg.approve`/`d2 tg.retry-download`'s
+already-correct handling of the identical case.
 
 `--voice-only` (TGT-109, a live-experienced incident) skips
 `send_message` entirely and resends only a synthesized voice note for
@@ -524,7 +530,12 @@ Whether the file sends as a photo (renders inline in Telegram's UI) or a
 document (downloadable) is decided by its extension - `.jpg`/`.jpeg`/
 `.png`/`.gif`/`.webp` (case-insensitive) send as a photo, everything
 else as a document. No content sniffing - Telegram accepts any file type
-via `sendDocument` regardless of what it actually contains.
+via `sendDocument` regardless of what it actually contains. A `--bot`
+flag immediately followed by another flag (e.g. `--bot --caption ...`)
+is refused cleanly with a `--bot requires a value` message and exit 1
+(TGT-231, found via a scheduled JOB-003 hourly bug hunt, live-
+reproduced) - previously this crashed with Perl's raw, uncaught exit
+255, the same gap `d2 tg.reply` had.
 
 `--db`/`-d` is recognized anywhere in the argument list (TGT-124, found
 via a scheduled improvement-hunt) - it used to be hand-parsed in a loop

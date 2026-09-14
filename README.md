@@ -1,6 +1,17 @@
 # tg
 
-**Status: early implementation (v1.83).** REFACTOR (TGT-230, found via
+**Status: early implementation (v1.84).** RELIABILITY FIX (TGT-231,
+found via a scheduled JOB-003 hourly bug hunt, live-reproduced):
+`cli/reply.pl` and `cli/send.pl` both called
+`D2TG::Reply::extract_bot_flag(@ARGV)` directly with no `eval` wrapper
+- a `--bot` flag immediately followed by another flag made its own
+validation `die`, and that die propagated completely uncaught,
+crashing both scripts with Perl's raw exit 255 instead of a clean
+refusal. `cli/approve.pl`/`cli/retry-download.pl` already `eval`-wrapped
+this identical call. Both scripts now do too, exiting 1 with a clean
+STDERR message.
+
+REFACTOR (TGT-230, found via
 a scheduled JOB-004 improvement hunt): `D2TG::Config::
 require_existing_base_dir`'s own eval/print-STDERR/exit(1) wrapper was
 duplicated byte-for-byte across all 11 `cli/*.pl` scripts that call it
