@@ -3374,3 +3374,50 @@ Fixed by narrowing the guard to actual code usage (a `use`/`require`
 statement or a `->` method call), which a bare name-mention in prose
 can never match. Full suite re-confirmed clean at 1608/1608 after the
 fix.
+
+## TGT-225: record_failed_download's own id-lookup SELECT was not bot-scoped
+
+Found via a scheduled JOB-003 hourly bug hunt. TGT-219 widened
+`failed_downloads`'s own `UNIQUE` constraint and its own
+`INSERT...ON CONFLICT` clause to `(chat_id, bot_key, message_id)`, but
+`record_failed_download`'s own id-lookup `SELECT` a few lines below it
+was never given the matching `bot_key` filter - it still read `SELECT
+id FROM failed_downloads WHERE chat_id = ? AND message_id = ?`.
+
+Reproduced live in the `perl-test` container against a scratch SQLite
+db (never against the production board): calling
+`record_failed_download(111, 55, 'fileA', bot_key => 'tokenA')` then
+`record_failed_download(111, 55, 'fileB', bot_key => 'tokenB')`
+returned the same id (`1`) for both calls, even though two distinct
+rows genuinely existed. Reachable in real multi-bot configs since
+Telegram's own `message_id` is per-chat, not per-bot - two bots
+polling the same shared group chat can both fail to download media for
+the same real chat message, hitting exactly this collision.
+`failed_downloads()`'s own listing query is correctly scoped and
+unaffected - only the `record_failed_download` return-id path was
+wrong, which is why `t/219-failed-downloads-bot-scoping.t`'s existing
+assertions (which never check `record_failed_download`'s own return
+value in the dual-bot case) didn't catch it. Currently latent in
+production since `D2TG::Poller::run_once` calls it in void context,
+but the return id is a documented public contract `t/83` and `t/196`
+already assert on directly in single-bot scenarios.
+
+Fixed by adding `AND bot_key = ?` to the `SELECT`, binding `$bot_key`
+alongside the existing `$chat_id`/`$message_id` binds - a one-line
+change matching the already-correct `INSERT...ON CONFLICT` clause a
+few lines above it in the same function.
+
+New test `t/225-record-failed-download-return-id-bot-scoped.t`:
+confirmed genuinely red against the pre-fix code (2/4 subtests failed
+- both bot_keys returned id `1`), confirmed green after the fix (4/4),
+with `t/219-failed-downloads-bot-scoping.t`, `t/83-failed-download-
+queue.t`, and `t/196-retry-failed-download-skips-redownload.t` re-run
+clean alongside it (82/82 total).
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: the
+fix is a one-line SQL predicate addition, directly comparable
+side-by-side against the already-correct `INSERT...ON CONFLICT` clause
+4 lines above it in the same function - a small, self-evidently correct
+diff, not a claim requiring external judgment.

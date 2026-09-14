@@ -1,13 +1,12 @@
 # tg
 
-**Status: early implementation (v1.77).** SECURITY (TGT-222, found via
-TGT-220's own vulnerability-scan gate): `cpan-audit` flags 2 CVEs
-against `HTTP::Tiny`. Investigated and confirmed not exploitable
-through this codebase's own code - every HTTP call goes through
-`LWP::UserAgent` instead; `HTTP::Tiny` is a core Perl module never
-directly invoked anywhere in `lib/D2TG`. Documented as an accepted,
-non-applicable finding, with a new structural regression test guarding
-against a future accidental `HTTP::Tiny` call reopening the question.
+**Status: early implementation (v1.78).** RELIABILITY FIX (TGT-225,
+found via a scheduled JOB-003 hourly bug hunt): `D2TG::Store::
+record_failed_download`'s own id-lookup `SELECT` was never updated for
+TGT-219's own bot_key-scoped `UNIQUE` constraint - two rows sharing the
+same `chat_id`/`message_id` but different `bot_key` could make it
+return the wrong row's id. Fixed by scoping the `SELECT` by `bot_key`
+too, matching the `INSERT...ON CONFLICT` clause a few lines above it.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`

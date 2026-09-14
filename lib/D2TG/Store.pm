@@ -558,9 +558,15 @@ sub record_failed_download {
         undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
     );
 
+    # TGT-225 (found via a scheduled JOB-003 hourly bug hunt): this
+    # id-lookup was never updated for TGT-219's own bot_key-scoped
+    # UNIQUE constraint above - with two rows sharing (chat_id,
+    # message_id) but different bot_key, an unscoped SELECT could
+    # return either row's id at random (in practice, SQLite's own
+    # insertion order), not necessarily the one just written here.
     my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT id FROM failed_downloads WHERE chat_id = ? AND message_id = ?',
-        undef, $chat_id, $message_id,
+        'SELECT id FROM failed_downloads WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        undef, $chat_id, $bot_key, $message_id,
     );
 
     return $row->{id};
@@ -944,7 +950,12 @@ Codex review finding); the same C<message_id> failing under two
 DIFFERENT bots in a multi-bot config now queues two independent rows
 instead of colliding into one - Telegram's own C<file_id> values are
 bot-token-scoped, so retrying under the wrong bot's token could never
-have succeeded anyway. Returns the row's id (new or existing). The
+have succeeded anyway. Returns the row's id (new or existing) - the
+id-lookup itself is scoped by C<(chat_id, bot_key, message_id)> too
+(TGT-225, found via a scheduled JOB-003 hourly bug hunt; previously
+scoped only by C<(chat_id, message_id)>, so two rows sharing that pair
+under different C<bot_key>s could make it return the wrong row's id).
+The
 C<UPDATE SET> clause deliberately does not assign C<local_path> (TGT-196)
 - a redelivery of the same failed-download event must not clobber a
 C<local_path> already persisted by L</mark_failed_download_downloaded>

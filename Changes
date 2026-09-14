@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.78  2026-09-14
+      - RELIABILITY FIX (TGT-225, found via a scheduled JOB-003 hourly
+        bug hunt): D2TG::Store::record_failed_download's own id-lookup
+        SELECT was never updated for TGT-219's bot_key-scoped UNIQUE
+        constraint - it still filtered only by (chat_id, message_id),
+        not the full (chat_id, bot_key, message_id) key the INSERT...
+        ON CONFLICT clause a few lines above it already uses. With two
+        rows sharing the same chat_id and message_id but different
+        bot_key (reachable since Telegram's own message_id is
+        per-chat, not per-bot - two bots polling the same shared group
+        chat can both fail to download media for the same real
+        message), the SELECT could return the wrong row's id. Latent
+        in production today (D2TG::Poller::run_once discards the
+        return value) but broke the documented public contract
+        t/83/t/196 already assert on directly. Fixed by adding
+        "AND bot_key = ?" to the SELECT. New test:
+        t/225-record-failed-download-return-id-bot-scoped.t.
+
 1.77  2026-09-14
       - SECURITY (TGT-222, found via TGT-220's own vulnerability-scan
         gate): cpan-audit deps . flags 2 CVEs against HTTP::Tiny
