@@ -1,5 +1,17 @@
 # tg
 
+**Status: early implementation (v1.95).** BUGFIX (TGT-244, found via a
+scheduled JOB-003 hourly bug hunt): `D2TG::Download::auto_retry_failed_downloads`'
+own 60s auto-retry throttle (TGT-221) was silently bypassed for a
+queued failed download whose file downloaded successfully but whose
+`record_message` bookkeeping write kept failing - the same
+"persistently-failing `record_message`" scenario TGT-196 already
+documented as real. `retry_failed_download` now returns a third value,
+`$still_queued`, so the throttle stamps `last_retry_at` whenever a row
+stays queued after an attempt, not only when the download step itself
+failed - previously such a row was retried on every poll cycle instead
+of once per 60s.
+
 **Status: early implementation (v1.94).** DOC FIX (TGT-240, found via
 a scheduled JOB-005 doc-accuracy hunt): the `extract_bot_flag_or_die`
 POD (and its copy in `docs/commands.md`) said "7 `cli/*.pl` scripts"

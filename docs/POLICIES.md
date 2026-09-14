@@ -4465,3 +4465,68 @@ throughout this session. Fell back to independent verification: the
 `git show` diff review above (confirming the change is prose-only)
 combined with the new test's own count/list assertions against the
 real `cli/*.pl` directory listing.
+
+## TGT-244: auto-retry throttle silently bypassed when download succeeds but record_message keeps failing
+
+Found via a scheduled JOB-003 hourly bug-hunt fork, live-reproduced (no
+"try to imagine a failure" - the fake store in the new test drove the
+real `D2TG::Download::retry_failed_download` and
+`auto_retry_failed_downloads` code paths). `retry_failed_download`
+always returned `(1, $local_path)` once the download step itself
+succeeded, even when the subsequent `record_message` bookkeeping write
+then failed and the row was deliberately kept queued (via
+`mark_failed_download_downloaded`) - TGT-196's own documented
+"persistently-failing `record_message`" scenario.
+`auto_retry_failed_downloads` (TGT-221's own 60s throttle) only called
+`D2TG::Store::mark_failed_download_retried` to stamp `last_retry_at`
+when that return was false. Since `$ok` was always `1` in this
+partial-success case, `last_retry_at` was never stamped and stayed
+`NULL` forever - `D2TG::Store::failed_downloads_due_for_retry`'s own
+`last_retry_at IS NULL` clause then matched the row unconditionally on
+every single poll cycle, instead of once per `AUTO_RETRY_INTERVAL_SECONDS`
+(60s) as TGT-221 documents and intends. The redownload itself was not
+repeated (the row's `local_path` was already persisted, so
+`retry_failed_download` skipped straight to the `record_message`
+retry), but the store write (and its own `STORE ERROR` log line) was
+attempted on every poll cycle rather than at the documented, bounded
+rate - defeating the whole point of the throttle for exactly the
+scenario the codebase already anticipated as real.
+
+Fixed by giving `retry_failed_download` a third return value,
+`$still_queued`: `0` when the row was actually removed (a fully
+successful attempt), `1` when the download succeeded but
+`record_message` failed and the row was kept queued.
+`auto_retry_failed_downloads` now stamps `last_retry_at` whenever
+`!$ok || $still_queued` - i.e. whenever the row remains queued after
+the attempt, regardless of which specific step caused that. A fully
+successful retry (row removed) needs no `last_retry_at` stamp at all,
+since the row no longer exists to be reconsidered. The only real
+caller of `retry_failed_download` besides `auto_retry_failed_downloads`
+is `cli/retry-download.pl`'s manual path, which only destructures the
+first two return values - confirmed via `grep -rn
+'retry_failed_download\('` - so it is completely unaffected by the new,
+purely additive third value.
+
+New test `t/244-auto-retry-throttle-record-message-failure.t`: a
+`D2TG::Store` subclass whose `record_message` always dies (simulating a
+persistent bookkeeping failure while the download itself succeeds via a
+real `Fake::UA`/`Fake::DownloadTelegram` pair, the same fake shapes
+`t/221-auto-retry-failed-downloads.t` already established). Confirmed
+genuinely red against the pre-fix code (2/5 subtests failed - the row
+was re-attempted on the very next `failed_downloads_due_for_retry` call
+instead of being throttled), confirmed green after the fix (5/5),
+including a check that the row correctly becomes due again once the
+60s interval has genuinely elapsed (the fix must throttle, not
+permanently stop retrying). Full suite re-run clean: 183 files, 1823
+tests. 100% statement+subroutine coverage confirmed on the touched
+module, `lib/D2TG/Download.pm`.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: a
+line-by-line `git diff` review of the change (reproduced above)
+confirming it is a minimal, purely additive third return value plus the
+one new `if` condition that consumes it, a `grep` confirming
+`cli/retry-download.pl` is the only other caller and is unaffected, and
+the new red/green test itself directly exercising the real bug through
+the real code paths (not a mocked reproduction of the symptom).

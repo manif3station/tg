@@ -1,5 +1,27 @@
 Revision history for the tg skill
 
+1.95  2026-09-14
+      - BUGFIX (TGT-244, found via a scheduled JOB-003 hourly bug hunt):
+        D2TG::Download::auto_retry_failed_downloads' own 60s auto-retry
+        throttle (TGT-221) was silently bypassed for a queued
+        failed_downloads row whose file downloaded successfully but
+        whose record_message bookkeeping write kept failing - exactly
+        the "persistently-failing record_message" scenario TGT-196
+        already documented as real. retry_failed_download always
+        returned (1, $local_path) once the download itself succeeded,
+        even though the row was deliberately left queued
+        (mark_failed_download_downloaded) when record_message failed;
+        auto_retry_failed_downloads only stamped last_retry_at when
+        that return was false, so a row stuck in this exact
+        partial-success state never got last_retry_at stamped and was
+        retried on every single poll cycle instead of once per
+        AUTO_RETRY_INTERVAL_SECONDS (60s). retry_failed_download now
+        returns a third value, $still_queued, so auto_retry_failed_downloads
+        can stamp last_retry_at whenever the row remains queued after
+        an attempt, regardless of which step (download or
+        record_message) caused it to stay queued. New test:
+        t/244-auto-retry-throttle-record-message-failure.t.
+
 1.94  2026-09-14
       - DOC FIX (TGT-240, found via a scheduled JOB-005 doc-accuracy
         hunt): the POD for D2TG::Reply::extract_bot_flag_or_die (and
