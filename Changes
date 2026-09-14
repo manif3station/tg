@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.77  2026-09-14
+      - SECURITY (TGT-222, found via TGT-220's own vulnerability-scan
+        gate): cpan-audit deps . flags 2 CVEs against HTTP::Tiny
+        (CVE-2026-7010 CRLF injection, CVE-2026-7017 cross-origin
+        credential-header forwarding on redirect). Investigated: this
+        codebase's own runtime code exclusively uses LWP::UserAgent for
+        every HTTP call (D2TG::Telegram, D2TG::Download) - HTTP::Tiny
+        is a core Perl module never directly invoked anywhere in
+        lib/D2TG. Not exploitable through this codebase's own code
+        paths. Documented as an accepted, non-applicable finding
+        (see docs/POLICIES.md); a new structural regression guard test
+        (t/222-no-http-tiny-usage.t) fails if a future change ever
+        introduces a direct HTTP::Tiny call, which would reopen this
+        question.
+
 1.76  2026-09-14
       - RELIABILITY FIX (TGT-220, found via a scheduled JOB-003 hourly
         bug hunt): D2TG::Poller::run_once's own NEW TG MEDIA FAILED

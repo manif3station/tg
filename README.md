@@ -1,14 +1,13 @@
 # tg
 
-**Status: early implementation (v1.76).** RELIABILITY FIX (TGT-220,
-found via a scheduled JOB-003 hourly bug hunt): `D2TG::Poller::run_once`'s
-own `NEW TG MEDIA FAILED` stdout line printed a hard-coded `RETRY WITH:
-d2 tg.retry-download --all` hint with no `--bot` flag, even though the
-bot token was already in scope at that print site. In a multi-bot
-config, following that command literally for a non-default-bot failure
-retried nothing. The line now appends a masked `--bot <token>` flag
-whenever a bot token is in play, matching the poller's own
-`REPLY WITH:` template convention. Single-bot mode is unchanged.
+**Status: early implementation (v1.77).** SECURITY (TGT-222, found via
+TGT-220's own vulnerability-scan gate): `cpan-audit` flags 2 CVEs
+against `HTTP::Tiny`. Investigated and confirmed not exploitable
+through this codebase's own code - every HTTP call goes through
+`LWP::UserAgent` instead; `HTTP::Tiny` is a core Perl module never
+directly invoked anywhere in `lib/D2TG`. Documented as an accepted,
+non-applicable finding, with a new structural regression test guarding
+against a future accidental `HTTP::Tiny` call reopening the question.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`

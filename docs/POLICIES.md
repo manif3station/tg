@@ -3308,3 +3308,59 @@ same conditional shape), confirmed the raw token is never printed (test
 asserts `unlike` against the raw token string), and confirmed no other
 call site or test was touched outside the ticket's declared scope
 (the `RETRY WITH` print line only).
+
+## TGT-222: HTTP::Tiny CVEs flagged by cpan-audit - investigated, not exploitable
+
+Found via TGT-220's own `vulnerability-scan` column gate (`cpan-audit
+deps .`, run as part of that ticket's `REQ-044` perlsec scan).
+`cpan-audit` reported 2 advisories against `HTTP::Tiny`:
+`CPANSA-HTTP-Tiny-2026-7010` (CVE-2026-7010, CRLF injection in the
+request line/control headers for versions before 0.093) and
+`CPANSA-HTTP-Tiny-2026-7017` (CVE-2026-7017, forwarding caller-supplied
+`Authorization`/`Cookie`/`Proxy-Authorization` headers to a
+cross-origin redirect target for versions before 0.095).
+
+Investigated whether this codebase's own code could reach either
+vulnerable path. `grep -rn 'HTTP::Tiny\|LWP::UserAgent'
+lib/D2TG/*.pm` confirmed every HTTP call in this project
+(`D2TG::Telegram`, `D2TG::Download`) goes through `LWP::UserAgent`
+exclusively - there is not one direct `HTTP::Tiny` method call anywhere
+in `lib/D2TG`. `HTTP::Tiny` is a core Perl module (bundled with the
+interpreter since 5.13.9, confirmed installed at version 0.088 in the
+test container) - it is present on the system regardless of whether
+this project declares or uses it, and `cpan-audit` scans installed
+modules, not this project's own declared dependency graph. Since
+neither CVE's vulnerable code path (a caller-controlled request
+line/header value reaching `HTTP::Tiny`'s own request construction, or
+a redirect-following call carrying caller-supplied credential headers)
+is ever exercised by this codebase's own code, both advisories are not
+exploitable here.
+
+Resolved by: documenting this as an accepted, non-applicable finding
+(this section) rather than pinning a version this project never
+declares or calls; adding a new structural regression test
+(`t/222-no-http-tiny-usage.t`) that fails if a future change ever
+introduces a direct `HTTP::Tiny` call in any `lib/D2TG/*.pm` module,
+which would reopen this exact question. No `cpanfile` change was made -
+adding an `HTTP::Tiny` version requirement to a project that never uses
+the module would misrepresent this project's own actual dependency
+graph.
+
+This ticket does not follow the usual TDD red/green pattern honestly -
+there was no code bug to fix, so the new test was never red against
+"pre-fix" code (there is no fix). `t/222-no-http-tiny-usage.t` is a
+forward-looking regression guard, confirmed passing (10/10) against the
+current codebase, documented as such rather than claiming a red state
+that never existed. Full suite re-run clean at 1599/1599 (1598 + the 1
+new test file).
+
+Codex adversarial review: first attempt this session to actually
+succeed - Codex independently ran its own search (`rg`) against
+`lib/D2TG` and confirmed no `HTTP::Tiny` usage exists, verifying this
+ticket's own finding rather than hitting the `bwrap` sandbox error seen
+on every other attempt so far this session. A second, follow-up prompt
+in the same session then hung and was killed via `timeout` - consistent
+with this session's own established intermittent-availability pattern
+(sometimes works, sometimes sandbox-errors, sometimes hangs) rather
+than a fully dead session. The one successful run's own finding matches
+the independent `grep` evidence above exactly.

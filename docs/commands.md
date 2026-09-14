@@ -962,3 +962,17 @@ short backoff - the poller does not stop. If these repeat continuously
 with the same message, treat it like any other error line (e.g. a
 repeating "401 Unauthorized" `POLL ERROR` means the token problem above,
 not a new bug).
+
+### `cpan-audit` reports HTTP::Tiny CVEs
+
+Expected (TGT-222, found via a vulnerability-scan gate): `cpan-audit
+deps .` flags 2 CVEs against `HTTP::Tiny` (CRLF injection,
+cross-origin credential forwarding on redirect). This project's own
+HTTP transport is exclusively `LWP::UserAgent` (`D2TG::Telegram`,
+`D2TG::Download`) - `HTTP::Tiny` is a core Perl module the audit tool
+sees installed on the system, never a dependency this project declares
+or calls, so neither CVE's vulnerable code path is reachable through
+this codebase. Documented as an accepted, non-applicable finding in
+`docs/POLICIES.md`'s own TGT-222 section; `t/222-no-http-tiny-usage.t`
+guards against a future change accidentally introducing a direct
+`HTTP::Tiny` call.
