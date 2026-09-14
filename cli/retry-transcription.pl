@@ -74,7 +74,7 @@ else {
 
 my $exit_code = 0;
 for my $row (@to_retry) {
-    my ( $ok, $result_or_error ) =
+    my ( $ok, $result_or_error, $still_queued ) =
       D2TG::Download::retry_failed_transcription( $telegram, $store, $row );
 
     if ( !$ok ) {
@@ -85,6 +85,23 @@ for my $row (@to_retry) {
         else {
             print STDERR "RETRY FAILED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $result_or_error\n";
         }
+        $exit_code = 1;
+        next;
+    }
+
+    # TGT-248 (found via a scheduled JOB-003 hourly bug hunt): $ok alone
+    # does not mean the retry fully completed. retry_failed_transcription's
+    # own 3rd return value, $still_queued, is true when the transcript
+    # was genuinely recovered but the follow-up record_message write then
+    # failed - the row stays queued (never removed) and NO row was ever
+    # written into the messages table. Printing the ordinary RETRY OK
+    # line in this state falsely claimed full success, mirroring the
+    # exact bug TGT-247 already fixed in cli/retry-download.pl.
+    if ($still_queued) {
+        print "RETRY PARTIAL [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
+          . "transcript recovered but the history record could not be written yet; "
+          . "the entry remains queued (still queued) and will be retried automatically, "
+          . "or retry again with d2 tg.retry-transcription $row->{id}\n";
         $exit_code = 1;
         next;
     }
@@ -156,5 +173,20 @@ matching C<retry-download.pl>'s own established distinction.
 
 C<--db>/C<-d> (or C<D2TG_DB>) and C<D2TG_TOKEN> resolve exactly as
 every other C<d2 tg.*> command's do.
+
+TGT-248 (found via a scheduled JOB-003 hourly bug hunt): C<RETRY OK> is
+only ever printed once a retry is genuinely fully complete - the exact
+same fix TGT-247 already made in C<cli/retry-download.pl>. Before this
+fix, this script discarded C<retry_failed_transcription>'s 3rd return
+value entirely, so when the transcript was genuinely recovered but the
+follow-up C<record_message> write then failed (a transient locked/busy
+database), it still printed the ordinary C<RETRY OK ...: <transcript>>
+line and exited 0, even though nothing was written to
+L<D2TG::Store>'s message history and the row was, in fact, still sitting
+in the C<failed_transcriptions> queue (never removed). This case now
+prints C<RETRY PARTIAL> instead - naming the row as still queued for a
+future automatic or manual (C<d2 tg.retry-transcription E<lt>idE<gt>>)
+retry - and sets a non-zero exit code, rather than falsely claiming full
+success.
 
 =cut

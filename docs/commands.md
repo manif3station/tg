@@ -922,6 +922,22 @@ exact recovery command - previously a transcription failure was only
 ever visible via `TRANSCRIBE ERROR` on STDERR, which never reaches the
 monitor job's own stdout-fed `tira.policy.bridge` notification stream.
 
+TGT-248 (found via a scheduled JOB-003 hourly bug hunt): `RETRY OK` is
+only printed once the retry is genuinely fully complete - the exact same
+fix TGT-247 already made for `d2 tg.retry-download`.
+`D2TG::Download::retry_failed_transcription` can genuinely recover the
+transcript but still fail the follow-up `record_message` write (a
+transient locked/busy database); it reports this via its own 3rd return
+value, `$still_queued` - the row stays queued in `failed_transcriptions`
+(never removed) and no `messages` row was ever written, so nothing
+exists yet for `d2 tg.history`/`d2 tg.unread` to show. This command now
+prints `RETRY PARTIAL` instead of `RETRY OK` for that case, naming the
+row as still queued (retried automatically, or manually via
+`d2 tg.retry-transcription <id>` again) and sets a non-zero exit code,
+rather than falsely claiming full success. Before this fix,
+`$still_queued` was silently discarded and every transcription success -
+full or partial - printed the same `RETRY OK: <transcript>` line.
+
 ## `d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
 
 Lists stored messages (TGT-038) oldest first: chat id, message id,

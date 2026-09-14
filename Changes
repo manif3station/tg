@@ -1,5 +1,33 @@
 Revision history for the tg skill
 
+1.99  2026-09-14
+      - BUGFIX (TGT-248, found via a scheduled JOB-003 hourly bug hunt):
+        the exact TGT-247 bug class, unfixed in
+        D2TG::Download::retry_failed_transcription - the function TGT-247's
+        own Changes/docs entries name as retry_failed_download's
+        documented structural sibling. It always returned
+        (1, $transcript) once download+transcription succeeded,
+        regardless of whether the follow-up record_message write then
+        succeeded. When record_message failed (e.g. a transient
+        locked/busy database), the row was correctly left queued in
+        failed_transcriptions (never removed) and no row was ever
+        written into the messages table - yet cli/retry-transcription.pl
+        still printed the ordinary "RETRY OK [id] ...: <transcript>"
+        line with exit 0, even though d2 tg.history/d2 tg.unread would
+        never show the recovered message.
+      - retry_failed_transcription now returns a 3rd value,
+        $still_queued (mirroring retry_failed_download's own
+        TGT-244/TGT-247 signal), true exactly when record_message
+        failed. cli/retry-transcription.pl now branches on it: prints
+        "RETRY PARTIAL" instead of "RETRY OK", explains the history
+        record could not be written yet, names the row as still queued
+        for automatic or manual retry, and sets a non-zero exit code -
+        instead of falsely claiming full success. Added
+        t/248-retry-transcription-record-failure-partial.t (a real unit
+        test against D2TG::Download::retry_failed_transcription using a
+        D2TG::Store subclass that forces record_message to die, matching
+        t/196/t/245's own established pattern for this module).
+
 1.98  2026-09-14
       - BUGFIX (TGT-247, found via a scheduled JOB-003 hourly bug hunt,
         live-reproduced in a developer-dashboard:latest container):

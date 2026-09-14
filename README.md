@@ -1,5 +1,21 @@
 # tg
 
+**Status: early implementation (v1.99).** BUGFIX (TGT-248, found via a
+scheduled JOB-003 hourly bug hunt): `cli/retry-transcription.pl` had the
+exact same bug TGT-247 fixed in `cli/retry-download.pl`, unfixed in that
+fix's own documented structural sibling. `D2TG::Download::retry_failed_transcription`
+always returned `(1, $transcript)` once download+transcription succeeded,
+regardless of whether the follow-up `record_message` write then
+succeeded - the retry loop discarded any way to know about that. When
+`record_message` failed (e.g. a transient locked/busy database), the row
+was correctly left queued in `failed_transcriptions` (never removed) and
+no row was ever written into the `messages` table - yet the script still
+printed the ordinary `RETRY OK [id] ...: <transcript>` line with exit 0.
+`retry_failed_transcription` now returns a 3rd value, `$still_queued`
+(mirroring `retry_failed_download`'s own TGT-244/TGT-247 signal), and the
+script prints `RETRY PARTIAL` instead when it's true, with a non-zero
+exit code.
+
 **Status: early implementation (v1.98).** BUGFIX (TGT-247, found via a
 scheduled JOB-003 hourly bug hunt, live-reproduced in a
 `developer-dashboard:latest` container): `cli/retry-download.pl`'s retry

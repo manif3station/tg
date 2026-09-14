@@ -315,7 +315,15 @@ sub retry_failed_transcription {
           . "a future retry can still restore history for this message, without re-transcribing\n";
     }
 
-    return ( 1, $transcript );
+    # TGT-248 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+    # retry_failed_download's own $still_queued 3rd return value
+    # (TGT-244/TGT-247) exactly. $ok=1 alone does not mean the retry is
+    # FULLY complete - when record_message fails above, the row is
+    # deliberately left in failed_transcriptions (never removed) and no
+    # row was ever written into the messages table, so a caller printing
+    # an unqualified success (as cli/retry-transcription.pl used to) is
+    # misleading. A true 3rd return value here signals exactly that case.
+    return ( 1, $transcript, $record_ok ? 0 : 1 );
 }
 
 # TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors

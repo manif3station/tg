@@ -4750,3 +4750,60 @@ already-safe values - `$row->{id}`, `$row->{chat_id}`,
 what every other line in this script already prints) - no new shell
 invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-248: cli/retry-transcription.pl claimed RETRY OK even when the retry was only partially complete
+
+Found via a scheduled JOB-003 hourly bug hunt - the exact TGT-247 bug
+class, unfixed in `D2TG::Download::retry_failed_transcription`, the
+function TGT-247's own documentation names as `retry_failed_download`'s
+structural sibling (both queue-retry functions attempt an external
+fetch, then a `record_message` write, then remove the queue row on
+success). `retry_failed_transcription` always returned `(1, $transcript)`
+once the download and transcription succeeded, regardless of whether the
+follow-up `record_message` write then succeeded - it had no equivalent
+of `retry_failed_download`'s `$still_queued` 3rd return value at all.
+When `record_message` failed (a transient locked/busy database, the same
+documented scenario as TGT-194/TGT-247), the row was correctly left
+queued in `failed_transcriptions` (never removed) and no row was ever
+written into the `messages` table.
+
+`cli/retry-transcription.pl`'s own retry loop only ever captured `($ok,
+$result_or_error)` from that call - there was no 3rd value to discard,
+because the low-level function never produced one - so its success
+branch printed the ordinary `RETRY OK [id] chat_id=X message_id=Y:
+<transcript>` line unconditionally whenever `$ok` was true, even in the
+partial-success case. `d2 tg.history`/`d2 tg.unread` would never show the
+recovered message, and the row was, in fact, still sitting in the retry
+queue - the operator/agent had no indication anything was incomplete.
+
+Fixed by adding a 3rd return value to `retry_failed_transcription`
+(`$record_ok ? 0 : 1`, mirroring `retry_failed_download`'s own
+`$still_queued` naming and shape exactly) and updating
+`cli/retry-transcription.pl` to capture and branch on it: when true, the
+script now prints `RETRY PARTIAL` instead of `RETRY OK`, explains that
+the history record could not be written yet, names the row as still
+queued (retried automatically, or via `d2 tg.retry-transcription <id>`
+again), and sets a non-zero exit code - matching TGT-247's fix wording
+for its sibling script. The fully-successful case (`$still_queued`
+false) is completely unchanged - still `RETRY OK: <transcript>`.
+
+New test `t/248-retry-transcription-record-failure-partial.t` - unlike
+`retry-download.pl`, `retry_failed_transcription` already had real
+functional-test precedent in this project (`t/196-retry-failed-download-skips-redownload.t`,
+`t/245-retry-record-message-bot-key.t` both use a real SQLite-backed
+`D2TG::Store` subclassed to force `record_message` to die, plus a fake
+`D2TG::Telegram`/`D2TG::Transcribe::transcribe` override), so this test
+follows that same real, non-source-inspection pattern directly against
+`D2TG::Download::retry_failed_transcription` rather than the script.
+Confirmed genuinely red against the pre-fix code (1 of 12 assertions
+failed: the 3rd return value did not signal the failure); confirmed
+green after the fix (12/12).
+
+perlsec.pl-style vulnerability-scan audit: pure data-flow change - one
+new return value derived from an existing boolean already computed by
+unchanged code (`$record_ok`), and one new `if ($still_queued) { ... }`
+branch in the CLI script printing only already-safe values
+(`$row->{id}`, `$row->{chat_id}`, `$row->{message_id}`, all of which
+every other line in this script already prints) - no new shell
+invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
