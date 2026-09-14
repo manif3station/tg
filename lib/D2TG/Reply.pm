@@ -468,10 +468,11 @@ already handles that case directly (TGT-068).
 
 =head2 extract_bot_flag_or_die(@args)
 
-TGT-236: centralizes the eval-wrap-print-STDERR-exit-1 idiom that 7
+TGT-236: centralizes the eval-wrap-print-STDERR-exit-1 idiom that 8
 C<cli/*.pl> scripts (C<history>, C<attachment>, C<unread>,
-C<retry-download>, C<approve>, C<send>, C<reply>) each duplicated
-around L</extract_bot_flag> - the exact duplication class that already
+C<retry-download>, C<retry-transcription>, C<approve>, C<send>,
+C<reply>) each duplicated around L</extract_bot_flag> - the exact
+duplication class that already
 caused TGT-068/074/231. Calls L</extract_bot_flag> in an C<eval>; on
 failure, prints the error to STDERR and calls C<exit(1)> instead of
 propagating a raw exception. On success, returns exactly what
