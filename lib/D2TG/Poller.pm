@@ -481,13 +481,9 @@ sub run_once {
                         # nothing (cli/retry-download.pl --all with no
                         # --bot only acts on the default-bot sentinel
                         # queue).
-                        my $retry_bot_flag =
-                          defined $bot_token
-                          ? ' --bot ' . D2TG::Config::masked_token($bot_token)
-                          : '';
                         print "$ts NEW TG MEDIA FAILED [$chat_id] $sender: "
                           . "$media_kind$caption_note - queued for retry, "
-                          . "RETRY WITH: d2 tg.retry-download --all$retry_bot_flag\n";
+                          . "RETRY WITH: d2 tg.retry-download --all" . _bot_flag($bot_token) . "\n";
                     }
                 }
             }
@@ -790,20 +786,28 @@ sub _sanitize_for_stdout {
     return $safe;
 }
 
+sub _bot_flag {
+    my ($bot_token) = @_;
+
+    # TGT-086: never print the real token here - both this helper's
+    # callers reach the target project's tira.policy.bridge as a
+    # monitor-output event (visible to anyone who can read that
+    # board), and the token is a real credential (whoever has it can
+    # send/receive as that bot). Masked the same way
+    # D2TG::Config::masked_token already masks the startup line
+    # (TGT-045). Extracted (TGT-226, found via a scheduled JOB-004
+    # improvement hunt) from _print_reply_template and the NEW TG
+    # MEDIA FAILED branch (TGT-220), which had duplicated this exact
+    # ternary verbatim.
+    return defined $bot_token
+      ? ' --bot ' . D2TG::Config::masked_token($bot_token)
+      : '';
+}
+
 sub _print_reply_template {
     my ( $chat_id, $message_id, $bot_token ) = @_;
 
-    # TGT-086: never print the real token here - this line reaches the
-    # target project's tira.policy.bridge as a monitor-output event
-    # (visible to anyone who can read that board), and the token is a
-    # real credential (whoever has it can send/receive as that bot).
-    # Masked the same way D2TG::Config::masked_token already masks the
-    # startup line (TGT-045); the placeholder <MASKED> is intentionally
-    # not runnable as-is - see this template's own POD.
-    my $bot_flag =
-      defined $bot_token
-      ? ' --bot ' . D2TG::Config::masked_token($bot_token)
-      : '';
+    my $bot_flag   = _bot_flag($bot_token);
     my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
     print qq{REPLY WITH: d2 tg.reply $chat_id "..."$bot_flag$reply_flag\n};
     return;

@@ -1,12 +1,12 @@
 # tg
 
-**Status: early implementation (v1.78).** RELIABILITY FIX (TGT-225,
-found via a scheduled JOB-003 hourly bug hunt): `D2TG::Store::
-record_failed_download`'s own id-lookup `SELECT` was never updated for
-TGT-219's own bot_key-scoped `UNIQUE` constraint - two rows sharing the
-same `chat_id`/`message_id` but different `bot_key` could make it
-return the wrong row's id. Fixed by scoping the `SELECT` by `bot_key`
-too, matching the `INSERT...ON CONFLICT` clause a few lines above it.
+**Status: early implementation (v1.79).** REFACTOR (TGT-226, found via
+a scheduled JOB-004 improvement hunt): the masked `--bot <token>` flag
+fragment printed on both the `REPLY WITH` and `RETRY WITH` recovery
+templates was built via an identical duplicated ternary at two call
+sites in `D2TG::Poller`. Not a bug - extracted into a shared
+`_bot_flag($bot_token)` helper, matching this project's own established
+extract-once-duplicated precedent. No behavior change.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`

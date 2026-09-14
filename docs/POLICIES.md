@@ -3421,3 +3421,41 @@ fix is a one-line SQL predicate addition, directly comparable
 side-by-side against the already-correct `INSERT...ON CONFLICT` clause
 4 lines above it in the same function - a small, self-evidently correct
 diff, not a claim requiring external judgment.
+
+## TGT-226: duplicated masked --bot flag construction extracted into a shared helper
+
+Found via a scheduled JOB-004 improvement hunt - not a bug. `D2TG::
+Poller` had two separate call sites building the identical "masked
+`--bot <token>` flag" string via the same 3-line ternary: `defined
+$bot_token ? ' --bot ' . D2TG::Config::masked_token($bot_token) : ''`
+- once inside `_print_reply_template` (the `REPLY WITH` template) and
+once inline in the `NEW TG MEDIA FAILED` branch (the `RETRY WITH`
+template, added by TGT-220). Both sites already behaved identically and
+correctly - this was a pure consolidation opportunity, matching this
+project's own established extract-once-duplicated precedent
+(`_classify_store_error` TGT-167, `open_store_or_die`,
+`_with_hard_timeout` TGT-126).
+
+Fixed by extracting a new `_bot_flag($bot_token)` helper and calling it
+from both sites; the masking-rationale comment (TGT-086, never print
+the real token) now lives once, next to the helper, instead of being
+duplicated at each call site.
+
+New test `t/226-bot-flag-helper-extracted.t` exercises the helper
+directly (`can_ok`, a defined-token case matching
+`D2TG::Config::masked_token`'s own output exactly, an undef-token case
+returning `''`, and an `unlike` assertion confirming the raw token is
+never present). Confirmed genuinely red against the pre-fix code (the
+helper didn't exist - `prove` exited 255 on an undefined subroutine),
+confirmed green after the fix, with `t/217-edited-message-reply-
+template.t`, `t/220-media-failed-retry-with-bot-flag.t`, and
+`t/204-failed-download-visibility.t` re-run clean alongside it (18/18
+total) - proving both templates' printed output is byte-for-byte
+unchanged, as this ticket's own acceptance criteria required.
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: a
+side-by-side diff confirms both call sites now delegate to the same
+helper, and the helper's own body is byte-identical to the ternary it
+replaces at both original sites.
