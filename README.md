@@ -1,6 +1,19 @@
 # tg
 
-**Status: early implementation (v1.81).** DOC FIX (TGT-228, found via
+**Status: early implementation (v1.82).** RELIABILITY FIX (TGT-229,
+found via a scheduled JOB-003 hourly bug hunt): `d2 tg.unread`'s
+queued-failed-download listing is unscoped across all bots, but its
+own printed recovery hint was one bot-agnostic literal - `RETRY WITH:
+d2 tg.retry-download --all` with no `--bot` flag - even though
+`cli/retry-download.pl`'s own `--all` with no `--bot` only ever
+retries the default-bot sentinel's own queue. A non-default-bot queued
+failure was listed but its printed recovery instructions could never
+actually retry it - the same bug class TGT-217/TGT-220 already fixed
+elsewhere, never applied here. Now shows each row's own bot (masked)
+and prints one correctly-scoped `RETRY WITH` hint per distinct bot
+present; single-bot installs are completely unaffected.
+
+DOC FIX (TGT-228, found via
 a scheduled JOB-005 doc-accuracy hunt): this file's own top-of-file
 rolling changelog broke for 5 consecutive commits - TGT-220/222/225/
 226/227's own documentation-column edits each REPLACED the

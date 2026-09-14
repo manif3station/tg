@@ -3584,3 +3584,60 @@ direct `grep` for each of the 4 distinguishing terms in the restored
 paragraph sequence (TGT-227 → 226 → 225 → 222 → 220 → 219 → 218)
 confirms correct newest-to-oldest chronological order with no content
 altered from `Changes`'s own accurate wording.
+
+## TGT-229: cli/unread.pl's failed-download RETRY WITH hint omitted --bot in a multi-bot config
+
+Found via a scheduled JOB-003 hourly bug hunt, specifically prompted by
+a note to re-check every printed recovery-command template across the
+codebase (`GET ATTACHMENT WITH`/`REPLY WITH`/`RETRY WITH`) against the
+same class of bug TGT-227 found - a flag placed where its own consuming
+parser never actually looks for it. `REPLY WITH` (TGT-227) and the
+poller's own `NEW TG MEDIA FAILED` `RETRY WITH` line (TGT-220) were
+both confirmed already correctly fixed; `cli/unread.pl`'s own separate
+`RETRY WITH` line - printed after its queued-failed-downloads listing,
+introduced by TGT-204 before multi-bot support existed - was not.
+
+`cli/unread.pl` lists queued `failed_downloads` unscoped across every
+configured bot (`D2TG::Store::failed_downloads` called with no
+`bot_key` filter, correctly, matching TGT-204's own original design),
+but printed a single static hint - `"Queued failed downloads (RETRY
+WITH: d2 tg.retry-download --all):"` - with no `--bot` flag, and never
+displayed each row's own `bot_key` at all. `cli/retry-download.pl
+--all` with no `--bot` only retrieves `failed_downloads(bot_key =>
+'')` - the default-bot sentinel (TGT-219). Reproduced live in the
+`perl-test` container: seeded two rows via
+`D2TG::Store::record_failed_download`, one under the default `bot_key`
+and one under a distinct non-default `bot_key` - the unscoped listing
+correctly showed both, but the printed recovery hint could only ever
+retry the default-bot row; the non-default-bot row was listed with no
+indication it needed a different command, and following the printed
+instructions literally would leave it stuck forever.
+
+Fixed by grouping the listing's own rows by `bot_key`: when only the
+default sentinel is present (the single-bot case), the output is
+byte-for-byte unchanged from before. When more than one bot's rows are
+present, each row now shows its own bot (masked via
+`D2TG::Config::masked_token`, matching `D2TG::Poller::_bot_flag`'s own
+convention) and one `RETRY WITH: d2 tg.retry-download --all[--bot
+<masked-token>]` line is printed per distinct bot actually found in the
+listing - so every row's own printed recovery command is genuinely the
+one that retries it.
+
+New test `t/229-unread-multi-bot-retry-hint.t`: confirmed genuinely red
+against the pre-fix code (2/6 subtests failed - no masked `--bot` hint
+was printed for the non-default-bot row, and the plain hint appeared
+only once instead of once per distinct bot), confirmed green after the
+fix (6/6), with the existing `t/109-unread-unrecognized-args-refuse.t`
+(argv-shape validation) re-run clean alongside it (18/18 total) -
+proving the single-bot/no-queued-failures cases are completely
+unaffected.
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: the
+fix reuses `D2TG::Config::masked_token` directly (the same helper
+`_print_reply_template`/`_bot_flag` already use), so the masking
+behavior itself is already proven correct elsewhere - the new code only
+adds grouping/branching logic around an already-trusted primitive, and
+the test asserts the raw token is never printed, matching this
+project's own established TGT-086 convention.

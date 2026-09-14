@@ -70,9 +70,39 @@ else {
 my @queued_failures = @{ $store->failed_downloads };
 if (@queued_failures) {
     print "\n" if @unread;
-    print "Queued failed downloads (RETRY WITH: d2 tg.retry-download --all):\n";
-    for my $row (@queued_failures) {
-        print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}: $row->{media_kind} - $row->{error}\n";
+
+    # TGT-229 (found via a scheduled JOB-003 hourly bug hunt): this
+    # listing is unscoped across ALL bots (matching TGT-204's own
+    # original design), but the printed recovery hint used to be one
+    # bot-agnostic literal - "d2 tg.retry-download --all" with no
+    # --bot flag only ever retries the default-bot sentinel's own
+    # queue (TGT-219), silently leaving a non-default-bot row
+    # unretryable via the printed instructions. A distinct masked
+    # --bot flag (matching D2TG::Poller::_bot_flag's own convention) is
+    # now printed for every distinct non-default bot_key actually
+    # present. Single-bot installs (the only bot_key present is the
+    # default sentinel) are completely unaffected - same header, same
+    # per-row format, same single plain RETRY WITH line as before.
+    my %distinct_bot_key = map { ( $_->{bot_key} // '' ) => 1 } @queued_failures;
+    my $multi_bot = keys(%distinct_bot_key) > 1 || !exists $distinct_bot_key{''};
+
+    if ($multi_bot) {
+        print "Queued failed downloads:\n";
+        for my $row (@queued_failures) {
+            my $bot_key = $row->{bot_key} // '';
+            my $bot_note = $bot_key ne '' ? ' (bot: ' . D2TG::Config::masked_token($bot_key) . ')' : '';
+            print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}$bot_note: $row->{media_kind} - $row->{error}\n";
+        }
+        for my $bot_key ( sort keys %distinct_bot_key ) {
+            my $bot_flag = $bot_key ne '' ? ' --bot ' . D2TG::Config::masked_token($bot_key) : '';
+            print "RETRY WITH: d2 tg.retry-download --all$bot_flag\n";
+        }
+    }
+    else {
+        print "Queued failed downloads (RETRY WITH: d2 tg.retry-download --all):\n";
+        for my $row (@queued_failures) {
+            print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}: $row->{media_kind} - $row->{error}\n";
+        }
     }
 }
 
@@ -114,6 +144,13 @@ L<D2TG::Store/failed_downloads>, naming the exact recovery command. A
 queued failed download is not itself an unread message (it was never
 recorded into message history, TGT-104's own design) but is exactly
 the kind of "needs your attention" state this command exists to
-surface.
+surface. This listing is unscoped across every configured bot; the
+printed recovery command is now correctly scoped per bot too (TGT-229,
+found via a scheduled JOB-003 hourly bug hunt - previously one
+bot-agnostic literal that could never actually retry a non-default-bot
+row, the same class of gap TGT-217/TGT-220 already fixed elsewhere).
+Each row now names its own bot (masked) when more than one bot's queue
+is present, and one C<RETRY WITH> line is printed per distinct bot
+found; single-bot installs see byte-identical output to before.
 
 =cut

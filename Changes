@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+1.82  2026-09-14
+      - RELIABILITY FIX (TGT-229, found via a scheduled JOB-003 hourly
+        bug hunt): cli/unread.pl's queued-failed-download listing is
+        unscoped across all bots, but its own printed recovery hint
+        was one bot-agnostic literal - "RETRY WITH: d2
+        tg.retry-download --all" with no --bot flag, even though
+        cli/retry-download.pl's own --all with no --bot only ever
+        retries the default-bot sentinel's own queue (TGT-219). A
+        non-default-bot queued failure was listed but its printed
+        recovery instructions could never actually retry it. Same bug
+        class as TGT-217/TGT-220, both already fixed elsewhere, but
+        never applied to this command. Now shows each row's own bot
+        (masked) and prints one correctly-scoped RETRY WITH hint per
+        distinct bot present in the listing; single-bot installs are
+        completely unaffected (identical output to before). New test:
+        t/229-unread-multi-bot-retry-hint.t.
+
 1.81  2026-09-14
       - DOC FIX (TGT-228, found via a scheduled JOB-005 doc-accuracy
         hunt): README.md's top-of-file rolling changelog (each shipped

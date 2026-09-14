@@ -701,7 +701,15 @@ real live-reported incident - a queued failed download is not an
 unread message, since it was never recorded into message history at
 all, but is exactly the kind of "needs your attention" state this
 command exists to surface), naming the exact recovery command
-(`d2 tg.retry-download --all`).
+(`d2 tg.retry-download --all`). This listing is unscoped across every
+configured bot; the printed `RETRY WITH` hint is now correctly scoped
+per bot too (TGT-229, found via a scheduled JOB-003 hourly bug hunt -
+previously one bot-agnostic literal that could never actually retry a
+non-default-bot row) - each row shows its own bot (masked) when more
+than one bot's queue is present, and one `RETRY WITH: d2
+tg.retry-download --all [--bot <masked-token>]` line is printed per
+distinct bot found; single-bot installs see the exact same output as
+before.
 
 ## `d2 tg.attachment <chat_id> <message_id> [--db <alias> | -d <alias>]`
 
