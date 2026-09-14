@@ -1411,7 +1411,13 @@ hour with no proactive signal, since C<MEDIA DOWNLOAD ERROR> above only
 ever reaches STDERR - never the monitor job's own stdout-fed
 C<tira.policy.bridge> notification stream) - naming the exact recovery
 command so a queued failure is no longer invisible until a human/agent
-happens to check C<d2 tg.retry-download> speculatively.
+happens to check C<d2 tg.retry-download> speculatively. When a bot
+token is in play, the C<RETRY WITH> line also appends a masked
+C<--bot E<lt>tokenE<gt>> flag (TGT-220, found via a scheduled JOB-003
+hourly bug hunt), matching L</_print_reply_template>'s own established
+convention - without it, following the printed command literally for a
+non-default-bot failure in a multi-bot config retried nothing, since
+C<--all> with no C<--bot> only acts on the default-bot sentinel queue.
 
 If the message carries a caption (TGT-092, a live production incident:
 a caption was silently dropped entirely before this fix, causing a real
