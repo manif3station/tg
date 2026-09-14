@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+1.94  2026-09-14
+      - DOC FIX (TGT-240, found via a scheduled JOB-005 doc-accuracy
+        hunt): the POD for D2TG::Reply::extract_bot_flag_or_die (and
+        docs/commands.md's own copy of the same sentence) said "7
+        cli/*.pl scripts" and listed 7 names - stale since TGT-237
+        added cli/retry-transcription.pl as an 8th real caller.
+        Corrects both to 8 and adds retry-transcription to the list.
+        New regression test (mirroring t/98-skills-md-cli-list-
+        current.t's own established pattern) scans cli/*.pl for
+        actual callers and fails the suite if the POD's stated
+        count/list ever drifts from the real set again. No lib/cli
+        behavior changed - prose and a new test only. New test:
+        t/240-extract-bot-flag-pod-caller-count.t.
+
 1.93  2026-09-14
       - FEATURE (TGT-221, budget project live incident via JOB-008
         feature-request-triage: 4 photos stuck >1hr, transient HTTP

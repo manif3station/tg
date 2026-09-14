@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v1.94).** DOC FIX (TGT-240, found via
+a scheduled JOB-005 doc-accuracy hunt): the `extract_bot_flag_or_die`
+POD (and its copy in `docs/commands.md`) said "7 `cli/*.pl` scripts"
+and omitted `retry-transcription.pl` - stale since TGT-237 added it as
+an 8th real caller. Corrected both locations, with a new regression
+test guarding the count/list against future drift. No behavior
+changed - prose only.
+
 **Status: early implementation (v1.93).** FEATURE (TGT-221, a live
 budget-project incident, JOB-008 feature-request-triage): TGT-204 made
 a queued `failed_downloads` row visible but deferred automatic

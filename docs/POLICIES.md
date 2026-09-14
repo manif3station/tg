@@ -4419,3 +4419,49 @@ itself caught by the test suite, not by manual review), and confirmed
 `t/83-failed-download-queue.t`'s own full pre-existing suite passes
 unmodified, proving no regression to the existing manual-retry/
 visibility behavior this ticket was scoped to leave untouched.
+
+## TGT-240: extract_bot_flag_or_die POD undercounted its own real callers
+
+Found via a scheduled JOB-005 doc-accuracy hunt. The POD for
+`D2TG::Reply::extract_bot_flag_or_die` (added by TGT-236) said "7
+`cli/*.pl` scripts (`history`, `attachment`, `unread`,
+`retry-download`, `approve`, `send`, `reply`)" - the identical
+sentence was pasted a second time in `docs/commands.md`'s own
+`D2TG::Reply` Module reference table entry. TGT-237 later added
+`cli/retry-transcription.pl` as an 8th real caller of the same helper,
+but neither prose copy was ever updated - confirmed via `grep -l
+extract_bot_flag_or_die cli/*.pl`, which returns 8 files, not 7. A
+reader of this POD (the authoritative module reference for the
+helper) was told there were 7 callers and given an exhaustive-looking
+list that omitted a real one.
+
+Fixed by correcting both prose locations to name 8 callers including
+`retry-transcription`, and adding a new structural regression test
+mirroring `t/98-skills-md-cli-list-current.t`'s own established
+pattern (guard a hardcoded prose count/list against the real file
+list, so a future ticket adding another caller fails the suite
+instead of silently letting this drift recur). No behavior or
+signature change to `extract_bot_flag_or_die` itself - purely
+prose and a new test, per this ticket's own explicit scope.
+
+New test `t/240-extract-bot-flag-pod-caller-count.t`: confirmed
+genuinely red against the pre-fix code (2/11 subtests failed - the
+POD's stated count of 7 didn't match the real 8, and
+`retry-transcription` was missing from the caller list), confirmed
+green after the fix (11/11). Full suite re-run clean: run in 6 smaller
+batches (30 files each) rather than one pass, since this session hit
+persistent host-level OOM kills on every attempt at a single full-suite
+invocation (batched coverage x2, parallel `-j 4`, non-parallel `-lr`) -
+confirmed via `docker ps`/`free -h` that unrelated containers on this
+shared host (other sessions running `cp -r` operations, not this
+project's own) were consuming the available memory, not a defect in
+this change; the diff itself was also independently verified to touch
+only POD/comment text via `git show` (zero executable Perl lines
+changed). All 6 batches (182 files, 1818 tests total) passed clean.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: the
+`git show` diff review above (confirming the change is prose-only)
+combined with the new test's own count/list assertions against the
+real `cli/*.pl` directory listing.
