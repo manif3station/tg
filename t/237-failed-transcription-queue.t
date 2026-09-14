@@ -212,6 +212,62 @@ sub capture_std {
     is( $store->get_message( 999, 56 ), undef, 'no message is restored on a failed retry' );
 }
 
+{
+    # A successful download but a failed transcription must also leave
+    # the queue row untouched, and must not restore any message.
+    my $dir = tempdir( CLEANUP => 1 );
+    my $store = D2TG::Store->new(
+        db_path       => File::Spec->catfile( $dir, 'store.sqlite' ),
+        admin_chat_id => 1,
+    );
+    my $id = $store->record_failed_transcription(
+        999, 57, 'AABBtranscribefails', sender => 'ada', error => 'whisper crashed',
+    );
+    my ($row) = grep { $_->{id} == $id } @{ $store->failed_transcriptions };
+
+    no warnings 'once';
+    local *D2TG::Download::download_file = sub { return '/tmp/does-not-matter-tgt237-b.oga' };
+    local *D2TG::Transcribe::transcribe  = sub { die "whisper still crashed\n" };
+
+    my ( $ok, $error ) = D2TG::Download::retry_failed_transcription( 'fake-telegram', $store, $row );
+
+    ok( !$ok, 'retry_failed_transcription reports failure when transcription itself fails after a successful download' );
+    like( $error, qr/whisper still crashed/, 'returns the underlying transcription error' );
+    is( scalar @{ $store->failed_transcriptions }, 1, 'the queue row is left untouched' );
+    is( $store->get_message( 999, 57 ), undef, 'no message is restored' );
+}
+
+{
+    # A successful transcription whose record_message write itself
+    # fails must leave the queue row queued (not lost twice), matching
+    # retry_failed_download's own established precedent.
+    package Fake::Store::FailsToRecordMessage;
+
+    sub new { return bless {}, shift }
+    sub record_message { die "database is locked\n" }
+    sub failed_transcriptions { return [] }
+    sub remove_failed_transcription { }
+
+    package main;
+
+    my $store = Fake::Store::FailsToRecordMessage->new;
+    my $row = { id => 99, chat_id => 999, message_id => 58, file_id => 'AABBrecordfails', sender => 'ada' };
+
+    no warnings 'once';
+    local *D2TG::Download::download_file = sub { return '/tmp/does-not-matter-tgt237-c.oga' };
+    local *D2TG::Transcribe::transcribe  = sub { return 'a transcript that cannot be saved' };
+
+    my ( $out, $err ) = ( '', '' );
+    open my $err_fh, '>', \$err or die $!;
+    local *STDERR = $err_fh;
+    my ( $ok, $transcript ) = D2TG::Download::retry_failed_transcription( 'fake-telegram', $store, $row );
+    close $err_fh;
+
+    ok( $ok, 'retry_failed_transcription still reports success - the transcription itself succeeded' );
+    is( $transcript, 'a transcript that cannot be saved', 'returns the transcript even though it could not be saved' );
+    like( $err, qr/STORE ERROR.*queue row not removed/, 'a record_message failure is reported and the row is deliberately left queued' );
+}
+
 # CLI-level: d2 tg.retry-transcription lists and retries the real queue.
 {
     my $cli         = File::Spec->catfile( $Bin, '..', 'cli', 'retry-transcription.pl' );
