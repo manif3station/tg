@@ -22,12 +22,9 @@ my ( $db_alias, @rest );
 # file_id values are bot-token-scoped, so a queued failure recorded
 # under a non-default bot must be retried as that same bot). Leading
 # position, same as D2TG::Reply::extract_bot_flag's every other caller.
-my ( $bot_token, @after_bot );
-eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+# TGT-236 centralized the eval-wrap idiom itself into
+# D2TG::Reply::extract_bot_flag_or_die.
+my ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 

@@ -270,6 +270,27 @@ sub extract_bot_flag {
     return ( $bot_token, @args );
 }
 
+# TGT-236: 7 cli/*.pl scripts each duplicated the identical
+# eval-wrap-print-STDERR-exit-1 idiom around extract_bot_flag - the
+# exact duplication class that already caused TGT-068/074/231.
+# Centralizes only that idiom; extract_bot_flag itself is unchanged
+# and this returns whatever it returns (bot_token may be undef),
+# leaving each caller's own downstream default/positional handling
+# untouched, since that differs legitimately between callers (a
+# leading-position single-call site vs. a caller embedded in a
+# multi-flag dispatch loop).
+sub extract_bot_flag_or_die {
+    my (@args) = @_;
+
+    my ( $bot_token, @rest ) = eval { extract_bot_flag(@args) };
+    if ($@) {
+        print STDERR $@;
+        exit 1;
+    }
+
+    return ( $bot_token, @rest );
+}
+
 sub parse_cli_args {
     my (@args) = @_;
 

@@ -34,12 +34,10 @@ while (@ARGV) {
             # uncaught here, crashing with Perl's raw exit 255 instead
             # of this project's own clean-refusal convention, matching
             # cli/approve.pl/cli/retry-download.pl's own existing
-            # eval-wrap of this identical call.
-            ( $bot_token, @ARGV ) = eval { D2TG::Reply::extract_bot_flag(@ARGV) };
-            if ($@) {
-                print STDERR $@;
-                exit 1;
-            }
+            # eval-wrap of this identical call. TGT-236 centralized the
+            # eval-wrap idiom itself into
+            # D2TG::Reply::extract_bot_flag_or_die.
+            ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
         }
         else {
             # A bare trailing --bot with no value can't be consumed by

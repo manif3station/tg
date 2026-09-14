@@ -18,13 +18,9 @@ my ( $db_alias, @rest );
 # TGT-233 (fast-follow from TGT-232's own scope decision): TGT-232 made
 # D2TG::Store's messages table bot_key-aware, but this script had no
 # --bot flag at all - matching cli/retry-download.pl's own established
-# leading-position, eval-wrapped extract_bot_flag convention.
-my ( $bot_token, @after_bot );
-eval { ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+# leading-position convention. TGT-236 centralized the eval-wrap idiom
+# itself into D2TG::Reply::extract_bot_flag_or_die.
+my ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 

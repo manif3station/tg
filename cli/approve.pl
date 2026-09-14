@@ -15,12 +15,9 @@ my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
-my ( $bot_key, @after_bot );
-eval { ( $bot_key, @after_bot ) = D2TG::Reply::extract_bot_flag(@ARGV) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+# TGT-236 centralized the eval-wrap idiom itself into
+# D2TG::Reply::extract_bot_flag_or_die.
+my ( $bot_key, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 $bot_key = '' unless defined $bot_key;
 
