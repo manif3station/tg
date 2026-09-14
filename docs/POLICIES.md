@@ -4807,3 +4807,60 @@ branch in the CLI script printing only already-safe values
 every other line in this script already prints) - no new shell
 invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-249: retry_failed_download/retry_failed_transcription reported still_queued=0 even when the row-removal write itself failed
+
+Found via a scheduled JOB-003 hourly bug hunt. `retry_failed_download`'s
+and `retry_failed_transcription`'s own `$still_queued` 3rd return value
+(TGT-244/TGT-248) was computed by unconditionally assuming the
+queue-row removal write (`remove_failed_download` /
+`remove_failed_transcription`) succeeded once `record_message` had
+succeeded - neither function ever inspected
+`D2TG::Poller::store_write_safe`'s own `(ok, value)` result for that
+specific call; the removal call's return value was simply discarded.
+
+When `record_message` succeeded but the removal write itself then hit a
+transient failure (a locked/busy database - the exact scenario
+`store_write_safe` exists to guard against, per its own documented
+purpose and the surrounding comments on both functions), the queue row
+was genuinely NOT removed - it remained in `failed_downloads` /
+`failed_transcriptions`. But `$still_queued` was still hardcoded to `0`
+(`retry_failed_download`) or derived only from `$record_ok`
+(`retry_failed_transcription`), both ignoring the removal write's own
+outcome. `cli/retry-download.pl` and `cli/retry-transcription.pl` both
+already correctly branch on `$still_queued` (TGT-247/TGT-248) to decide
+`RETRY OK` vs `RETRY PARTIAL` - but since it was wrongly `0`/false in
+this scenario, both scripts printed an unqualified `RETRY OK` and
+exited 0, even though the row was, in fact, still sitting in the retry
+queue. This is a narrow, previously-unaddressed sibling of the exact bug
+class TGT-244/TGT-247/TGT-248 already fixed for the `record_message`-
+failure path; the removal-write-failure path was simply never
+considered.
+
+Fixed by capturing `store_write_safe`'s own success flag for the
+removal write in both functions and deriving `$still_queued` from it
+directly: `retry_failed_download` now sets
+`$still_queued = $remove_ok ? 0 : 1`; `retry_failed_transcription` now
+returns `( 1, $transcript, ( $record_ok && $remove_ok ) ? 0 : 1 )`. No
+change was needed to `cli/retry-download.pl` or
+`cli/retry-transcription.pl` themselves - they already consumed the 3rd
+return value correctly (TGT-247/TGT-248); only the value they were
+given was wrong in this one edge case.
+
+New test `t/249-still-queued-on-removal-write-failure.t`, following the
+same real, non-source-inspection pattern as TGT-194/TGT-248 (a real
+SQLite-backed `D2TG::Store` subclassed to force
+`remove_failed_download`/`remove_failed_transcription` specifically to
+die, with `record_message` left genuinely succeeding). Confirmed
+genuinely red against the pre-fix code (2 of 12 assertions failed - the
+3rd return value did not signal the still-queued state in either
+function); confirmed green after the fix (12/12).
+
+perlsec.pl-style vulnerability-scan audit: pure data-flow change - one
+existing `store_write_safe` call's already-computed return value is now
+captured into a local variable instead of discarded, and one existing
+boolean expression is adjusted to include it. No new shell invocation,
+no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced, and no
+change to what either function prints or persists - only to the
+accuracy of the `$still_queued` signal both already exposed.

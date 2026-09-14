@@ -877,6 +877,16 @@ row as still queued (it is retried automatically, or manually via
 `$still_queued` was silently discarded and every download success - full
 or partial - printed the same `RETRY OK`/`GET ATTACHMENT WITH` line.
 
+TGT-249 (found via a scheduled JOB-003 hourly bug hunt): `$still_queued`
+itself used to be wrong in one further edge case - `retry_failed_download`
+hardcoded it to `0` once `record_message` succeeded, without checking
+whether the follow-up `remove_failed_download` write (which actually
+clears the row) succeeded too. If that removal write hit its own
+transient failure, the row stayed genuinely queued in `failed_downloads`
+but this command still printed `RETRY OK`. Fixed by deriving
+`$still_queued` from that removal write's own success/failure instead of
+assuming it.
+
 ## `d2 tg.retry-transcription [--bot <token>] [--db <alias> | -d <alias>] [<id> | --all]`
 
 TGT-237 (found via a scheduled JOB-003 hourly bug hunt): `d2 tg.poller`
@@ -937,6 +947,15 @@ row as still queued (retried automatically, or manually via
 rather than falsely claiming full success. Before this fix,
 `$still_queued` was silently discarded and every transcription success -
 full or partial - printed the same `RETRY OK: <transcript>` line.
+
+TGT-249 (found via a scheduled JOB-003 hourly bug hunt): mirrors the
+`retry_failed_download` fix above exactly - `retry_failed_transcription`
+derived `$still_queued` only from whether `record_message` succeeded,
+never checking whether the follow-up `remove_failed_transcription` write
+that actually clears the row also succeeded. A transient failure in that
+removal write left the row genuinely queued while this command still
+printed `RETRY OK`. Fixed the same way: `$still_queued` now also
+reflects the removal write's own outcome.
 
 ## `d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]`
 

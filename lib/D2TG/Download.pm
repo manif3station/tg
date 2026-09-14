@@ -187,8 +187,18 @@ sub retry_failed_download {
 
     my $still_queued;
     if ($record_ok) {
-        D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
-        $still_queued = 0;
+
+        # TGT-249 (found via a scheduled JOB-003 hourly bug hunt): the
+        # removal write itself is store_write_safe-wrapped for the same
+        # reason record_message is - a locked/busy database can make it
+        # fail transiently too. Its own (ok, value) result must be
+        # inspected, not discarded - a still-queued row (removal write
+        # failed) must never be reported as $still_queued=0, or
+        # cli/retry-download.pl prints an unqualified RETRY OK for a row
+        # that is, in fact, still sitting in failed_downloads.
+        my ($remove_ok) =
+          D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
+        $still_queued = $remove_ok ? 0 : 1;
     }
     else {
         # TGT-196: persist the already-downloaded path on the row (a
@@ -307,8 +317,16 @@ sub retry_failed_transcription {
         }
     );
 
+    my $remove_ok;
     if ($record_ok) {
-        D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_transcription', sub { $store->remove_failed_transcription( $row->{id} ) } );
+
+        # TGT-249 (found via a scheduled JOB-003 hourly bug hunt): the
+        # removal write's own (ok, value) result must be inspected, not
+        # discarded - a locked/busy database can make it fail
+        # transiently too, and a still-queued row in that case (removal
+        # write failed) must never be reported as fully complete.
+        ($remove_ok) =
+          D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_transcription', sub { $store->remove_failed_transcription( $row->{id} ) } );
     }
     else {
         print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
@@ -323,7 +341,12 @@ sub retry_failed_transcription {
     # row was ever written into the messages table, so a caller printing
     # an unqualified success (as cli/retry-transcription.pl used to) is
     # misleading. A true 3rd return value here signals exactly that case.
-    return ( 1, $transcript, $record_ok ? 0 : 1 );
+    #
+    # TGT-249: also true when record_message succeeded but the removal
+    # write itself then failed - $remove_ok is undef in that case
+    # (never attempted removal at all, or the attempt itself failed),
+    # so still_queued must be true, not just when $record_ok is false.
+    return ( 1, $transcript, ( $record_ok && $remove_ok ) ? 0 : 1 );
 }
 
 # TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors

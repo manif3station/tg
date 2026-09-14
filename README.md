@@ -1,5 +1,22 @@
 # tg
 
+**Status: early implementation (v2.00).** BUGFIX (TGT-249, found via a
+scheduled JOB-003 hourly bug hunt): `D2TG::Download::retry_failed_download`
+and `retry_failed_transcription`'s own `$still_queued` 3rd return value
+(TGT-244/TGT-248) was computed by unconditionally assuming the queue-row
+removal write (`remove_failed_download`/`remove_failed_transcription`)
+succeeded once `record_message` had succeeded, discarding
+`D2TG::Poller::store_write_safe`'s own success/failure result for that
+call. When `record_message` succeeded but the removal write itself then
+hit a transient failure (a locked/busy database), the row was NOT
+actually removed, yet `$still_queued` was still reported as false - so
+`cli/retry-download.pl`/`cli/retry-transcription.pl` printed an
+unqualified `RETRY OK` and exited 0, even though the row remained
+queued. Both functions now derive `$still_queued` from the removal
+write's own outcome instead of assuming it succeeded; no change was
+needed to either CLI script, which already branched on this value
+correctly (TGT-247/TGT-248).
+
 **Status: early implementation (v1.99).** BUGFIX (TGT-248, found via a
 scheduled JOB-003 hourly bug hunt): `cli/retry-transcription.pl` had the
 exact same bug TGT-247 fixed in `cli/retry-download.pl`, unfixed in that

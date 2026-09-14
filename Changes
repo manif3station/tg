@@ -1,5 +1,30 @@
 Revision history for the tg skill
 
+2.00  2026-09-14
+      - BUGFIX (TGT-249, found via a scheduled JOB-003 hourly bug hunt):
+        D2TG::Download::retry_failed_download and
+        retry_failed_transcription's own $still_queued 3rd return value
+        (TGT-244/TGT-248) was computed by unconditionally assuming the
+        queue-row removal write (remove_failed_download /
+        remove_failed_transcription) succeeded once record_message had
+        succeeded - it never inspected D2TG::Poller::store_write_safe's
+        own (ok, value) result for that call. When record_message
+        succeeded but the removal write itself then hit a transient
+        failure (a locked/busy database - the exact scenario
+        store_write_safe exists to guard against), the row was NOT
+        actually removed, yet $still_queued was still reported as
+        false/0 - so cli/retry-download.pl and cli/retry-transcription.pl
+        printed an unqualified RETRY OK and exited 0, even though the row
+        remained in failed_downloads/failed_transcriptions.
+      - Both functions now capture store_write_safe's own success flag
+        for the removal write and derive $still_queued from it, instead
+        of hardcoding 0. This is a previously-unaddressed sibling of the
+        exact bug class TGT-244/TGT-247/TGT-248 already fixed for the
+        record_message-failure path; cli/retry-download.pl and
+        cli/retry-transcription.pl needed no changes - they already
+        consumed the 3rd return value correctly, only the value they were
+        given was wrong in this one edge case.
+
 1.99  2026-09-14
       - BUGFIX (TGT-248, found via a scheduled JOB-003 hourly bug hunt):
         the exact TGT-247 bug class, unfixed in
