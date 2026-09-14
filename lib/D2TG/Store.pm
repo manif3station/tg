@@ -14,6 +14,13 @@ use constant DEFAULT_BOT_KEY => '';
 # D2TG::Download::prune_vault's own named-constant-default pattern.
 use constant DEFAULT_RETENTION_DAYS => 90;
 
+# TGT-238: a separate, shorter default for failed_downloads/
+# failed_transcriptions - these are retry queues, not history, so a
+# permanently-unretryable row (an expired file_id, say) should stop
+# cluttering d2 tg.unread's own listing well before a legitimate
+# message would age out of history.
+use constant DEFAULT_FAILED_QUEUE_RETENTION_DAYS => 30;
+
 sub new {
     my ( $class, %args ) = @_;
 
@@ -876,6 +883,23 @@ sub prune_history {
     $self->{dbh}->do(
         "DELETE FROM sent_replies WHERE datetime(created_at) < datetime('now', ?)",
         undef, "-$days days",
+    );
+
+    # TGT-238: failed_downloads/failed_transcriptions are pure retry
+    # queues with no other eviction path - a row is removed only by a
+    # successful retry, so a permanently-unretryable row (an expired
+    # Telegram file_id, say) would otherwise sit forever. A separate
+    # (shorter) default window from messages/sent_replies above, since
+    # this is about not cluttering a retry queue, not history retention.
+    my $failed_queue_days = $args{failed_queue_retention_days} // DEFAULT_FAILED_QUEUE_RETENTION_DAYS;
+
+    $self->{dbh}->do(
+        "DELETE FROM failed_downloads WHERE datetime(created_at) < datetime('now', ?)",
+        undef, "-$failed_queue_days days",
+    );
+    $self->{dbh}->do(
+        "DELETE FROM failed_transcriptions WHERE datetime(created_at) < datetime('now', ?)",
+        undef, "-$failed_queue_days days",
     );
 
     return;
