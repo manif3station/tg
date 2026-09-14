@@ -172,8 +172,10 @@ sub retry_failed_download {
         );
     }
 
+    my $still_queued;
     if ($record_ok) {
         D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
+        $still_queued = 0;
     }
     else {
         # TGT-196: persist the already-downloaded path on the row (a
@@ -184,9 +186,21 @@ sub retry_failed_download {
         D2TG::Poller::store_write_safe( $row->{chat_id}, 'mark_failed_download_downloaded', sub { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) } );
         print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
           . "a future retry can still restore history for this message, without re-downloading\n";
+        $still_queued = 1;
     }
 
-    return ( 1, $local_path );
+    # TGT-244 (found via a scheduled JOB-003 hourly bug hunt): the third
+    # return value tells the caller whether the row is still sitting in
+    # the queue after this attempt, independent of whether the download
+    # itself succeeded - $ok alone conflated "download succeeded" with
+    # "the whole retry attempt is fully done", which let
+    # auto_retry_failed_downloads' 60s throttle be silently bypassed
+    # whenever record_message kept failing after a successful download
+    # (TGT-196's own documented "persistently-failing record_message"
+    # scenario). A caller that only cares about the (ok, value) pair
+    # (e.g. cli/retry-download.pl's manual path) is unaffected - this is
+    # purely additive.
+    return ( 1, $local_path, $still_queued );
 }
 
 # TGT-221 (Q-015 answered by Michael, 2026-09-14: retry every 60s for
@@ -214,9 +228,17 @@ sub auto_retry_failed_downloads {
     );
 
     for my $row (@$due) {
-        my ( $ok, $result_or_error ) = retry_failed_download( $telegram, $store, $row, $dir, ua => $args{ua} );
+        my ( $ok, $result_or_error, $still_queued ) = retry_failed_download( $telegram, $store, $row, $dir, ua => $args{ua} );
 
-        if ( !$ok ) {
+        # TGT-244: stamp last_retry_at whenever this attempt leaves the
+        # row still in the queue - not only when the download step
+        # itself failed ($ok false). A download that succeeded but whose
+        # record_message write kept failing (TGT-196's own documented
+        # scenario) left the row queued too, and must be throttled by
+        # the same 60s interval, or failed_downloads_due_for_retry's own
+        # "last_retry_at IS NULL" clause keeps matching it on every poll
+        # cycle forever.
+        if ( !$ok || $still_queued ) {
             eval { $store->mark_failed_download_retried( $row->{id} ) };
         }
     }
@@ -391,8 +413,17 @@ production write that has no such hook.
 TGT-104: retries one L<D2TG::Store/failed_downloads> row - C<$row> is
 one of the hashrefs that method returns (C<id>, C<chat_id>,
 C<message_id>, C<file_id>, C<sender>, C<media_kind>, C<caption_note>,
-C<error>). Returns C<(1, $local_path)> on success or C<(0, $error)> on
-failure, mirroring L<D2TG::Poller>'s own C<_run_non_fatal> return shape.
+C<error>). Returns C<(1, $local_path, $still_queued)> on a successful
+download, or C<(0, $error)> if the download itself failed, mirroring
+L<D2TG::Poller>'s own C<_run_non_fatal> return shape for the first two
+values. C<$still_queued> (TGT-244, found via a scheduled JOB-003 hourly
+bug hunt) is true when the download succeeded but the row was
+nonetheless left in the queue because C<record_message> itself failed
+(TGT-196's own documented "persistently-failing C<record_message>"
+scenario) - C<$ok> alone cannot distinguish that case from a fully
+completed retry, since both return C<$ok = 1>. L</auto_retry_failed_downloads>
+uses C<$still_queued> to keep throttling a row correctly even when it's
+the bookkeeping write, not the download, that keeps failing.
 
 On success, restores the message into C<$store>'s own history via
 C<record_message> when C<$row> carries a C<media_kind> (the same
@@ -449,10 +480,22 @@ C<failed_downloads> row visible but explicitly deferred automatic
 recovery - this closes that gap. Selects rows via
 L<D2TG::Store/failed_downloads_due_for_retry> and reuses
 L</retry_failed_download> itself for the actual retry attempt (no
-duplicated retry logic) - a failed attempt calls
-L<D2TG::Store/mark_failed_download_retried> to stamp C<last_retry_at>;
-a successful one is already handled by C<retry_failed_download>'s own
-L<D2TG::Store/remove_failed_download> call. Intended to be called once
+duplicated retry logic) - C<last_retry_at> is stamped via
+L<D2TG::Store/mark_failed_download_retried> whenever the row is left
+queued by the attempt: either the download itself failed (C<$ok> false)
+or, per C<retry_failed_download>'s own C<$still_queued> return value
+(TGT-244, found via a scheduled JOB-003 hourly bug hunt), the download
+succeeded but C<record_message> kept failing and the row was
+deliberately kept queued (TGT-196's own documented scenario) - before
+this fix, C<$ok> alone was checked, which meant a row stuck in that
+exact partial-success state never got C<last_retry_at> stamped at all
+and was retried on every single poll cycle instead of once per
+C<AUTO_RETRY_INTERVAL_SECONDS>, silently defeating the whole point of
+this throttle. A fully successful attempt (row removed) is unaffected -
+it's already handled by C<retry_failed_download>'s own
+L<D2TG::Store/remove_failed_download> call and never needs
+C<last_retry_at> stamped at all, since the row no longer exists.
+Intended to be called once
 per C<(chat_id group, bot)> pair per poll cycle from C<cli/poller.pl>'s
 main loop, scoped to that pair's own C<bot_key> - a retry needs the
 matching bot's own C<$telegram>, since Telegram's C<file_id> values
