@@ -3364,3 +3364,13 @@ with this session's own established intermittent-availability pattern
 (sometimes works, sometimes sandbox-errors, sometimes hangs) rather
 than a fully dead session. The one successful run's own finding matches
 the independent `grep` evidence above exactly.
+
+Self-caught bug during the QA stage: the initial `t/222-...t` used a
+bare text-match regex (`qr/\bHTTP::Tiny\b/`), which false-positived
+against `D2TG::Telegram`'s own POD (added in this same ticket)
+naming `HTTP::Tiny` specifically to document that it is NOT used -
+the full suite run at QA caught this immediately (1/1608 failed).
+Fixed by narrowing the guard to actual code usage (a `use`/`require`
+statement or a `->` method call), which a bare name-mention in prose
+can never match. Full suite re-confirmed clean at 1608/1608 after the
+fix.
