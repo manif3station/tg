@@ -112,6 +112,41 @@ if (@queued_failures) {
     }
 }
 
+# TGT-239 (found via a scheduled JOB-003 hourly bug hunt): TGT-237
+# added failed_transcriptions as a structural sibling of
+# failed_downloads, but this command was never updated to also surface
+# it - a queued failed transcription was invisible here, discoverable
+# only by catching the poller's own transient stdout at the moment it
+# happened, or by running d2 tg.retry-transcription speculatively with
+# no listed argument. Mirrors the failed_downloads section above
+# exactly, including its own multi-bot RETRY WITH scoping (TGT-229).
+my @queued_transcriptions = @{ $store->failed_transcriptions };
+if (@queued_transcriptions) {
+    print "\n" if @unread || @queued_failures;
+
+    my %distinct_bot_key = map { ( $_->{bot_key} // '' ) => 1 } @queued_transcriptions;
+    my $multi_bot = keys(%distinct_bot_key) > 1 || !exists $distinct_bot_key{''};
+
+    if ($multi_bot) {
+        print "Queued failed transcriptions:\n";
+        for my $row (@queued_transcriptions) {
+            my $bot_key = $row->{bot_key} // '';
+            my $bot_note = $bot_key ne '' ? ' (bot: ' . D2TG::Config::masked_token($bot_key) . ')' : '';
+            print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}$bot_note: $row->{error}\n";
+        }
+        for my $bot_key ( sort keys %distinct_bot_key ) {
+            my $bot_flag = $bot_key ne '' ? ' --bot ' . D2TG::Config::masked_token($bot_key) : '';
+            print "RETRY WITH: d2 tg.retry-transcription --all$bot_flag\n";
+        }
+    }
+    else {
+        print "Queued failed transcriptions (RETRY WITH: d2 tg.retry-transcription --all):\n";
+        for my $row (@queued_transcriptions) {
+            print "[$row->{chat_id}] msg #$row->{message_id} $row->{sender}: $row->{error}\n";
+        }
+    }
+}
+
 =head1 NAME
 
 unread - list new/non-replied messages, dispatched as C<d2 tg.unread>
