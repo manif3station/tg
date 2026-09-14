@@ -1211,6 +1211,25 @@ seconds later, not a strict timing guarantee).
 
 =back
 
+=head2 prune_history(retention_days => $days = 90)
+
+TGT-235: deletes rows older than the retention window from C<messages>
+and C<sent_replies> - neither table had any retention/eviction policy
+before this, unlike L<D2TG::Download/prune_vault> which already caps
+the attachments vault's own disk usage by byte count. Mirrors
+C<prune_vault>'s own pattern: a sane hardcoded default
+(C<DEFAULT_RETENTION_DAYS>, currently 90), an optional
+C<retention_days> override, and a silent no-op when nothing is past
+the window. Called from C<cli/poller.pl>'s per-cycle loop right after
+the existing C<prune_vault> call, C<eval>-wrapped there so a
+locked/busy database can't turn this housekeeping into a poll-cycle
+failure - a failed prune simply retries next cycle.
+
+No foreign-key relationship exists between C<messages>/C<sent_replies>
+and C<failed_downloads>/C<text_only_replies> (confirmed by reading the
+schema, not assumed), so pruning an aged-out C<messages> row cannot
+orphan a still-relevant C<failed_downloads> row.
+
 =head2 disconnect
 
 Disconnects the underlying DBI handle (TGT-036). C<cli/poller.pl> calls

@@ -3977,3 +3977,80 @@ threads the identical `bot_key` value both sides actually use, and
 manually verified the perlsec-relevant surface (bot tokens are opaque
 strings passed as bound SQL parameters, never interpolated or
 shell-executed).
+
+## TGT-235: messages/sent_replies tables had no retention policy (unbounded row growth)
+
+Found via a scheduled JOB-004 improvement hunt. `D2TG::Store`'s
+`messages` and `sent_replies` tables had no retention/eviction policy
+at all - every inbound message and every sent reply's dedup row was
+kept forever. This is asymmetric with the codebase's own established
+pattern: the attachments *vault* (files on disk) is already actively
+size-capped via `D2TG::Download::prune_vault` (TGT-052/054/134), but
+the SQLite rows describing those same messages/replies were never
+pruned anywhere. For a long-running Tira monitor-job poller, this
+meant unbounded DB growth over time, with every read path
+(`unread_messages`, `recent_messages`, `messages_in_range`,
+`text_only_replies`, `is_recent_duplicate_reply`) scanning
+ever-larger tables. Checked the full ticket list first - no existing
+card covered this (TGT-052/054/134 solved only the vault-file half).
+
+During drafting, one inaccurate premise in the original ticket text
+(filed by the hunt fork) was caught and corrected: it claimed a
+"CLI-flag precedent" for the retention config value, mirroring
+`prune_vault`'s `max_bytes` argument - but `prune_vault` itself has no
+CLI/env-var flag at all, only a function-argument override with a
+hardcoded default. The corrected key_detail documents this; the
+implementation follows the real precedent (function-arg override, no
+new CLI flag), not the ticket's original, inaccurate framing.
+
+Fixed by a new `D2TG::Store::prune_history(retention_days => $days =
+90)` mirroring `prune_vault`'s own pattern exactly: `DELETE FROM
+messages/sent_replies WHERE datetime(created_at) < datetime('now',
+'-N days')`, a sane hardcoded default (90 days, a new
+`DEFAULT_RETENTION_DAYS` constant matching `DEFAULT_BOT_KEY`'s own
+named-constant convention), silent no-op when nothing is past the
+window, overridable via an optional argument. Wired into
+`cli/poller.pl`'s per-cycle loop immediately after the existing
+`prune_vault` call, `eval`-wrapped with a `PRUNE HISTORY ERROR` STDERR
+line on failure - matching every other non-essential store-write call
+site in this script, so a locked/busy database can't turn this
+housekeeping into a poll-cycle failure (the row simply gets pruned on
+a later cycle instead).
+
+`failed_downloads`/`text_only_replies` reference the same chat/message
+identity as `messages`/`sent_replies` but have no foreign-key
+constraint to either - both are already independently bounded
+(`failed_downloads` by active drain via retry, `text_only_replies` is
+itself a view over `sent_replies`, pruned together with it) - so
+deleting an aged-out `messages` row cannot orphan a still-relevant
+`failed_downloads` row; this was confirmed by reading the schema
+(no FK declarations anywhere in `D2TG::Store`) rather than assumed.
+
+New test `t/235-message-history-retention.t`: confirmed genuinely red
+against the pre-fix code (`prune_history` method did not exist),
+confirmed green after the fix (6/6) - covering the default-window
+prune, a caller-supplied shorter `retention_days` override, a
+no-op-when-nothing-aged-out case, and `sent_replies` pruning
+independently of `messages`. Full suite re-run clean at 1698/1698
+(batched under `Devel::Cover` due to genuine host memory pressure this
+session - several stale `perl-test` containers from earlier
+timed-out/killed runs were found still consuming RAM and removed
+before retrying; the full suite still ran and passed, just split into
+4 batches accumulating into one `cover_db` rather than one single
+invocation, which `Devel::Cover` supports natively). 100%
+statement+subroutine coverage confirmed on `lib/D2TG/Store.pm`;
+`cli/poller.pl` remains outside `Devel::Cover`'s direct
+instrumentation (invoked via subprocess in its own tests) - an
+accepted, previously-documented limitation, not new to this ticket.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: read
+`D2TG::Store`'s full schema to confirm no FK constraint exists between
+`messages` and `failed_downloads`/`text_only_replies` (so pruning
+cannot orphan anything), and manually verified the perlsec-relevant
+surface (the retention window value is always a bound SQL parameter
+via string interpolation of a numeric day-count into a fixed SQL
+literal shape `'-$days days'`, matching `is_recent_duplicate_reply`'s
+own already-proven `'-$window_seconds seconds'` pattern one screen
+above it in the same file - never user-supplied free text).

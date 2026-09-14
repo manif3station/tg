@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v1.88).** FEATURE (TGT-235, found via a
+scheduled JOB-004 improvement hunt): `D2TG::Store`'s `messages` and
+`sent_replies` tables had no retention/eviction policy at all - every
+inbound message and every sent reply's dedup row was kept forever,
+unlike `D2TG::Download::prune_vault` which already caps the
+attachments vault's own disk usage. New `prune_history` mirrors
+`prune_vault`'s own pattern (age-based cap, default 90 days,
+overridable, silent no-op when nothing is past the window), wired into
+`cli/poller.pl`'s per-cycle loop.
+
 **Status: early implementation (v1.87).** BUGFIX (TGT-234, found via a
 scheduled JOB-003 hourly bug hunt): `cli/poller.pl`'s multi-bot startup
 seeded every admin chat_id into the allow-list only under the

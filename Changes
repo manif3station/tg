@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.88  2026-09-14
+      - FEATURE (TGT-235, found via a scheduled JOB-004 improvement
+        hunt): D2TG::Store's messages and sent_replies tables had no
+        retention/eviction policy at all - every inbound message and
+        every sent reply's dedup row was kept forever, unlike
+        D2TG::Download::prune_vault which already caps the attachments
+        vault's own disk usage. New D2TG::Store::prune_history mirrors
+        prune_vault's own pattern: an age-based cap (default 90 days),
+        silent no-op when nothing is past the window, overridable via
+        an optional retention_days argument. Wired into
+        cli/poller.pl's per-cycle loop right after the existing
+        prune_vault call, eval-wrapped so a locked/busy database
+        doesn't turn this housekeeping into a poll-cycle failure. New
+        test: t/235-message-history-retention.t.
+
 1.87  2026-09-14
       - BUGFIX (TGT-234, found via a scheduled JOB-003 hourly bug
         hunt): cli/poller.pl's multi-bot startup seeded every admin
