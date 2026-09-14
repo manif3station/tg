@@ -4284,3 +4284,59 @@ own existing CRUD/retry behavior), and `t/235-message-history-retention.t`
 also passes unmodified (proving the new `failed_queue_retention_days`
 argument doesn't interfere with the pre-existing `retention_days`
 sweep of `messages`/`sent_replies`).
+
+## TGT-239: d2 tg.unread never surfaced queued failed_transcriptions
+
+Found via a scheduled JOB-003 hourly bug-hunt fork. `cli/unread.pl`
+lists queued `failed_downloads` (TGT-204/229) but TGT-237's own
+`failed_transcriptions` retry queue - a structural sibling with the
+same schema shape and `D2TG::Store` accessor pattern - was never
+wired into this command's own visibility. A grep across `cli/unread.pl`
+and `lib/D2TG/Poller.pm` confirmed zero references to
+`failed_transcriptions` outside the poller's own queuing code and
+`cli/retry-transcription.pl` itself. A failed voice transcription was
+queued silently and never surfaced again - discoverable only by
+catching the poller's own transient stdout at the exact moment of
+failure, or by running `d2 tg.retry-transcription` speculatively with
+no listed argument. TGT-238's own 30-day `failed_queue_retention_days`
+compounded this into permanent, silent loss: an un-surfaced queued
+transcription failure could quietly expire with zero visibility -
+exactly the operational gap TGT-204 already fixed once for
+`failed_downloads`, reopened for its sibling queue.
+
+Fixed by adding a "Queued failed transcriptions" section to
+`cli/unread.pl`, structured identically to the existing
+`failed_downloads` section immediately above it in the same file -
+same multi-bot `RETRY WITH` scoping logic (TGT-229's own convention,
+reused rather than reinvented byte-for-byte), same masked-token
+display, same per-distinct-bot-key `RETRY WITH` line, printed after
+the failed-downloads section (a blank line separator only when
+something already printed above it, matching the existing separator
+logic exactly). Recovery hint names `d2 tg.retry-transcription --all`
+instead of `d2 tg.retry-download --all`. No changes to `D2TG::Store`,
+`D2TG::Poller`, or `cli/retry-transcription.pl` themselves - both
+already correctly implemented by TGT-237, per this ticket's own scope.
+
+New test `t/239-unread-surfaces-failed-transcriptions.t`: confirmed
+genuinely red against the pre-fix code (5/8 subtests failed - the new
+section, its recovery hint, and multi-bot scoping were all absent),
+confirmed green after the fix (8/8) - covering a single queued row's
+section/hint, multi-bot scoping (mirroring `t/229`'s own precedent),
+both queues appearing together in the correct order, and an
+empty-store regression baseline proving byte-identical output when
+nothing is queued. Full suite re-run clean at 1793/1793, including
+`t/229-unread-multi-bot-retry-hint.t`/`t/124-unread-usage-pod-parity.t`/
+`t/109-unread-unrecognized-args-refuse.t` passing unmodified. `cli/unread.pl`
+remains outside `Devel::Cover`'s direct instrumentation (invoked via
+subprocess in its own tests) - the same accepted, previously-documented
+limitation as every other `cli/*.pl` script; no `lib/` module was
+touched by this ticket, so no coverage gate applied.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: diffed
+the new section line-by-line against the existing `failed_downloads`
+section immediately above it to confirm structural parity (same
+multi-bot detection logic, same masked-token display, same separator
+handling), and confirmed the full pre-existing `failed_downloads`
+listing test suite passes unmodified.

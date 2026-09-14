@@ -199,4 +199,16 @@ Each row now names its own bot (masked) when more than one bot's queue
 is present, and one C<RETRY WITH> line is printed per distinct bot
 found; single-bot installs see byte-identical output to before.
 
+After the failed-downloads section (or in its place, if there are
+none), also lists any currently-queued failed voice transcriptions via
+L<D2TG::Store/failed_transcriptions> (TGT-239, found via a scheduled
+JOB-003 hourly bug hunt - TGT-237 built this retry queue as a
+structural sibling of C<failed_downloads> but never wired it into this
+command's own visibility, so a queued failed transcription was
+invisible here and could silently expire via TGT-238's own 30-day
+eviction with zero visibility). Structured identically to the
+failed-downloads section above it, including the same per-bot
+C<RETRY WITH> scoping (TGT-229's own convention); naming
+C<d2 tg.retry-transcription --all> as the recovery command.
+
 =cut

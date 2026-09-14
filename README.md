@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v1.92).** FEATURE (TGT-239, found via
+a scheduled JOB-003 hourly bug hunt): `d2 tg.unread` never surfaced
+queued `failed_transcriptions` rows, unlike `failed_downloads` -
+TGT-237 built the retry queue but never wired it into `d2 tg.unread`'s
+visibility. Now prints a "Queued failed transcriptions" section
+mirroring the existing `failed_downloads` section exactly, including
+multi-bot `RETRY WITH` scoping - previously a failed voice
+transcription could silently expire via TGT-238's own 30-day eviction
+with zero visibility.
+
 **Status: early implementation (v1.91).** FEATURE (TGT-238, found via
 a scheduled JOB-004 improvement hunt): `D2TG::Store::prune_history`
 (TGT-235) added retention for `messages`/`sent_replies` but left

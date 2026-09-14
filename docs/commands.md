@@ -727,7 +727,18 @@ messages, using the same leading-position, eval-wrapped
 preserves today's exact default-bot behavior unchanged. TGT-232 made
 `D2TG::Store`'s `messages` table `bot_key`-aware, but until now this
 command had no `--bot` flag at all, so it could never actually exercise
-that scoping.
+that scoping. After the failed-downloads section (or in its place, if
+there are none), also lists any currently-queued failed voice
+transcriptions (TGT-239, found via a scheduled JOB-003 hourly bug hunt
+- TGT-237 built the `failed_transcriptions` retry queue but never
+wired it into this command's own visibility, so a queued failed
+transcription was invisible here and could silently expire via
+TGT-238's own 30-day eviction with zero visibility), naming the exact
+recovery command (`d2 tg.retry-transcription --all`) - structured
+identically to the failed-downloads section above it, including the
+same per-bot `RETRY WITH` scoping (TGT-229's own convention, reused
+rather than reinvented); single-bot installs see byte-identical output
+when nothing is queued.
 
 ## `d2 tg.attachment [--bot <token>] <chat_id> <message_id> [--db <alias> | -d <alias>]`
 
