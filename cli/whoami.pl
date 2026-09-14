@@ -19,11 +19,7 @@ if (@ARGV) {
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
-eval { D2TG::Config::require_existing_base_dir($base_dir) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+D2TG::Config::require_existing_base_dir_or_die($base_dir);
 
 my $skill_root = File::Spec->catdir( $Bin, '..' );
 my $version    = D2TG::Config::skill_version( default_root => $skill_root );

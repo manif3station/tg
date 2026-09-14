@@ -1,6 +1,16 @@
 # tg
 
-**Status: early implementation (v1.82).** RELIABILITY FIX (TGT-229,
+**Status: early implementation (v1.83).** REFACTOR (TGT-230, found via
+a scheduled JOB-004 improvement hunt): `D2TG::Config::
+require_existing_base_dir`'s own eval/print-STDERR/exit(1) wrapper was
+duplicated byte-for-byte across all 11 `cli/*.pl` scripts that call it
+- the one remaining startup-guard call never given its own `_or_die`
+sibling, unlike `resolve_alias_dir_or_die` and `open_store_or_die`.
+Extracted into a new `require_existing_base_dir_or_die` helper; all 11
+call sites updated. Pure behavior-preserving refactor - no printed
+message, exit code, or control flow changed.
+
+RELIABILITY FIX (TGT-229,
 found via a scheduled JOB-003 hourly bug hunt): `d2 tg.unread`'s
 queued-failed-download listing is unscoped across all bots, but its
 own printed recovery hint was one bot-agnostic literal - `RETRY WITH:

@@ -470,6 +470,24 @@ sub require_existing_base_dir {
       . "value (typo?) or create the directory yourself first.\n";
 }
 
+sub require_existing_base_dir_or_die {
+    my ($base_dir) = @_;
+
+    # TGT-230 (found via a scheduled JOB-004 improvement hunt): the
+    # eval/print-STDERR/exit(1) wrapper around require_existing_base_dir
+    # was duplicated byte-for-byte across 11 cli/*.pl scripts - the one
+    # remaining startup-guard call still hand-wrapped everywhere instead
+    # of having its own _or_die sibling, unlike resolve_alias_dir_or_die
+    # (TGT-172) and D2TG::Poller::open_store_or_die. Pure refactor: no
+    # change to the printed message, exit code, or control flow.
+    my $result = eval { require_existing_base_dir($base_dir) };
+    if ($@) {
+        print STDERR $@;
+        exit 1;
+    }
+    return $result;
+}
+
 sub resolve_self_exec_path {
     my (%args) = @_;
 
@@ -928,6 +946,18 @@ C<telegram.messages.db> inside it. This function does not affect the
 C<.tira/> subdirectory itself - that is still created as normal once
 C<$base_dir> is confirmed real; only the base directory itself must
 pre-exist.
+
+=head2 require_existing_base_dir_or_die($base_dir)
+
+TGT-230 (found via a scheduled JOB-004 improvement hunt): a thin
+wrapper around L</require_existing_base_dir> that catches its die,
+prints the message to STDERR, and exits 1 - the exact eval/print-
+STDERR/exit(1) pattern all 11 C<cli/*.pl> scripts that call
+C<require_existing_base_dir> had each independently duplicated,
+matching L</resolve_alias_dir_or_die>'s own established shape for the
+same problem. Returns C<$base_dir> on success, same as
+C<require_existing_base_dir>; never returns on failure. A pure
+extraction - no behavior change at any of the 11 call sites.
 
 =head2 skill_version(default_root => $path)
 

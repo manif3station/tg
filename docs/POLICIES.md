@@ -3641,3 +3641,55 @@ behavior itself is already proven correct elsewhere - the new code only
 adds grouping/branching logic around an already-trusted primitive, and
 the test asserts the raw token is never printed, matching this
 project's own established TGT-086 convention.
+
+## TGT-230: extracted require_existing_base_dir's duplicated eval/print/exit wrapper
+
+Found via a scheduled JOB-004 improvement hunt - not a bug.
+`D2TG::Config::require_existing_base_dir($base_dir)` is called from all
+11 `cli/*.pl` scripts that need a resolved storage base directory
+(`approve.pl`, `attachment.pl`, `history.pl`, `poller.pl`, `reply.pl`,
+`retry-download.pl`, `send.pl`, `status.pl`, `text-only-replies.pl`,
+`unread.pl`, `whoami.pl`), and at every single call site it was wrapped
+in the exact same byte-identical 5-line block: `eval {
+D2TG::Config::require_existing_base_dir($base_dir) }; if ($@) { print
+STDERR $@; exit 1; }`. This is the identical eval/print-STDERR/exit(1)
+shape this project has already extracted twice before for other
+startup-guard calls with the same duplication problem:
+`resolve_alias_dir_or_die` (TGT-172, wraps `resolve_alias_dir`) and
+`D2TG::Poller::open_store_or_die` (wraps `D2TG::Store->new`).
+`require_existing_base_dir` was the one remaining startup-guard call
+still hand-wrapped at every site instead of having its own `_or_die`
+sibling.
+
+Confirmed by direct `grep -rn -B1 -A4` across every `cli/*.pl` file:
+byte-identical at all 11 sites.
+
+Fixed by adding `D2TG::Config::require_existing_base_dir_or_die
+($base_dir)`, matching `resolve_alias_dir_or_die`'s exact existing
+shape and adjacent in the same file, and replacing all 11 call sites'
+inline blocks with a single call to it. Pure behavior-preserving
+refactor: no change to any printed message, exit code, or control
+flow - only the duplication is removed.
+
+New test `t/230-require-existing-base-dir-or-die.t`, matching
+`t/172-resolve-alias-dir-or-die.t`'s own established `CORE::GLOBAL::
+exit` interception pattern (installed in a `BEGIN` block before
+`D2TG::Config` loads, since a bare `exit` call's binding is decided at
+compile time): confirmed genuinely red against the pre-fix code
+(undefined subroutine error - the helper didn't exist yet), confirmed
+green after the fix (5/5) - both the success-passthrough branch and the
+failure branch (exits 1, prints the exact same STDERR text
+`require_existing_base_dir` itself dies with, byte-for-byte) are
+covered. Full suite re-run clean at 1638/1638 (one transient host-load
+flake in `t/66-lock-last-poller-wins.t`, confirmed unrelated via an
+isolated re-run, consistent with this session's own documented flake
+history for that file).
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: `perl
+-Ilib -c` syntax-checked all 11 modified `cli/*.pl` files cleanly, and
+the full suite (which exercises every one of these 11 scripts via
+subprocess across dozens of existing test files) passed unmodified -
+proof the refactor is genuinely behavior-preserving, not just
+syntactically valid.

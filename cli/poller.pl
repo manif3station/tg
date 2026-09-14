@@ -121,11 +121,7 @@ my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
-eval { D2TG::Config::require_existing_base_dir($base_dir) };
-if ($@) {
-    print STDERR $@;
-    exit 1;
-}
+D2TG::Config::require_existing_base_dir_or_die($base_dir);
 
 # TGT-062: refuse to start a second instance against the same storage
 # location - a prior poller merely suspended (Ctrl-Z, not killed) still
