@@ -189,6 +189,41 @@ sub retry_failed_download {
     return ( 1, $local_path );
 }
 
+# TGT-221 (Q-015 answered by Michael, 2026-09-14: retry every 60s for
+# up to 5 minutes total, independent of poll cadence): TGT-204 made a
+# queued failed_downloads row visible but explicitly deferred automatic
+# recovery - it sat queued until a human/agent ran d2 tg.retry-download
+# by hand. Called once per (chat_id group, bot) pair per poll cycle
+# from cli/poller.pl's main loop, scoped to that pair's own bot_key
+# (a retry needs the matching bot's own $telegram, since Telegram's
+# file_id values are bot-token-scoped). Reuses retry_failed_download
+# itself for the actual retry - only the "which rows, how often"
+# selection logic is new (D2TG::Store::failed_downloads_due_for_retry).
+# A row past the 5-minute window is silently skipped, not deleted - it
+# stays fully visible/retryable via d2 tg.unread/d2 tg.retry-download
+# exactly as before; this is additive automatic recovery, not a
+# replacement for the manual escape hatch. Never dies - a locked/busy
+# database or a retry failure must not turn this non-essential
+# housekeeping into a poll-cycle failure, matching prune_vault/
+# prune_history's own established non-fatal call-site pattern.
+sub auto_retry_failed_downloads {
+    my ( $telegram, $store, $dir, %args ) = @_;
+
+    my $due = $store->failed_downloads_due_for_retry(
+        defined $args{bot_key} ? ( bot_key => $args{bot_key} ) : ()
+    );
+
+    for my $row (@$due) {
+        my ( $ok, $result_or_error ) = retry_failed_download( $telegram, $store, $row, $dir, ua => $args{ua} );
+
+        if ( !$ok ) {
+            eval { $store->mark_failed_download_retried( $row->{id} ) };
+        }
+    }
+
+    return;
+}
+
 # TGT-237: retry_failed_download's own analogue for a queued failed
 # voice transcription. Re-downloads the voice file transiently (never
 # passed a `dir`, matching D2TG::Poller's own $transcribe_voice

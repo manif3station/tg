@@ -452,6 +452,24 @@ until ($shutting_down) {
           if defined $new_offset
           && D2TG::Poller::persist_offset_safe( $store, $new_offset, $pair->{bot_key} );
 
+        # TGT-221 (Q-015 answered by Michael: retry every 60s for up
+        # to 5 minutes total): scoped to this pair's own bot_key, since
+        # a retry needs the matching bot's own $telegram (Telegram's
+        # file_id values are bot-token-scoped) - run once per pair per
+        # cycle, matching every other per-pair step in this loop.
+        # eval-wrapped so a locked/busy database or a retry failure
+        # can never turn this non-essential housekeeping into a
+        # poll-cycle failure.
+        eval {
+            D2TG::Download::auto_retry_failed_downloads(
+                $pair->{telegram}, $store, $attachments_dir,
+                bot_key => $pair->{bot_key},
+            );
+        };
+        if ($@) {
+            print STDERR "AUTO RETRY ERROR: failed_downloads housekeeping sweep failed - will retry next cycle.\n";
+        }
+
         # TGT-116 (Codex review finding): written after EACH pair, not
         # once after the whole for-loop - a single voice transcription
         # can legitimately take up to 10800s on its own (D2TG::Transcribe's

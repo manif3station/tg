@@ -260,6 +260,24 @@ sub _ensure_schema {
         }
     }
 
+    # TGT-221 (Q-015 answered by Michael: retry every 60s for up to 5
+    # minutes total): NULL means "never auto-retried yet" - the same
+    # duplicate-tolerant ALTER TABLE pattern local_path above already
+    # established. Placed AFTER the TGT-219 migration block above (not
+    # before, like local_path is) - that migration's own CREATE TABLE
+    # only lists the columns it explicitly knows about, so an earlier
+    # placement would have this column silently dropped by the
+    # rename/create/copy/drop on every fresh database (caught before
+    # this ticket shipped, not after). Set by
+    # mark_failed_download_retried after each automatic retry attempt
+    # (success or failure); read by failed_downloads_due_for_retry to
+    # decide whether 60s have elapsed since the last attempt.
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE failed_downloads ADD COLUMN last_retry_at TEXT') };
+    }
+    die $@ if $@ && $@ !~ /duplicate column name/;
+
     # TGT-237: mirrors failed_downloads' own shape, but a fresh table
     # created with bot_key from the start (unlike failed_downloads,
     # which needed TGT-219's own rename/create/copy/drop migration to
@@ -690,17 +708,54 @@ sub failed_downloads {
     # which bot queued it even without filtering).
     if ( defined $args{bot_key} ) {
         return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
+            'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
              FROM failed_downloads WHERE bot_key = ? ORDER BY id',
             { Slice => {} }, $args{bot_key},
         );
     }
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path
+        'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
          FROM failed_downloads ORDER BY id',
         { Slice => {} }
     );
+}
+
+# TGT-221 (Q-015 answered by Michael: retry every 60s for up to 5
+# minutes total, independent of poll cadence): rows still within the
+# 5-minute auto-retry window (measured from created_at, when the
+# failure was first queued) and not attempted in the last 60s
+# (last_retry_at NULL - never attempted - or older than 60s). A row
+# past the 5-minute window is deliberately excluded here, not deleted -
+# it stays fully visible/retryable via failed_downloads/
+# d2 tg.retry-download exactly as before, only automatic retry gives up.
+use constant AUTO_RETRY_INTERVAL_SECONDS => 60;
+use constant AUTO_RETRY_WINDOW_SECONDS   => 300;
+
+sub failed_downloads_due_for_retry {
+    my ( $self, %args ) = @_;
+
+    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
+         FROM failed_downloads
+         WHERE datetime(created_at) >= datetime('now', ?)
+           AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
+    my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
+
+    if ( defined $args{bot_key} ) {
+        $sql .= ' AND bot_key = ?';
+        push @bind, $args{bot_key};
+    }
+    $sql .= ' ORDER BY id';
+
+    return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
+}
+
+sub mark_failed_download_retried {
+    my ( $self, $id ) = @_;
+
+    $self->{dbh}->do( 'UPDATE failed_downloads SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
+
+    return;
 }
 
 sub remove_failed_download {
