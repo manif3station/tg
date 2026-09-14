@@ -3839,3 +3839,20 @@ drop pattern exactly, and the full existing test suite (which exercises
 every touched function extensively in the single-bot/unscoped case)
 passing unmodified is strong evidence the backward-compatible default
 path genuinely works as before.
+
+Self-caught coverage gap during the QA stage: `lib/D2TG/Store.pm` came
+in at only 96.6% statement (not the mandatory 100%) on the first
+coverage run. Traced via `cover -report text ... | grep '\*\*\*'`
+(Devel::Cover's own zero-hit marker) to two gaps: (1) the new
+migration's own `rollback`/`die` error-handling branch, and (2)
+`recent_messages`/`messages_in_range`'s own `bot_key`-filter branches,
+neither exercised by the original test file. Fixed by adding a
+mid-migration-failure regression test matching
+`t/75-multi-bot-allow-list-scoping.t`'s own established `local
+*DBI::db::do` mocking pattern (simulates the data-copy `INSERT` step
+failing, confirms the error propagates loudly, then confirms a genuine
+re-open with the real code migrates successfully and the pre-existing
+row survives), plus two new subtests exercising `recent_messages(bot_
+key => ...)` and `messages_in_range(bot_key => ...)` directly.
+Re-confirmed 100%/100%/100% on `lib/D2TG/Store.pm`, `lib/D2TG/Poller.pm`,
+and `lib/D2TG/Reply.pm` after the fix.
