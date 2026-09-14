@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+1.80  2026-09-14
+      - SECURITY FIX (TGT-227, found via a scheduled JOB-003 hourly
+        bug hunt): the poller's own REPLY WITH recovery-command
+        template printed "d2 tg.reply <chat_id> \"...\" --bot
+        <masked_token> --reply-to-message-id <id>" - --bot placed
+        AFTER chat_id, a position neither cli/reply.pl's own
+        flag-parsing loop (leading-only) nor D2TG::Reply::
+        parse_cli_args (no trailing --bot handling at all) ever
+        consumed. A --bot flag there fell straight into the joined
+        reply text and was sent to Telegram verbatim, while the
+        actual send silently fell back to the wrong bot. Worse,
+        substituting the real token in place - exactly what this
+        module's own docs instruct an operator to do - leaked the
+        real bot credential into the sent Telegram message text.
+        Fixed by printing --bot BEFORE chat_id, matching cli/
+        reply.pl's own already-working leading-position parsing
+        (the same convention cli/approve.pl/cli/retry-download.pl
+        already use) - no parser changes needed. New test:
+        t/227-reply-with-bot-flag-position-parseable.t.
+
 1.79  2026-09-14
       - REFACTOR (TGT-226, found via a scheduled JOB-004 improvement
         hunt): the masked "--bot <token>" flag fragment was built via

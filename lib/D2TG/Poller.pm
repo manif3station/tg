@@ -807,9 +807,21 @@ sub _bot_flag {
 sub _print_reply_template {
     my ( $chat_id, $message_id, $bot_token ) = @_;
 
+    # TGT-227 (found via a scheduled JOB-003 hourly bug hunt): --bot
+    # must be printed BEFORE $chat_id, not after - cli/reply.pl's own
+    # flag-parsing loop (matching cli/approve.pl/cli/retry-download.pl's
+    # established convention) only recognizes --bot while it is the
+    # leading unconsumed argument; D2TG::Reply::parse_cli_args has no
+    # trailing-position handling for --bot at all (only for
+    # --reply-to-message-id). Printing it after chat_id/text (the old
+    # behavior) meant it was never parsed as a flag - it fell straight
+    # into the joined reply text and was sent to Telegram verbatim,
+    # while the actual send silently fell back to the wrong bot. Worse,
+    # substituting the real token in place (as this module's own docs
+    # instruct) leaked the real credential into the sent message text.
     my $bot_flag   = _bot_flag($bot_token);
     my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
-    print qq{REPLY WITH: d2 tg.reply $chat_id "..."$bot_flag$reply_flag\n};
+    print qq{REPLY WITH: d2 tg.reply$bot_flag $chat_id "..."$reply_flag\n};
     return;
 }
 
@@ -1477,12 +1489,18 @@ C<< (msg #N) >> (TGT-040), when Telegram provided one.
 
 Every content line (text, a successfully transcribed voice message, or a
 successfully/plainly reported photo/document) is immediately followed by
-a C<< REPLY WITH: d2 tg.reply <chat_id> "..." [--bot <token>] --reply-to-message-id <id> >>
+a C<< REPLY WITH: d2 tg.reply [--bot <token>] <chat_id> "..." --reply-to-message-id <id> >>
 line - a ready-to-run reply command template with the chat id and
 message id filled in, per the owner's answered design question (Q-004).
 The C<--reply-to-message-id> flag (TGT-040) is only included when
 C<message_id> is known. C<--bot <masked_token>> (TGT-057) is only
-included when C<bot_token> is given to C<run_once> - C<cli/poller.pl> passes
+included when C<bot_token> is given to C<run_once>, and is printed
+BEFORE C<chat_id> (TGT-227, found via a scheduled JOB-003 hourly bug
+hunt, a security-relevant fix - printing it after C<chat_id> put it in
+a position C<cli/reply.pl> never actually parses as a flag, so it fell
+into the reply text itself, leaking the real token into the sent
+message once an operator substituted it in place as instructed below).
+C<cli/poller.pl> passes
 its own receiving bot's token here whenever it's running in multi-bot
 mode (TGT-049), since C<d2 tg.reply>'s C<D2TG_TOKEN> fallback can't know
 which of a pool of bots to use; single-bot/env-only mode never passes

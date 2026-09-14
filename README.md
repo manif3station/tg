@@ -1,12 +1,15 @@
 # tg
 
-**Status: early implementation (v1.79).** REFACTOR (TGT-226, found via
-a scheduled JOB-004 improvement hunt): the masked `--bot <token>` flag
-fragment printed on both the `REPLY WITH` and `RETRY WITH` recovery
-templates was built via an identical duplicated ternary at two call
-sites in `D2TG::Poller`. Not a bug - extracted into a shared
-`_bot_flag($bot_token)` helper, matching this project's own established
-extract-once-duplicated precedent. No behavior change.
+**Status: early implementation (v1.80).** SECURITY FIX (TGT-227, found
+via a scheduled JOB-003 hourly bug hunt): the poller's own `REPLY WITH`
+recovery-command template printed `--bot <token>` AFTER `chat_id` - a
+position `cli/reply.pl` never actually parses. A `--bot` flag there
+fell straight into the outgoing reply text (sent to Telegram verbatim)
+while the real send silently used the wrong bot; substituting the real
+token in place, as this module's own docs instruct, leaked the real
+credential into the sent message. Fixed by printing `--bot` BEFORE
+`chat_id`, matching `cli/reply.pl`'s own already-working leading-position
+parsing convention.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`

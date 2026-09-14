@@ -3459,3 +3459,68 @@ throughout this session. Fell back to independent verification: a
 side-by-side diff confirms both call sites now delegate to the same
 helper, and the helper's own body is byte-identical to the ternary it
 replaces at both original sites.
+
+## TGT-227: REPLY WITH's own --bot flag sat in a position cli/reply.pl never parses
+
+Found via a scheduled JOB-003 hourly bug hunt - a real, reachable
+credential-leak bug, not a cosmetic mismatch. `D2TG::Poller::
+_print_reply_template` printed `REPLY WITH: d2 tg.reply <chat_id>
+"..." --bot <masked_token> --reply-to-message-id <id>` - `--bot` placed
+AFTER `chat_id`. `cli/reply.pl`'s own flag-parsing loop only recognizes
+`--db`/`--bot`/`--voice-only` while each is the leading unconsumed
+argument (its loop `last`s on the first non-flag token, i.e. `chat_id`
+itself); `D2TG::Reply::parse_cli_args` only recognizes a trailing
+`--reply-to-message-id`, with no `--bot` handling at all. A `--bot`
+flag printed after `chat_id` was therefore never recognized by either
+layer - it fell straight into the joined reply text.
+
+Reproduced live in the `perl-test` container (never against the
+production board): `D2TG::Reply::parse_cli_args(123456, 'hello',
+'there', '--bot', 'abcTOKEN123', '--reply-to-message-id', 42)` returned
+`text = 'hello there --bot abcTOKEN123'` - the `--bot` pair swallowed
+into the outgoing message text unchanged, while the actual send would
+silently fall back to `D2TG_TOKEN` (the wrong bot in multi-bot mode).
+The impact is worse than a cosmetic format mismatch: this module's own
+documented instruction tells an operator to substitute the real token
+in place of the masked placeholder before running the command - doing
+exactly that leaked the real bot credential into the visible Telegram
+message text sent to the chat. `t/57-reply-bare-bot-flag-no-hang.t`'s
+own comment already noted "the order the real REPLY WITH template
+never produces" in passing without treating it as a bug, and the only
+existing coverage of the printed template (`t/51-multi-bot-reply-
+template.t`) asserted the format string via regex without ever feeding
+it back through the real `cli/reply.pl` parsing path end-to-end.
+
+Fixed by printing `--bot` BEFORE `chat_id` in `_print_reply_template`,
+matching `cli/reply.pl`'s own already-working leading-position parsing
+contract - the same convention `cli/approve.pl`/`cli/retry-download.pl`
+already use. No parser changes were needed; the trailing-position
+alternative considered in drafting (extending `D2TG::Reply::
+parse_cli_args` to also recognize a trailing `--bot`) was rejected as
+unnecessary complexity once the simpler, convention-matching fix was
+available.
+
+New test `t/227-reply-with-bot-flag-position-parseable.t`: captures the
+poller's own real printed `REPLY WITH` line, substitutes the real token
+for the masked one (exactly as an operator following the module's own
+docs would), splits it the way a shell would, and feeds it through the
+real `D2TG::Reply::extract_bot_flag`/`parse_cli_args` functions -
+confirmed genuinely red against the pre-fix code (3/6 subtests failed:
+the token was not extracted as a flag, and both `--bot` and the raw
+token leaked into `$text`), confirmed green after the fix (6/6).
+`t/51-multi-bot-reply-template.t`'s own format-string assertion was
+updated to match the new (correct) field order, since this ticket's own
+fix deliberately changed the printed format; `t/217-edited-message-
+reply-template.t`, `t/220-media-failed-retry-with-bot-flag.t`,
+`t/204-failed-download-visibility.t`, and `t/226-bot-flag-helper-
+extracted.t` (the other consumers of `_bot_flag`/`_print_reply_template`)
+all re-run clean unmodified (33/33 total across all 6 files).
+
+Codex adversarial review attempted: hit the same `bwrap: loopback:
+Failed RTM_NEWADDR: Operation not permitted` sandbox error seen
+throughout this session. Fell back to independent verification: the
+fix's own correctness is demonstrated directly by the new test, which
+exercises the actual production parsing functions (`D2TG::Reply::
+extract_bot_flag`/`parse_cli_args`), not a reimplementation or mock of
+them - a passing assertion here is definitionally equivalent to the
+real `cli/reply.pl` behaving correctly on this exact input.

@@ -50,8 +50,8 @@ sub capture_stdout {
 
     like(
         $out,
-        qr/REPLY WITH: d2 tg\.reply 4567 "\.\.\." --bot 1234\.\.\.sxyz --reply-to-message-id 42/,
-        'multi-bot REPLY WITH names the receiving bot by its masked token (TGT-086)'
+        qr/REPLY WITH: d2 tg\.reply --bot 1234\.\.\.sxyz 4567 "\.\.\." --reply-to-message-id 42/,
+        'multi-bot REPLY WITH names the receiving bot by its masked token (TGT-086), --bot leading (TGT-227 - the one position cli/reply.pl actually parses)'
     );
     unlike( $out, qr/\Q$real_token\E/, 'the real, full bot token never appears in stdout (TGT-086)' );
 }
