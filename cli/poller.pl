@@ -688,9 +688,13 @@ never grows unbounded over the skill's lifetime. Right after it,
 L<D2TG::Store/prune_history> (TGT-235, found via a scheduled JOB-004
 improvement hunt) deletes C<messages>/C<sent_replies> rows past the
 retention window (default 90 days) - neither table had any retention
-policy before this, unlike the attachment vault above; C<eval>-wrapped
-so a locked/busy database prints a C<PRUNE HISTORY ERROR> line and
-retries next cycle instead of failing the whole poll cycle.
+policy before this, unlike the attachment vault above; also sweeps
+C<failed_downloads>/C<failed_transcriptions> using a separate, shorter
+30-day default (TGT-238, found via a scheduled JOB-004 improvement
+hunt) - a permanently-unretryable queued row otherwise had no eviction
+path besides a successful retry; C<eval>-wrapped so a locked/busy
+database prints a C<PRUNE HISTORY ERROR> line and retries next cycle
+instead of failing the whole poll cycle.
 
 C<SIGTERM>/C<SIGINT> also call L<D2TG::Transcribe>'s C<kill_current>
 (TGT-031), so a transcription in progress at shutdown time is killed

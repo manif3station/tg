@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v1.91).** FEATURE (TGT-238, found via
+a scheduled JOB-004 improvement hunt): `D2TG::Store::prune_history`
+(TGT-235) added retention for `messages`/`sent_replies` but left
+`failed_downloads`/`failed_transcriptions` out of scope - neither table
+had any other eviction path, so a permanently-unretryable row would sit
+in the queue forever. `prune_history` now also sweeps both retry
+queues, using a separate (shorter, 30-day default) window from the
+message-history one.
+
 **Status: early implementation (v1.90).** FEATURE (TGT-237, found via
 a scheduled JOB-003 hourly bug hunt): a failed voice transcription
 used to be permanently lost with no retry path - `D2TG::Poller`'s

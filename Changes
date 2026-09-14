@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+1.91  2026-09-14
+      - FEATURE (TGT-238, found via a scheduled JOB-004 improvement
+        hunt): D2TG::Store::prune_history (TGT-235) added a retention
+        policy for messages/sent_replies but deliberately left
+        failed_downloads/failed_transcriptions out of scope. Neither
+        table had any other eviction path - a row is removed only by
+        a successful retry, so a permanently-unretryable row (an
+        expired Telegram file_id, say) would sit in the queue forever,
+        surfacing indefinitely in d2 tg.unread's listing. prune_history
+        now also sweeps both retry queues, using a separate (shorter,
+        30-day default) window from the messages/sent_replies one,
+        overridable via a new failed_queue_retention_days argument -
+        already wired into cli/poller.pl's per-cycle call, no CLI
+        change needed. New test: t/238-failed-queue-retention.t.
+
 1.90  2026-09-14
       - FEATURE (TGT-237, found via a scheduled JOB-003 hourly bug
         hunt): D2TG::Poller's voice transcription branch had no

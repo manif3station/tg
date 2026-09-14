@@ -4231,3 +4231,56 @@ photo/document failure branch immediately above it in the same file to
 confirm the queue-write/STDOUT-visibility shape is structurally
 identical, and confirmed the full pre-existing `t/17`/`t/83` test
 suites pass unmodified.
+
+## TGT-238: failed_downloads/failed_transcriptions rows never aged out
+
+Found via a scheduled JOB-004 improvement hunt. `D2TG::Store::prune_history`
+(TGT-235) added a retention/eviction policy for `messages`/`sent_replies`,
+explicitly scoped to only those two tables (its own POD never mentioned
+the retry queues). `failed_downloads`/`failed_transcriptions` had no
+retention policy of their own either, and unlike `messages`/
+`sent_replies` they are unbounded in a distinct way: a row is removed
+only by a *successful* retry (`remove_failed_download`/
+`remove_failed_transcription`) - there is no attempt cap and no
+age-based eviction, so a permanently-unretryable row (an expired
+Telegram `file_id`, a permanently-unreachable sender, a disk-full
+condition at download time that never gets fixed) stays in the queue
+forever, keeps surfacing in `d2 tg.unread`'s failed-download/
+failed-transcription listing, and slowly grows the SQLite file with no
+bound. Explicitly distinct from TGT-221 (automatic retry-with-backoff,
+still `drafting`/blocked on Q-015) - eviction of unrecoverable rows is
+orthogonal to whether/when auto-retry ever ships.
+
+Fixed by extending `prune_history` itself (rather than adding a sibling
+method) to also sweep both retry queues, using a new
+`failed_queue_retention_days` argument independent of the existing
+`retention_days` one - a stale retry-queue row is a different concern
+from message-history retention, so a separate (shorter, 30-day)
+default was chosen via a new `DEFAULT_FAILED_QUEUE_RETENTION_DAYS`
+constant, deliberately generous enough not to race the existing manual
+`d2 tg.retry-download`/`d2 tg.retry-transcription` commands for a
+genuinely recent transient failure. No `cli/poller.pl` change was
+needed - it already calls `prune_history` unconditionally every poll
+cycle (TGT-235), so both new sweeps are wired in for free.
+
+New test `t/238-failed-queue-retention.t`: confirmed genuinely red
+against the pre-fix code (3/7 subtests failed - aged-out rows in both
+tables survived pruning), confirmed green after the fix (7/7) -
+covering age-based eviction for both tables independently, a
+caller-supplied `failed_queue_retention_days` override, and a
+no-op-when-nothing-aged-out case for both queues together. Full suite
+re-run clean at 1785/1785 (batched under `Devel::Cover` due to host
+memory pressure this session; `t/54-lock-acquire-race.t`'s own known
+transient flake reproduced once in the full-suite run, re-confirmed
+passing cleanly in isolation, unrelated to this change). 100%
+statement+subroutine coverage confirmed on `lib/D2TG/Store.pm`.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification:
+confirmed `t/83-failed-download-queue.t` and `t/237-failed-transcription-queue.t`
+pass unmodified (proving the new sweep doesn't disturb either queue's
+own existing CRUD/retry behavior), and `t/235-message-history-retention.t`
+also passes unmodified (proving the new `failed_queue_retention_days`
+argument doesn't interfere with the pre-existing `retention_days`
+sweep of `messages`/`sent_replies`).

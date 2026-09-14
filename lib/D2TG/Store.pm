@@ -1338,7 +1338,7 @@ seconds later, not a strict timing guarantee).
 
 =back
 
-=head2 prune_history(retention_days => $days = 90)
+=head2 prune_history(retention_days => $days = 90, failed_queue_retention_days => $days2 = 30)
 
 TGT-235: deletes rows older than the retention window from C<messages>
 and C<sent_replies> - neither table had any retention/eviction policy
@@ -1356,6 +1356,16 @@ No foreign-key relationship exists between C<messages>/C<sent_replies>
 and C<failed_downloads>/C<text_only_replies> (confirmed by reading the
 schema, not assumed), so pruning an aged-out C<messages> row cannot
 orphan a still-relevant C<failed_downloads> row.
+
+TGT-238 (found via a scheduled JOB-004 improvement hunt): also sweeps
+C<failed_downloads> and C<failed_transcriptions> - neither had any
+eviction path besides a successful retry, so a permanently-unretryable
+row would otherwise sit in the queue forever. Uses a separate,
+independent C<failed_queue_retention_days> argument
+(C<DEFAULT_FAILED_QUEUE_RETENTION_DAYS>, currently 30 - shorter than
+the message-history default, since a stale retry-queue row is a
+different concern from message-history retention) rather than reusing
+C<retention_days>.
 
 =head2 disconnect
 
