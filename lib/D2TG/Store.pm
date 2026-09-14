@@ -1272,6 +1272,29 @@ Removes one row from the C<failed_downloads> queue by its own C<id>
 C<D2TG::Download::retry_failed_download> only after a retry actually
 succeeds; a failed retry leaves the row untouched.
 
+=head2 failed_downloads_due_for_retry(bot_key => $b)
+
+TGT-221 (Q-015 answered by Michael: retry every 60s for up to 5
+minutes total, independent of poll cadence): returns queued rows still
+within C<AUTO_RETRY_WINDOW_SECONDS> (300) of their own C<created_at>
+that haven't been attempted (per C<last_retry_at>) in the last
+C<AUTO_RETRY_INTERVAL_SECONDS> (60) - the selection query
+C<D2TG::Download::auto_retry_failed_downloads> runs each poll cycle
+before actually retrying anything. A row outside the window is
+excluded here but never deleted - it remains fully visible via
+L</failed_downloads> for manual C<d2 tg.retry-download> recovery;
+automatic retry simply stops attempting it. C<bot_key> is optional,
+matching L</failed_downloads>'s own established filter pattern.
+
+=head2 mark_failed_download_retried($id)
+
+TGT-221: stamps C<last_retry_at> to now on a queued row - called by
+C<D2TG::Download::auto_retry_failed_downloads> after a failed
+automatic retry attempt (never after a success, since a successful
+retry removes the row via L</remove_failed_download> instead), so the
+next L</failed_downloads_due_for_retry> call correctly waits out the
+60s interval before attempting that row again.
+
 =head2 record_failed_transcription($chat_id, $message_id, $file_id, sender => $s, error => $e, bot_key => $b)
 
 TGT-237: persists a failed inbound voice transcription for later retry,

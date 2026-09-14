@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+1.93  2026-09-14
+      - FEATURE (TGT-221, budget project live incident via JOB-008
+        feature-request-triage: 4 photos stuck >1hr, transient HTTP
+        500/timeout, a manual retry succeeded immediately): TGT-204
+        made a queued failed_downloads row visible but explicitly
+        deferred automatic recovery - it sat queued until a human/
+        agent ran d2 tg.retry-download by hand. Per Q-015 (answered by
+        Michael): retries every 60s for up to 5 minutes total,
+        independent of poll cadence. New D2TG::Store methods
+        (failed_downloads_due_for_retry, mark_failed_download_retried)
+        select rows still within the 5-minute window not attempted in
+        the last 60s; a row past the window is left queued/visible,
+        not deleted - automatic retry simply gives up, the manual
+        escape hatch stays available. New
+        D2TG::Download::auto_retry_failed_downloads reuses
+        retry_failed_download for the actual retry, called once per
+        (chat_id group, bot) pair per poll cycle, eval-wrapped so it
+        can never turn into a poll-cycle failure. New test:
+        t/221-auto-retry-failed-downloads.t.
+
 1.92  2026-09-14
       - FEATURE (TGT-239, found via a scheduled JOB-003 hourly bug
         hunt): TGT-237 added failed_transcriptions as a structural

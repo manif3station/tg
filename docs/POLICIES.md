@@ -4340,3 +4340,82 @@ section immediately above it to confirm structural parity (same
 multi-bot detection logic, same masked-token display, same separator
 handling), and confirmed the full pre-existing `failed_downloads`
 listing test suite passes unmodified.
+
+## TGT-221: automatic background retry for queued failed downloads
+
+Source: JOB-008 feature-request-triage, from a real budget-project
+live incident (`/tmp/ask-for-more-from-d2tg/20260911T202500-budget-emberfox.md` -
+4 photos stuck queued over an hour on a transient HTTP 500/timeout; a
+manual retry succeeded immediately, seconds later). TGT-204 (v1.64)
+made a queued `failed_downloads` row visible (`NEW TG MEDIA FAILED`
+stdout line + `d2 tg.unread` listing) but explicitly deferred automatic
+recovery, calling it out as "a separate, larger design decision about
+retry cadence and whether it belongs in the poller's own main loop" -
+this ticket makes that decision and implements it.
+
+**Q-015** (asked with a voice note and 3 options, per this project's
+own standing rule): what retry cadence and max-attempt cap should
+automatic background retry use? Michael answered: retry every 60s for
+up to 5 minutes total, independent of poll cadence - matching the
+emberfox incident's own "seconds later" recovery window closely, and
+avoiding the risk of hammering Telegram's API on a genuinely-dead
+download by capping the window explicitly rather than retrying
+forever.
+
+Fixed by adding `D2TG::Store::failed_downloads_due_for_retry(bot_key
+=> $b)` - a SQL query (not a Perl-side time comparison, for the same
+reasons `prune_history`'s own age-based sweeps already use SQLite's
+`datetime()` rather than pulling every row into Perl) selecting rows
+still within 5 minutes of their own `created_at` (the window is
+measured from when the failure was first queued, not from now) that
+haven't been attempted in the last 60s (tracked via a new
+`last_retry_at` column, `NULL` meaning "never auto-retried yet") - and
+`mark_failed_download_retried($id)`, which stamps it after a failed
+attempt. `D2TG::Download::auto_retry_failed_downloads` reuses
+`retry_failed_download` itself for the actual retry (no duplicated
+retry logic), called once per `(chat_id group, bot)` pair per poll
+cycle from `cli/poller.pl`'s main loop - scoped to that pair's own
+`bot_key`, since a retry needs the matching bot's own `$telegram`
+object (Telegram's `file_id` values are bot-token-scoped). A row past
+the 5-minute window is left queued and fully visible - automatic
+retry simply stops attempting it, never deletes it - so the manual
+`d2 tg.retry-download` escape hatch (and TGT-204's own visibility)
+are completely unaffected, matching this ticket's own explicit
+scope constraint.
+
+**Self-caught schema-ordering bug during implementation** (the same
+class TGT-235 itself self-caught and documented): the first draft
+placed the new `last_retry_at` `ALTER TABLE ADD COLUMN` block
+immediately after `local_path`'s own (mirroring its exact style) -
+but TGT-219's own rename/create/copy/drop migration block runs
+*after* that point in `_ensure_schema`, and its own `CREATE TABLE`
+only lists the columns it explicitly knows about. On any fresh
+database, that migration would have silently dropped the newly-added
+`last_retry_at` column immediately after adding it (confirmed live:
+`prove` failed with `no such column: last_retry_at` on the very next
+query). Caught by running the new test immediately after the first
+implementation attempt, not by review; fixed by moving the block to
+run *after* the TGT-219 migration instead.
+
+New test `t/221-auto-retry-failed-downloads.t`: confirmed genuinely
+red against the pre-fix code (`failed_downloads_due_for_retry` did not
+exist), confirmed green after the fix (14/14) - covering the
+due-for-retry query's own three states (never attempted → due
+immediately; just attempted → not due for 60s; past the 5-minute
+window → never due again but still listed by `failed_downloads`),
+`auto_retry_failed_downloads`'s successful-retry path (row removed,
+history restored) and failed-retry path (non-fatal, `last_retry_at`
+stamped, row stays queued), and `bot_key` scoping. Full suite re-run
+clean at 1807/1807. 100% statement+subroutine coverage confirmed on
+`lib/D2TG/Store.pm` and `lib/D2TG/Download.pm`.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: traced
+the exact SQL in `failed_downloads_due_for_retry` against SQLite's own
+`datetime()` semantics by hand (confirmed the window/interval math
+against the live-reproduced schema-ordering bug above, which was
+itself caught by the test suite, not by manual review), and confirmed
+`t/83-failed-download-queue.t`'s own full pre-existing suite passes
+unmodified, proving no regression to the existing manual-retry/
+visibility behavior this ticket was scoped to leave untouched.

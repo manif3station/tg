@@ -440,6 +440,27 @@ L<D2TG::Poller/store_write_safe> instead of each hand-writing its own
 C<eval>/classify/print block - a pure refactor, printed
 C<STORE ERROR [chat_id]: ... failed - REASON> text unchanged.
 
+=head2 auto_retry_failed_downloads($telegram, $store, $dir, bot_key => $b, ua => $optional_client)
+
+TGT-221 (a live budget-project incident via JOB-008 feature-request-
+triage, Q-015 answered by Michael: retry every 60s for up to 5 minutes
+total, independent of poll cadence): TGT-204 made a queued
+C<failed_downloads> row visible but explicitly deferred automatic
+recovery - this closes that gap. Selects rows via
+L<D2TG::Store/failed_downloads_due_for_retry> and reuses
+L</retry_failed_download> itself for the actual retry attempt (no
+duplicated retry logic) - a failed attempt calls
+L<D2TG::Store/mark_failed_download_retried> to stamp C<last_retry_at>;
+a successful one is already handled by C<retry_failed_download>'s own
+L<D2TG::Store/remove_failed_download> call. Intended to be called once
+per C<(chat_id group, bot)> pair per poll cycle from C<cli/poller.pl>'s
+main loop, scoped to that pair's own C<bot_key> - a retry needs the
+matching bot's own C<$telegram>, since Telegram's C<file_id> values
+are bot-token-scoped. Never dies - a locked/busy database or a retry
+failure must not turn this non-essential housekeeping into a
+poll-cycle failure, matching L</prune_vault>/L<D2TG::Store/prune_history>'s
+own established non-fatal call-site pattern.
+
 =head2 retry_failed_transcription($telegram, $store, $row, ua => $optional_client)
 
 TGT-237: C<retry_failed_download>'s own analogue for one

@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v1.93).** FEATURE (TGT-221, a live
+budget-project incident, JOB-008 feature-request-triage): TGT-204 made
+a queued `failed_downloads` row visible but deferred automatic
+recovery - it sat queued until a human/agent ran `d2 tg.retry-download`
+by hand. Per Michael's own design decision (Q-015): retries every 60s
+for up to 5 minutes total, independent of poll cadence. A row past the
+window is left queued/visible, not deleted - the manual escape hatch
+stays available.
+
 **Status: early implementation (v1.92).** FEATURE (TGT-239, found via
 a scheduled JOB-003 hourly bug hunt): `d2 tg.unread` never surfaced
 queued `failed_transcriptions` rows, unlike `failed_downloads` -
