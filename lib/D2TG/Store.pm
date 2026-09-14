@@ -1193,6 +1193,34 @@ Removes one row from the C<failed_downloads> queue by its own C<id>
 C<D2TG::Download::retry_failed_download> only after a retry actually
 succeeds; a failed retry leaves the row untouched.
 
+=head2 record_failed_transcription($chat_id, $message_id, $file_id, sender => $s, error => $e, bot_key => $b)
+
+TGT-237: persists a failed inbound voice transcription for later retry,
+mirroring L</record_failed_download> exactly (same upsert-on-C<(chat_id,
+bot_key, message_id)> redelivery-refresh behavior, same optional
+C<bot_key> defaulting to the single-bot sentinel) - C<D2TG::Poller>
+calls this when C<transcribe_voice> dies and a store is present,
+instead of only printing C<TRANSCRIBE ERROR> and losing the voice note
+forever. No C<media_kind>/C<caption_note>/C<local_path> equivalent -
+a transcription's own transient download is always unlinked
+immediately (never lands in the shared attachments vault) and a voice
+message carries no caption. Returns the row's id (new or existing).
+
+=head2 failed_transcriptions(bot_key => $b)
+
+Returns queued failed transcriptions (TGT-237), ordered by C<id> -
+each a hashref of C<id>, C<chat_id>, C<bot_key>, C<message_id>,
+C<file_id>, C<sender>, C<error>, C<created_at>. C<bot_key> is optional,
+matching L</failed_downloads>'s own established optional-filter
+pattern. C<cli/retry-transcription.pl> lists and acts on this.
+
+=head2 remove_failed_transcription($id)
+
+Removes one row from the C<failed_transcriptions> queue by its own
+C<id> (TGT-237) - a harmless no-op if that id doesn't exist. Called by
+C<D2TG::Download::retry_failed_transcription> only after a retry
+actually succeeds; a failed retry leaves the row untouched.
+
 =head2 record_sent_text($chat_id, $text_message_id, bot_key => $key, text => $text)
 
 Records that a text reply was sent (TGT-105) - C<D2TG::Reply::send_reply>

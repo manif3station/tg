@@ -1420,8 +1420,17 @@ the watching agent should notice a voice note arrived and can
 acknowledge it right away, instead of the whole wait being silent until
 the real transcript line appears). Its success then prints
 C<NEW TG VOICE [chat_id] sender: <transcript>> to STDOUT; its failure
-prints C<TRANSCRIBE ERROR [chat_id] sender: <message>> to STDERR and the
-loop continues - one bad voice note never crashes the poller. Without
+prints C<TRANSCRIBE ERROR [chat_id] sender: <message>> to STDERR and,
+when a store is present, is also persisted to
+L<D2TG::Store/failed_transcriptions> (TGT-237, found via a scheduled
+JOB-003 hourly bug hunt - previously the voice note was permanently
+lost with no retry path at all, unlike a failed photo/document
+download's own C<failed_downloads> queue) and announced on STDOUT as
+C<NEW TG VOICE FAILED [chat_id] sender: transcription failed - queued
+for retry, RETRY WITH: d2 tg.retry-transcription --all [--bot ...]>
+(only when the queue write itself succeeds, matching C<NEW TG MEDIA
+FAILED>'s own TGT-204 visibility precedent) - the loop continues either
+way, one bad voice note never crashes the poller. Without
 C<transcribe_voice>, a voice message falls back to the plain
 C<NEW TG MEDIA> line (no pre-transcription notice, since there's no
 blocking call to warn about).

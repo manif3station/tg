@@ -405,6 +405,34 @@ L<D2TG::Poller/store_write_safe> instead of each hand-writing its own
 C<eval>/classify/print block - a pure refactor, printed
 C<STORE ERROR [chat_id]: ... failed - REASON> text unchanged.
 
+=head2 retry_failed_transcription($telegram, $store, $row, ua => $optional_client)
+
+TGT-237: C<retry_failed_download>'s own analogue for one
+L<D2TG::Store/failed_transcriptions> row - C<$row> is one of the
+hashrefs that method returns (C<id>, C<chat_id>, C<message_id>,
+C<file_id>, C<sender>, C<error>). Returns C<(1, $transcript)> on
+success or C<(0, $error)> on failure, the same shape convention as
+C<retry_failed_download>.
+
+Re-downloads the voice file via C<download_file> with no C<dir>
+argument (transient, matching C<cli/poller.pl>'s own
+C<$transcribe_voice> coderef exactly - this download must never land
+in the shared, deduplicated attachments vault) and re-attempts
+L<D2TG::Transcribe/transcribe>; the downloaded file is C<unlink>ed
+immediately afterward regardless of outcome. On success, restores the
+message into C<$store>'s own history via C<record_message> (the
+transcript itself as the summary - unlike C<retry_failed_download>,
+there is no real local path to hide, since a transcript is text, not a
+filesystem location) before removing the queue row via
+L<D2TG::Store/remove_failed_transcription> - both calls go through
+L<D2TG::Poller/store_write_safe>, matching C<retry_failed_download>'s
+own established non-fatal store-write pattern; a C<record_message>
+failure leaves the row queued (logged as C<STORE ERROR [chat_id]:
+queue row not removed - ...>) rather than losing the transcript a
+second time. On a download or transcription failure, the row is left
+completely untouched - never removed - so the caller (C<cli/retry-transcription.pl>)
+can retry again later.
+
 =head2 prune_vault($dir, max_bytes => $bytes = 100MB)
 
 Keeps the attachment vault (TGT-052, typically
