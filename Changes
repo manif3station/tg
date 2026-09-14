@@ -1,5 +1,43 @@
 Revision history for the tg skill
 
+1.97  2026-09-14
+      - BUGFIX (TGT-246, found via a scheduled JOB-003 hourly bug hunt):
+        D2TG::Download::auto_retry_failed_downloads (TGT-221) gave
+        failed media downloads automatic background retry (every 60s
+        for up to 5 minutes total) from cli/poller.pl's main loop, but
+        the structurally identical failed_transcriptions queue
+        (TGT-237, built as that same queue's explicit structural
+        sibling) never got the same treatment - a transient voice-
+        transcription failure sat queued forever until a human/agent
+        ran d2 tg.retry-transcription by hand, with no automatic
+        recovery at all, while the identical failed_downloads case
+        self-heals within 5 minutes unattended.
+      - Added D2TG::Store::failed_transcriptions_due_for_retry and
+        mark_failed_transcription_retried, mirroring
+        failed_downloads_due_for_retry/mark_failed_download_retried
+        exactly (same AUTO_RETRY_INTERVAL_SECONDS/AUTO_RETRY_WINDOW_SECONDS
+        windowing). Added a new last_retry_at column to
+        failed_transcriptions (duplicate-tolerant ALTER TABLE, matching
+        failed_downloads' own TGT-221 migration).
+      - Added D2TG::Download::auto_retry_failed_transcriptions, reusing
+        the existing retry_failed_transcription (TGT-237) for the
+        actual retry attempt. Deliberately does not trust
+        retry_failed_transcription's own ($ok, $result) return value to
+        decide whether to throttle - unlike retry_failed_download,
+        retry_failed_transcription always returns (1, $transcript) once
+        download+transcription succeed, even when the following
+        record_message bookkeeping write then fails and the row is
+        left queued; trusting $ok alone would repeat the exact
+        throttle-bypass bug TGT-244 fixed for downloads. Instead checks
+        D2TG::Store::failed_transcriptions directly after the attempt
+        for whether the row still exists.
+      - Wired into cli/poller.pl's main per-pair loop, next to the
+        existing auto_retry_failed_downloads call, same eval-wrapped
+        non-fatal housekeeping pattern, scoped per (chat_id group, bot)
+        pair per poll cycle.
+      - New test t/246-auto-retry-failed-transcriptions.t, mirroring
+        t/221-auto-retry-failed-downloads.t's own shape.
+
 1.96  2026-09-14
       - BUGFIX (TGT-245, found via a scheduled JOB-003 hourly bug hunt):
         D2TG::Download::retry_failed_download and

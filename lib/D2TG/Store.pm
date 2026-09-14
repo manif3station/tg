@@ -299,6 +299,20 @@ sub _ensure_schema {
          )'
     );
 
+    # TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+    # failed_downloads' own last_retry_at column (added by TGT-221) -
+    # NULL means "never auto-retried yet". Placed as a duplicate-
+    # tolerant ALTER TABLE right after this fresh CREATE TABLE, the same
+    # pattern local_path used for failed_downloads - failed_transcriptions
+    # has no rename/create/copy/drop migration block of its own (unlike
+    # failed_downloads' TGT-219 migration) to worry about ordering
+    # against, so a plain trailing ALTER TABLE is safe here.
+    {
+        local $self->{dbh}{PrintError} = 0;
+        eval { $self->{dbh}->do('ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT') };
+    }
+    die $@ if $@ && $@ !~ /duplicate column name/;
+
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
     # send_voice failure after that point can leave a reply text-only,
@@ -799,14 +813,14 @@ sub failed_transcriptions {
 
     if ( defined $args{bot_key} ) {
         return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at
+            'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
              FROM failed_transcriptions WHERE bot_key = ? ORDER BY id',
             { Slice => {} }, $args{bot_key},
         );
     }
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at
+        'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
          FROM failed_transcriptions ORDER BY id',
         { Slice => {} }
     );
@@ -816,6 +830,38 @@ sub remove_failed_transcription {
     my ( $self, $id ) = @_;
 
     $self->{dbh}->do( 'DELETE FROM failed_transcriptions WHERE id = ?', undef, $id );
+
+    return;
+}
+
+# TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+# failed_downloads_due_for_retry/mark_failed_download_retried exactly
+# (TGT-221) - same AUTO_RETRY_INTERVAL_SECONDS/AUTO_RETRY_WINDOW_SECONDS
+# constants, same created_at/last_retry_at windowing logic. See that
+# pair's own comments above for the full rationale; unchanged here other
+# than the table name.
+sub failed_transcriptions_due_for_retry {
+    my ( $self, %args ) = @_;
+
+    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
+         FROM failed_transcriptions
+         WHERE datetime(created_at) >= datetime('now', ?)
+           AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
+    my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
+
+    if ( defined $args{bot_key} ) {
+        $sql .= ' AND bot_key = ?';
+        push @bind, $args{bot_key};
+    }
+    $sql .= ' ORDER BY id';
+
+    return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
+}
+
+sub mark_failed_transcription_retried {
+    my ( $self, $id ) = @_;
+
+    $self->{dbh}->do( 'UPDATE failed_transcriptions SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
 
     return;
 }
@@ -1312,9 +1358,10 @@ message carries no caption. Returns the row's id (new or existing).
 
 Returns queued failed transcriptions (TGT-237), ordered by C<id> -
 each a hashref of C<id>, C<chat_id>, C<bot_key>, C<message_id>,
-C<file_id>, C<sender>, C<error>, C<created_at>. C<bot_key> is optional,
-matching L</failed_downloads>'s own established optional-filter
-pattern. C<cli/retry-transcription.pl> lists and acts on this.
+C<file_id>, C<sender>, C<error>, C<created_at>, C<last_retry_at>
+(TGT-246). C<bot_key> is optional, matching L</failed_downloads>'s own
+established optional-filter pattern. C<cli/retry-transcription.pl>
+lists and acts on this.
 
 =head2 remove_failed_transcription($id)
 
@@ -1322,6 +1369,32 @@ Removes one row from the C<failed_transcriptions> queue by its own
 C<id> (TGT-237) - a harmless no-op if that id doesn't exist. Called by
 C<D2TG::Download::retry_failed_transcription> only after a retry
 actually succeeds; a failed retry leaves the row untouched.
+
+=head2 failed_transcriptions_due_for_retry(bot_key => $b)
+
+TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+L</failed_downloads_due_for_retry> exactly, applied to
+C<failed_transcriptions> instead - same C<AUTO_RETRY_INTERVAL_SECONDS>
+(60) / C<AUTO_RETRY_WINDOW_SECONDS> (300) windowing against C<created_at>/
+C<last_retry_at>. Closes a real asymmetry: C<failed_downloads> got
+automatic background retry via TGT-221 (Q-015 answered by Michael: retry
+every 60s for up to 5 minutes total), but the structurally identical
+C<failed_transcriptions> queue (TGT-237, explicitly modeled on
+C<failed_downloads>' own shape) never did - a transient transcription
+failure sat queued until a human/agent ran C<d2 tg.retry-transcription>
+by hand, with no automatic recovery at all. See
+L<D2TG::Download/auto_retry_failed_transcriptions>.
+
+=head2 mark_failed_transcription_retried($id)
+
+TGT-246: mirrors L</mark_failed_download_retried> exactly, applied to
+C<failed_transcriptions> - stamps C<last_retry_at> to now, so
+L</failed_transcriptions_due_for_retry> correctly throttles this row to
+once per C<AUTO_RETRY_INTERVAL_SECONDS> regardless of how often the
+caller (typically once per poll cycle) attempts a sweep. Called after
+every automatic retry attempt that leaves the row still queued
+(success removes the row instead, via L</remove_failed_transcription>,
+and never needs this stamped at all).
 
 =head2 record_sent_text($chat_id, $text_message_id, bot_key => $key, text => $text)
 

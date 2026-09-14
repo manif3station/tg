@@ -4521,6 +4521,92 @@ permanently stop retrying). Full suite re-run clean: 183 files, 1823
 tests. 100% statement+subroutine coverage confirmed on the touched
 module, `lib/D2TG/Download.pm`.
 
+## TGT-246: failed voice transcriptions never got the same auto-retry failed downloads got
+
+Found via a scheduled JOB-003 hourly bug-hunt fork, live-verified by
+direct code/grep read (not speculation): `D2TG::Download::auto_retry_failed_downloads`
+(TGT-221, Q-015 answered by Michael - "retry every 60s for up to 5
+minutes total, independent of poll cadence") gave the `failed_downloads`
+queue automatic background retry from `cli/poller.pl`'s main loop. The
+structurally identical `failed_transcriptions` queue (TGT-237) - whose
+own POD explicitly says it "mirrors `record_failed_download`/
+`failed_downloads`/`remove_failed_download`'s own shape exactly" - never
+received the same treatment. `grep -rn
+'failed_transcriptions_due_for_retry\|mark_failed_transcription_retried\|auto_retry_failed_transcriptions'`
+across `lib/` and `cli/` returned nothing before this fix: no such
+`D2TG::Store` accessors existed, no such `D2TG::Download` sub existed,
+and `cli/poller.pl`'s main loop never called one. `D2TG::Download::retry_failed_transcription`
+(TGT-237) already existed and was fully capable of performing the
+actual retry - it was simply never invoked automatically, only via the
+manual `d2 tg.retry-transcription` command. A transient transcription
+failure (a momentary whisper/ffmpeg hiccup, a transient network blip
+during the re-download step - the exact same failure class TGT-221's
+own live incident report described for downloads) therefore sat queued
+indefinitely with zero automatic recovery, while the identical failure
+shape on the download side self-heals unattended within 5 minutes - a
+silent reliability asymmetry between two queues the code and docs
+otherwise treat as parallel.
+
+Fixed by adding the same trio TGT-221 built for downloads, applied to
+transcriptions:
+
+- `D2TG::Store::failed_transcriptions_due_for_retry(bot_key => $b)` and
+  `mark_failed_transcription_retried($id)`, mirroring
+  `failed_downloads_due_for_retry`/`mark_failed_download_retried`
+  exactly (same `AUTO_RETRY_INTERVAL_SECONDS`/`AUTO_RETRY_WINDOW_SECONDS`
+  constants, same `created_at`/`last_retry_at` windowing). A new
+  `last_retry_at` column was added to `failed_transcriptions` via the
+  same duplicate-tolerant `ALTER TABLE` pattern `local_path` used for
+  `failed_downloads` - placed directly after `failed_transcriptions`'
+  own fresh `CREATE TABLE IF NOT EXISTS` block, which (unlike
+  `failed_downloads`) has no rename/create/copy/drop migration block of
+  its own to worry about ordering against, so this could not repeat the
+  known "`ALTER TABLE` before a later rename-migration silently drops
+  the new column" bug class this project has hit before.
+- `D2TG::Download::auto_retry_failed_transcriptions($telegram, $store,
+  bot_key => $b, ua => $ua)`, reusing `retry_failed_transcription`
+  itself for the actual retry attempt (no duplicated retry logic),
+  exactly as `auto_retry_failed_downloads` reuses `retry_failed_download`.
+- Wired into `cli/poller.pl`'s main per-pair loop, immediately after the
+  existing `auto_retry_failed_downloads` call, same eval-wrapped
+  non-fatal housekeeping pattern and per-`(chat_id group, bot)` scoping.
+
+One deliberate difference from a byte-for-byte copy of
+`auto_retry_failed_downloads`: this does **not** branch on
+`retry_failed_transcription`'s own `($ok, $result)` return value to
+decide whether to stamp `last_retry_at`. Unlike `retry_failed_download`
+(fixed by TGT-244, directly above this section), `retry_failed_transcription`
+always returns `(1, $transcript)` once download and transcription both
+succeed - **even when** the `record_message` bookkeeping write that
+follows then fails and the row is deliberately left queued (its own
+`STORE ERROR ... queue row not removed` path). Trusting `$ok` alone here
+would silently reintroduce the exact TGT-244 throttle-bypass bug for
+transcriptions: a row stuck in that partial-success state would never
+get `last_retry_at` stamped and would be retried on every single poll
+cycle instead of once per `AUTO_RETRY_INTERVAL_SECONDS`. Changing
+`retry_failed_transcription`'s own return contract to add a matching
+`$still_queued` value (as TGT-244 did for `retry_failed_download`) was
+deliberately kept out of this ticket's scope; instead,
+`auto_retry_failed_transcriptions` checks `D2TG::Store::failed_transcriptions`
+directly after the attempt for whether the row still exists -
+unambiguous regardless of which step failed (download, transcription,
+or `record_message`), and requires no change to
+`retry_failed_transcription`'s own existing callers or contract.
+
+New test `t/246-auto-retry-failed-transcriptions.t`, mirroring
+`t/221-auto-retry-failed-downloads.t`'s own shape and confirmed
+genuinely red against the pre-fix code (`Can't locate object method
+"failed_transcriptions_due_for_retry" via package "D2TG::Store"`):
+`failed_transcriptions_due_for_retry`'s windowing (immediately due,
+throttled within 60s, due again after 60s, excluded past the 5-minute
+window, still visible/listed either way), a successful
+`auto_retry_failed_transcriptions` call removing the row and restoring
+history, a failing attempt never crashing the caller while stamping
+`last_retry_at` and correctly throttling the next attempt, and
+`bot_key` scoping. Full suite re-run clean. 100% statement+subroutine
+coverage confirmed on the touched modules, `lib/D2TG/Store.pm` and
+`lib/D2TG/Download.pm`.
+
 Codex adversarial review attempted (`timeout 15 codex exec`): hung and
 was killed by timeout, the same near-universal unavailability seen
 throughout this session. Fell back to independent verification: a

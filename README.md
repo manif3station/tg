@@ -1,5 +1,20 @@
 # tg
 
+**Status: early implementation (v1.97).** BUGFIX (TGT-246, found via a
+scheduled JOB-003 hourly bug hunt): `D2TG::Download::auto_retry_failed_downloads`
+(TGT-221) gave failed media downloads automatic background retry (every
+60s for up to 5 minutes) from `cli/poller.pl`'s main loop, but the
+structurally identical `failed_transcriptions` queue (TGT-237, built as
+that same queue's explicit sibling) never got the same treatment - a
+transient voice-transcription failure sat queued until a human/agent
+ran `d2 tg.retry-transcription` by hand, with no automatic recovery at
+all. Added `D2TG::Store::failed_transcriptions_due_for_retry`/
+`mark_failed_transcription_retried` and
+`D2TG::Download::auto_retry_failed_transcriptions`, wired into
+`cli/poller.pl`'s main loop next to the existing download auto-retry
+call, scoped per `(chat_id group, bot)` pair per poll cycle exactly like
+its sibling.
+
 **Status: early implementation (v1.96).** BUGFIX (TGT-245, found via a
 scheduled JOB-003 hourly bug hunt): `D2TG::Download::retry_failed_download`
 and `retry_failed_transcription` both called `$store->record_message`

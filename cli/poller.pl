@@ -470,6 +470,21 @@ until ($shutting_down) {
             print STDERR "AUTO RETRY ERROR: failed_downloads housekeeping sweep failed - will retry next cycle.\n";
         }
 
+        # TGT-246 (found via a scheduled JOB-003 hourly bug hunt):
+        # failed_transcriptions (TGT-237) never got the same automatic
+        # recovery failed_downloads did above (TGT-221) - mirrors that
+        # call exactly, same per-pair/per-cycle scoping and non-fatal
+        # eval-wrap.
+        eval {
+            D2TG::Download::auto_retry_failed_transcriptions(
+                $pair->{telegram}, $store,
+                bot_key => $pair->{bot_key},
+            );
+        };
+        if ($@) {
+            print STDERR "AUTO RETRY ERROR: failed_transcriptions housekeeping sweep failed - will retry next cycle.\n";
+        }
+
         # TGT-116 (Codex review finding): written after EACH pair, not
         # once after the whole for-loop - a single voice transcription
         # can legitimately take up to 10800s on its own (D2TG::Transcribe's
