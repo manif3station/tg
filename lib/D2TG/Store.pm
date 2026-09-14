@@ -10,6 +10,10 @@ use Digest::SHA qw(sha256_hex);
 # bare '' literal at every call site.
 use constant DEFAULT_BOT_KEY => '';
 
+# TGT-235: the default age cap for prune_history, mirroring
+# D2TG::Download::prune_vault's own named-constant-default pattern.
+use constant DEFAULT_RETENTION_DAYS => 90;
+
 sub new {
     my ( $class, %args ) = @_;
 
@@ -778,6 +782,28 @@ sub is_recent_duplicate_reply {
     );
 
     return $row ? 1 : 0;
+}
+
+# TGT-235: unlike D2TG::Download::prune_vault, which already caps the
+# attachments vault's own disk usage by byte count, the messages and
+# sent_replies tables had no retention/eviction policy at all - every
+# row was kept forever. Mirrors prune_vault's own pattern: an
+# age-based cap, silent no-op when nothing is past the window,
+# configurable via an optional argument with a sane default.
+sub prune_history {
+    my ( $self, %args ) = @_;
+    my $days = $args{retention_days} // DEFAULT_RETENTION_DAYS;
+
+    $self->{dbh}->do(
+        "DELETE FROM messages WHERE datetime(created_at) < datetime('now', ?)",
+        undef, "-$days days",
+    );
+    $self->{dbh}->do(
+        "DELETE FROM sent_replies WHERE datetime(created_at) < datetime('now', ?)",
+        undef, "-$days days",
+    );
+
+    return;
 }
 
 sub disconnect {

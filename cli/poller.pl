@@ -466,6 +466,17 @@ until ($shutting_down) {
     }
     D2TG::Download::prune_vault($attachments_dir);
 
+    # TGT-235: unlike prune_vault above, which already caps the
+    # attachments vault's own disk usage, D2TG::Store's messages/
+    # sent_replies tables had no retention policy at all - eval-wrapped
+    # (a locked/busy SQLite database must not turn this non-essential
+    # housekeeping into a poll-cycle failure, matching every other
+    # non-fatal store-write call site in this script).
+    eval { $store->prune_history };
+    if ($@) {
+        print STDERR "PRUNE HISTORY ERROR: history retention sweep failed - will retry next cycle.\n";
+    }
+
     unless ($shutting_down) {
         my $current_version = D2TG::Poller::skill_version_check_safe( default_root => $skill_root );
         if ( defined $current_version && $current_version ne $starting_version ) {
