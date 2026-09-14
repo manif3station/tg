@@ -12,6 +12,11 @@ use File::Spec;
 # regression guard, not a fix for an existing bug: it fails if a future
 # change introduces a direct HTTP::Tiny call, which would reopen the
 # exploitability question this ticket's own investigation just closed.
+#
+# Checks actual code usage (a "use"/require statement or a method call
+# on the package), not mere text mentions - D2TG::Telegram's own POD
+# names HTTP::Tiny by name specifically to document that it is NOT
+# used, which a bare text search would misflag as a violation.
 
 my $lib_dir = File::Spec->catdir( $Bin, '..', 'lib', 'D2TG' );
 opendir my $dh, $lib_dir or die "can't open $lib_dir: $!";
@@ -26,8 +31,8 @@ for my $module (@modules) {
 
     unlike(
         $content,
-        qr/\bHTTP::Tiny\b/,
-        "$module does not reference HTTP::Tiny directly"
+        qr/^\s*(?:use|require)\s+HTTP::Tiny\b|HTTP::Tiny\s*->/m,
+        "$module does not use HTTP::Tiny in code"
     );
 }
 
