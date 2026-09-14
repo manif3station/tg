@@ -35,7 +35,14 @@ sub new {
 
     if ( defined $args{admin_chat_id} ) {
         my @ids = ref $args{admin_chat_id} eq 'ARRAY' ? @{ $args{admin_chat_id} } : ( $args{admin_chat_id} );
-        $self->_seed_admin($_) for @ids;
+        for my $id (@ids) {
+            if ( ref $id eq 'HASH' ) {
+                $self->_seed_admin( $id->{chat_id}, $id->{bot_key} );
+            }
+            else {
+                $self->_seed_admin($id);
+            }
+        }
     }
 
     return $self;
@@ -809,7 +816,13 @@ Opens (creating if needed) the SQLite database at C<db_path>, ensures the
 schema exists, and seeds C<admin_chat_id> into the allow-list if given.
 C<admin_chat_id> may be a single scalar (unchanged from before) or an
 arrayref of chat ids (TGT-049, for multi-group polling) - every id in
-the arrayref is seeded allowed.
+the arrayref is seeded allowed. As of TGT-234, an arrayref element may
+also be a hashref C<{ chat_id => $id, bot_key => $token }> - each is
+seeded under that specific C<bot_key> rather than the default sentinel,
+which is what C<cli/poller.pl>'s own real multi-bot startup now does
+(see L</_seed_admin> and L</is_allowed>) so the admin is auto-approved
+under every bot it's actually configured to poll with, not only under
+the single-bot default.
 
 Every connection sets C<PRAGMA busy_timeout = 5000> and
 C<PRAGMA journal_mode = WAL> immediately after connecting (TGT-129,

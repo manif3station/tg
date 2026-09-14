@@ -329,13 +329,31 @@ my $skill_root = File::Spec->catdir( $Bin, '..' );
 # ran before D2TG::Lock::release($lock_path), leaking the startup lock
 # file acquired above on a storage-open failure. Fixed the same way
 # TGT-184 fixed the identical gap on heartbeat_path's own failure exit.
+# TGT-234: a flat list of chat ids (the pre-fix shape) seeds every
+# admin chat_id under D2TG::Store's DEFAULT_BOT_KEY ('') sentinel only.
+# But is_allowed() below is called with the REAL bot token as bot_key
+# whenever $single_bot_mode is false, so an unscoped seed never matched
+# and the admin was locked out under every bot in a multi-bot/multi-
+# group config. Seed every real (chat_id, bot_key) pair actually
+# polled instead - $single_bot_mode is already computed above, so the
+# single-bot case still seeds under the '' sentinel exactly as before.
+my @admin_seed;
+for my $group (@$groups) {
+    for my $token ( @{ $group->{bots} } ) {
+        push @admin_seed, {
+            chat_id => $group->{chat_id},
+            bot_key => $single_bot_mode ? undef : $token,
+        };
+    }
+}
+
 my $store = eval {
     D2TG::Store->new(
         db_path => D2TG::Config::state_db_path(
             default_root => $skill_root,
             base_dir      => $base_dir,
         ),
-        admin_chat_id => [ map { $_->{chat_id} } @$groups ],
+        admin_chat_id => \@admin_seed,
     );
 };
 if ($@) {
@@ -585,8 +603,13 @@ C<D2TG_TOKEN> fold in as an implicit trailing group rather than being a
 separate code path - see L<D2TG::Config/bot_groups> for the exact
 merge rule (which also documents why the plain single-env-var case,
 with no C<--chat_id>/C<--bot> given at all, is byte-identical to this
-skill's original single-bot behavior). All declared chat ids are seeded
-into the allow-list. Every (chat_id, bot) pair is polled sequentially,
+skill's original single-bot behavior). Every real (chat_id, bot token)
+pair actually polled is seeded into the allow-list under its own
+C<bot_key> (TGT-234 - previously every declared chat id was seeded
+only under the single-bot default sentinel, which never matched the
+real per-bot C<is_allowed> check below in a multi-bot/multi-group
+config and silently locked the admin out under every non-default bot).
+Every (chat_id, bot) pair is polled sequentially,
 round-robin, once per poll cycle - not one process per bot - each with
 its own L<D2TG::Telegram> instance and its own persisted offset (see
 L<D2TG::Store/get_offset>); the single-bot case keeps using the
