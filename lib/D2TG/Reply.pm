@@ -466,6 +466,24 @@ C<'--db'> as the token). A bare trailing C<--bot> with I<no> value at
 all (C<@args> too short) is unaffected here - C<cli/reply.pl>'s own caller
 already handles that case directly (TGT-068).
 
+=head2 extract_bot_flag_or_die(@args)
+
+TGT-236: centralizes the eval-wrap-print-STDERR-exit-1 idiom that 7
+C<cli/*.pl> scripts (C<history>, C<attachment>, C<unread>,
+C<retry-download>, C<approve>, C<send>, C<reply>) each duplicated
+around L</extract_bot_flag> - the exact duplication class that already
+caused TGT-068/074/231. Calls L</extract_bot_flag> in an C<eval>; on
+failure, prints the error to STDERR and calls C<exit(1)> instead of
+propagating a raw exception. On success, returns exactly what
+C<extract_bot_flag> returns (C<$bot_token> may still be C<undef>) -
+this helper does not apply any default-to-C<''> or positional
+handling itself, since that differs legitimately between callers: a
+leading-position single call site (C<history.pl> and siblings) versus
+a caller embedded in a multi-flag dispatch loop (C<send.pl>/C<reply.pl>,
+which also pre-check C<@ARGV E<gt>= 2> and handle a bare trailing
+C<--bot> specially themselves). C<extract_bot_flag> itself is
+unchanged.
+
 =head2 parse_cli_args(@ARGV)
 
 Parses C<cli/reply.pl>'s raw argument list into C<($chat_id, $text,

@@ -4054,3 +4054,81 @@ via string interpolation of a numeric day-count into a fixed SQL
 literal shape `'-$days days'`, matching `is_recent_duplicate_reply`'s
 own already-proven `'-$window_seconds seconds'` pattern one screen
 above it in the same file - never user-supplied free text).
+
+## TGT-236: 7-way duplicated --bot flag eval-wrap boilerplate centralized
+
+Found via a scheduled JOB-004 improvement hunt, not a bug fix - the
+pre-refactor behavior was already correct in all 7 scripts. 7
+`cli/*.pl` scripts (`history.pl`, `attachment.pl`, `unread.pl`,
+`retry-download.pl`, `approve.pl`, `send.pl`, `reply.pl`) each
+duplicated the identical 6-line eval-wrapped
+`D2TG::Reply::extract_bot_flag(@ARGV)` block (declare vars, eval-call,
+check `$@`, print STDERR + exit 1, reassign `@ARGV`, default `bot_key`
+to `''`) verbatim or near-verbatim. This exact boilerplate has already
+been the source of at least 3 separate bug tickets found one script at
+a time (TGT-068, TGT-074, TGT-231), and TGT-233 had to hand-copy the
+block into 3 more scripts as a "fast-follow" specifically because it
+was deferred rather than centralized then.
+
+Two structurally different shapes exist across the 7 scripts:
+`history.pl`/`attachment.pl`/`unread.pl`/`retry-download.pl` (a
+standalone leading-position call, identical byte-for-byte) and
+`approve.pl` (the same shape, minor variable-name difference - `$bot_key`
+instead of `$bot_token`, default applied via `$bot_key = '' unless
+defined $bot_key` instead of a ternary) are one family; `send.pl`/
+`reply.pl` are a second family, calling the eval-wrapped idiom from
+inside a `while (@ARGV)` multi-flag dispatch loop that itself
+pre-checks `@ARGV >= 2` and handles a bare trailing `--bot` specially
+(silently shifting it off to keep the loop progressing, rather than
+leaving it as a leftover positional argument the way the first family
+does).
+
+Fixed by adding one new `D2TG::Reply::extract_bot_flag_or_die(@args)`
+that centralizes ONLY the eval+print-STDERR+exit-1 idiom - the actual
+duplicated part responsible for the 3 prior bug tickets - and returns
+whatever `extract_bot_flag` itself returns (`$bot_token` may be
+`undef`), deliberately NOT folding in the default-to-`''`/positional
+handling that differs legitimately between the two families. Each of
+the 5 leading-position scripts now calls the helper and keeps its own
+one-line default afterward (unchanged from before); `send.pl`/`reply.pl`
+keep their own loop structure (the `@ARGV >= 2` pre-check, the bare
+`shift @ARGV` fallback) untouched, calling the shared helper only in
+place of their own manual eval block. `extract_bot_flag` itself is
+completely unchanged, matching the solution's own explicit design
+constraint.
+
+New test `t/236-shared-bot-flag-helper.t`: confirmed genuinely red
+against the pre-fix code (`extract_bot_flag_or_die` did not exist),
+confirmed green after the fix (29/29) - covering the happy path, the
+absent-`--bot` case, the helper's own die-branch (exercised in-process
+via the `CORE::GLOBAL::exit` interception technique already
+established by `t/177`/`t/230`/`t/172`/`t/186`, since a subprocess
+call is invisible to the parent process's own `Devel::Cover`
+instrumentation), and a 7-script subprocess regression sweep using
+`--bot -x` (an unambiguous flag-shaped malformed value, chosen instead
+of `--bot --db ...` from `t/231`'s own precedent because several of
+the 7 scripts strip `--db` out in an earlier, separate pass before
+`--bot` is ever examined, so `--db` would not reliably reach
+`extract_bot_flag` as the "next" token in every script the way `-x`
+does). All 6 pre-existing `--bot`-related test files
+(`t/231`/`t/227`/`t/210`/`t/62`/`t/51`/`t/233`) re-confirmed passing
+unmodified. Full suite re-run clean at 1727/1727.
+
+Self-caught coverage gap on the first pass: 98.0% statement (not the
+mandatory 100%) on `lib/D2TG/Reply.pm`, traced to
+`extract_bot_flag_or_die`'s own die-branch - the 7-script regression
+sweep's subprocess calls all reach that branch, but subprocess
+coverage is invisible to the parent `Devel::Cover` run (the same
+established, accepted `cli/*.pl` limitation, here manifesting inside a
+`lib/` module instead). Fixed by adding the in-process
+`CORE::GLOBAL::exit`-interception subtest described above. Re-confirmed
+100%/100%/100% on `lib/D2TG/Reply.pm` after the fix.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: diffed
+each of the 7 scripts' new call site against its own pre-refactor
+version line-by-line to confirm only the eval-wrap lines were replaced
+(no other logic touched), and confirmed the full pre-existing `--bot`
+test suite passes unmodified as the strongest evidence the refactor is
+behavior-preserving.

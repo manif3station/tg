@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v1.89).** REFACTOR (TGT-236, found via
+a scheduled JOB-004 improvement hunt): 7 `cli/*.pl` scripts each
+duplicated the identical eval-wrap-print-STDERR-exit-1 idiom around
+`D2TG::Reply::extract_bot_flag` - the exact duplication class that
+already caused TGT-068, TGT-074, and TGT-231. New
+`extract_bot_flag_or_die` centralizes only that idiom; no behavior
+change for any caller.
+
 **Status: early implementation (v1.88).** FEATURE (TGT-235, found via a
 scheduled JOB-004 improvement hunt): `D2TG::Store`'s `messages` and
 `sent_replies` tables had no retention/eviction policy at all - every
