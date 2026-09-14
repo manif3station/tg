@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.76  2026-09-14
+      - RELIABILITY FIX (TGT-220, found via a scheduled JOB-003 hourly
+        bug hunt): D2TG::Poller::run_once's own NEW TG MEDIA FAILED
+        stdout line printed a hard-coded "RETRY WITH: d2
+        tg.retry-download --all" hint with no --bot flag, even though
+        $bot_token was already in scope at that exact print site
+        (threaded into record_failed_download's own bot_key argument
+        two lines earlier, per TGT-219). In a multi-bot config,
+        following that printed command literally for a non-default-bot
+        failure retried nothing, since cli/retry-download.pl's own
+        --all with no --bot only acts on the default-bot sentinel
+        queue. The RETRY WITH line now appends a masked --bot <token>
+        flag whenever $bot_token is defined, matching
+        _print_reply_template's own already-established convention
+        exactly (same masked_token() helper, never the raw token).
+        Single-bot mode (no bot_token) is unchanged. New test:
+        t/220-media-failed-retry-with-bot-flag.t.
+
 1.75  2026-09-14
       - RELIABILITY FIX (TGT-219, found via a scheduled JOB-004
         improvement hunt): D2TG::Store's failed_downloads queue was

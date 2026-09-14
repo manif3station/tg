@@ -469,9 +469,25 @@ sub run_once {
                         # recovery command, same convention as
                         # _print_attachment_template's own
                         # GET ATTACHMENT WITH line.
+                        # TGT-220 (found via a scheduled JOB-003 hourly
+                        # bug hunt): $bot_token is already in scope
+                        # here (used above for is_allowed and threaded
+                        # into record_failed_download's own bot_key
+                        # arg two lines earlier, per TGT-219) - a
+                        # multi-bot config's retry command must be
+                        # scoped the same way _print_reply_template's
+                        # own masked --bot flag already is, or
+                        # following this line literally retries
+                        # nothing (cli/retry-download.pl --all with no
+                        # --bot only acts on the default-bot sentinel
+                        # queue).
+                        my $retry_bot_flag =
+                          defined $bot_token
+                          ? ' --bot ' . D2TG::Config::masked_token($bot_token)
+                          : '';
                         print "$ts NEW TG MEDIA FAILED [$chat_id] $sender: "
                           . "$media_kind$caption_note - queued for retry, "
-                          . "RETRY WITH: d2 tg.retry-download --all\n";
+                          . "RETRY WITH: d2 tg.retry-download --all$retry_bot_flag\n";
                     }
                 }
             }

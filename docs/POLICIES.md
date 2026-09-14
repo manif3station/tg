@@ -3256,3 +3256,55 @@ caught the new `--bot` flag missing from the POD `SYNOPSIS`, fixed in
 the same pass, not scope creep). Full suite re-run clean at 1595/1595.
 100% statement+subroutine coverage confirmed on both `lib/D2TG/Store.pm`
 and `lib/D2TG/Poller.pm`.
+
+## TGT-220: NEW TG MEDIA FAILED's own RETRY WITH hint omitted --bot in a multi-bot config
+
+Found via a scheduled JOB-003 hourly bug hunt. `D2TG::Poller::run_once`'s
+`NEW TG MEDIA FAILED` stdout line (TGT-204) prints a `RETRY WITH: d2
+tg.retry-download --all` recovery-command hint whenever a media
+download fails and is successfully queued. Confirmed by direct source
+read that this line was a hard-coded string literal, even though
+`$bot_token` is already in scope at that exact print site - used two
+lines earlier for `record_failed_download`'s own `bot_key => $bot_token`
+argument (TGT-219). The sibling helper `_print_reply_template` already
+handles the equivalent case correctly: it appends a masked `--bot
+<token>` reminder whenever `$bot_token` is defined. A full grep of every
+recovery-command template in this module confirmed the `RETRY WITH`
+line was the sole one built as a bare literal rather than from
+`$bot_token`, like every other reply/attachment template.
+
+In a multi-bot config (`bot_groups`, TGT-098/202/213/218/219) where a
+media download fails and is queued under a non-default bot, `cli/
+retry-download.pl --all` with no `--bot` given only retries
+`failed_downloads(bot_key => '')` - the default-bot sentinel (TGT-219).
+Following the printed `RETRY WITH` command literally for a
+non-default-bot failure therefore retried nothing: the queue entry
+stayed stuck with no error, the command just reporting "No failed
+downloads queued." or silently processing only unrelated default-bot
+entries. This is the same class of gap as TGT-217 (a stdout template
+missing its bot-scoping flag), just on the `MEDIA FAILED` line instead
+of the `edited_message` line.
+
+Fixed by appending the same masked `--bot <token>` conditional
+`_print_reply_template` already uses (via `D2TG::Config::masked_token`,
+never the raw token) to the `RETRY WITH` line whenever `$bot_token` is
+defined; unchanged when it isn't.
+
+New test `t/220-media-failed-retry-with-bot-flag.t`: confirmed genuinely
+red against the pre-fix code (1/3 subtests failed - the masked `--bot`
+flag was missing from the multi-bot case's printed line), confirmed
+green after the fix (3/3), with the existing sibling
+`t/204-failed-download-visibility.t` re-run clean alongside it (10/10
+total, confirming the single-bot/no-token case is completely
+unaffected). Full suite re-run clean at 1598/1598. 100%
+statement+subroutine coverage confirmed on `lib/D2TG/Poller.pm`.
+
+Codex adversarial review attempted (2 tries): both returned the same
+`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted` sandbox
+error seen throughout this session. Fell back to independent
+verification: direct diff of the fix confirming it mirrors
+`_print_reply_template`'s own exact masked-append pattern (same helper,
+same conditional shape), confirmed the raw token is never printed (test
+asserts `unlike` against the raw token string), and confirmed no other
+call site or test was touched outside the ticket's declared scope
+(the `RETRY WITH` print line only).

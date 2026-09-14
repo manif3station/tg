@@ -1,17 +1,14 @@
 # tg
 
-**Status: early implementation (v1.75).** RELIABILITY FIX (TGT-219,
-found via a scheduled JOB-004 improvement hunt): `D2TG::Store`'s
-`failed_downloads` queue was the sole per-chat table never given the
-`bot_key` scoping TGT-098 already applied to `allow_list`/`pending` -
-the same `message_id` failing under two different bots in a multi-bot
-config collapsed into one row, and Telegram's own `file_id` values are
-bot-token-scoped, so a retry with the wrong bot's token could never
-succeed. `failed_downloads` now carries a `bot_key` column (migrated in
-place); `D2TG::Poller::run_once` threads its own bot token through;
-`cli/retry-download.pl` gains a `--bot <token>` flag (matching
-`cli/approve.pl`/`cli/reply.pl`'s own pattern). Single-bot mode is
-completely unaffected.
+**Status: early implementation (v1.76).** RELIABILITY FIX (TGT-220,
+found via a scheduled JOB-003 hourly bug hunt): `D2TG::Poller::run_once`'s
+own `NEW TG MEDIA FAILED` stdout line printed a hard-coded `RETRY WITH:
+d2 tg.retry-download --all` hint with no `--bot` flag, even though the
+bot token was already in scope at that print site. In a multi-bot
+config, following that command literally for a non-default-bot failure
+retried nothing. The line now appends a masked `--bot <token>` flag
+whenever a bot token is in play, matching the poller's own
+`REPLY WITH:` template convention. Single-bot mode is unchanged.
 
 RELIABILITY FIX (TGT-218,
 found via a scheduled JOB-003 hourly bug hunt): `D2TG::Config::require_chat_id_or_warn`
