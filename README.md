@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v1.87).** BUGFIX (TGT-234, found via a
+scheduled JOB-003 hourly bug hunt): `cli/poller.pl`'s multi-bot startup
+seeded every admin chat_id into the allow-list only under the
+single-bot default sentinel, but the real per-bot `is_allowed` check
+run in multi-bot mode never matched that sentinel - in any
+multi-bot/multi-group config, the admin's own messages were always
+queued as unapproved first-contact under every configured bot instead
+of being auto-allowed. Fixed by seeding each real `(chat_id, bot
+token)` pair actually polled; single-bot installs are unaffected.
+
 **Status: early implementation (v1.86).** FEATURE (TGT-233, fast-follow
 from TGT-232): `d2 tg.history`, `d2 tg.unread`, and `d2 tg.attachment`
 now accept a `--bot <token>` flag, matching `d2 tg.retry-download`'s own

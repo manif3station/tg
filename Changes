@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+1.87  2026-09-14
+      - BUGFIX (TGT-234, found via a scheduled JOB-003 hourly bug
+        hunt): cli/poller.pl's multi-bot startup seeded every admin
+        chat_id into D2TG::Store's allow-list only under the
+        DEFAULT_BOT_KEY ('') sentinel, but D2TG::Poller::run_once's
+        is_allowed check in multi-bot mode passes the REAL bot token
+        as bot_key - the seeded row never matched, so in any
+        multi-bot/multi-group config the admin's own messages were
+        always treated as unapproved first-contact and queued to
+        pending under every configured bot. D2TG::Store->new's
+        admin_chat_id arrayref may now contain hashrefs
+        { chat_id => ..., bot_key => ... } to seed a specific bot_key
+        per chat_id; cli/poller.pl now builds one such pair per real
+        (chat_id, bot token) it is about to poll. Plain scalars still
+        seed under the default sentinel exactly as before - single-bot
+        installs are unaffected. New test:
+        t/234-multi-bot-admin-seeding.t.
+
 1.86  2026-09-14
       - FEATURE (TGT-233, fast-follow from TGT-232's own scope
         decision): cli/history.pl, cli/unread.pl, and

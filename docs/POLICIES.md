@@ -3917,3 +3917,63 @@ verification: diffed each script's new `--bot` block character-for-
 character against `cli/retry-download.pl`'s own already-proven pattern,
 and confirmed via the new test file that default (no `--bot`) behavior
 is byte-identical to pre-fix output for all 3 scripts.
+
+## TGT-234: multi-bot admin_chat_id seeding used the wrong bot_key, locking the admin out
+
+Found via a scheduled JOB-003 hourly bug-hunt fork. `cli/poller.pl`'s
+multi-bot startup called `D2TG::Store->new(admin_chat_id => [ map {
+$_->{chat_id} } @$groups ])` - a flat list of chat ids with no
+`bot_key` info at all - so `_seed_admin` always seeded each admin
+chat_id under `DEFAULT_BOT_KEY` (`''`). But `D2TG::Poller::run_once`'s
+own `is_allowed` check passes `bot_token => $pair->{bot_key}` - the
+REAL bot token - whenever `$single_bot_mode` is false (any config with
+2+ chat_id groups or 2+ bots). `Store::is_allowed` does an exact
+`(chat_id, bot_key)` match with no fallback to `''`, so the seeded row
+never matched: in any multi-bot/multi-group configuration, the admin's
+own messages were always treated as unapproved first-contact and
+queued to `pending` under every configured bot - exactly backwards from
+the intended auto-seed behavior, and the same TGT-098/219/232
+bot_key-scoping bug class but in the opposite direction (a false
+negative locking the owner out, rather than a leak across bots).
+`t/45-multi-chat-seeding.t`/`t/75-multi-bot-allow-list-scoping.t` only
+ever called `is_allowed()` with no `bot_key` (or matching `bot_key`s),
+so the real multi-bot admin-seeding scenario had zero test coverage
+before this ticket.
+
+Fixed by extending `D2TG::Store::new`'s `admin_chat_id` arrayref to
+accept a hashref element (`{ chat_id => ..., bot_key => ... }`) in
+addition to a plain scalar - seeding that specific `bot_key` instead of
+the default sentinel - while a bare scalar still seeds under the
+sentinel exactly as before (full back-compat, `_seed_admin` itself
+already accepted an optional `$bot_key` parameter, unused by any
+caller until now). `cli/poller.pl` now builds one such pair per real
+`(chat_id, bot token)` it is about to poll, using `$single_bot_mode`
+(already computed earlier in the script, before `D2TG::Store->new` is
+called) to decide whether to seed the sentinel (single-bot, unchanged
+behavior) or the real token (multi-bot, the fix).
+
+New test `t/234-multi-bot-admin-seeding.t`: confirmed genuinely red
+against the pre-fix code (4/9 subtests failed - a 2-group/2-bot config
+and a shared-chat_id/2-bot config each failed to auto-approve the
+admin under its own real bot token), confirmed green after the fix
+(9/9). No regression to `t/45-multi-chat-seeding.t`/`t/75-multi-bot-
+allow-list-scoping.t`'s own existing single-bot/scalar-admin_chat_id
+coverage. Full suite re-run clean at 1692/1692 (the known transient
+`t/54-lock-acquire-race.t` host-load flake reproduced once under
+`Devel::Cover` instrumentation load, re-confirmed passing cleanly in
+isolation, unrelated to this change). 100% statement+subroutine
+coverage confirmed on `lib/D2TG/Store.pm`; `cli/poller.pl` remains
+outside `Devel::Cover`'s direct instrumentation (invoked via
+subprocess in its own tests) - an accepted, previously-documented
+limitation, not new to this ticket.
+
+Codex adversarial review attempted (`timeout 15 codex exec`): hung and
+was killed by timeout, the same near-universal unavailability seen
+throughout this session. Fell back to independent verification: traced
+the exact call chain from `cli/poller.pl`'s `$single_bot_mode`
+computation through `D2TG::Store->new`/`_seed_admin` to
+`D2TG::Poller::run_once`'s `is_allowed` call, confirming the fix
+threads the identical `bot_key` value both sides actually use, and
+manually verified the perlsec-relevant surface (bot tokens are opaque
+strings passed as bound SQL parameters, never interpolated or
+shell-executed).
