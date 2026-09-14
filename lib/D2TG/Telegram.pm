@@ -353,7 +353,12 @@ D2TG::Telegram - minimal Telegram Bot API client
 Raw HTTP client against the Telegram Bot API - no SDK dependency, matching
 the C<~/skills/tg> blueprint's own "no heavy SDK" principle. Uses
 L<LWP::UserAgent> by default (TGT-028); pass C<ua> to the constructor to
-inject a different (or mock) client for testing.
+inject a different (or mock) client for testing. This is the module's
+sole HTTP transport - it never uses L<HTTP::Tiny> directly (TGT-222,
+found via a vulnerability-scan gate: C<cpan-audit> flags CVEs against
+C<HTTP::Tiny>, a core Perl module present on the system but never
+called by this module or L<D2TG::Download>, so neither CVE's
+vulnerable code path is reachable here).
 
 Every C<_call> is additionally wrapped in a hard, C<SIGALRM>-based
 timeout (TGT-044, a real production incident: the underlying C<ua>'s own
