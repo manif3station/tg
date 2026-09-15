@@ -231,13 +231,12 @@ if (@other_pollers) {
           . "tracked by this instance's own lock file. It may be competing for the same "
           . "getUpdates long-poll slot; investigate and stop it manually.\n";
     }
-    if (@different_token) {
-        print STDERR "NOTE: other poller-shaped process(es) detected (PID(s): "
-          . join( ', ', @different_token ) . ") with a different bot token - "
-          . "almost certainly a sibling project's own poller on this host, not a real "
-          . "conflict. If this machine runs multiple projects with this skill, that is "
-          . "the most likely explanation; no action needed unless you know otherwise.\n";
-    }
+    # TGT-250 (Michael, live via Telegram, 2026-09-15): the different_token
+    # case is confirmed benign (a sibling project's own poller, different
+    # bot token, no real getUpdates collision) - printing anything about it
+    # was pure noise with no action ever attached, so it deliberately
+    # prints nothing now. Detection/classification itself is unchanged;
+    # only this branch stopped reporting.
     if (@unknown_token) {
 
         # A Codex review finding: 'unknown' (unreadable environ, no

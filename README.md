@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.01).** BUGFIX (TGT-250, live Telegram
+request from Michael): `d2 tg.poller` no longer prints the "NOTE: other
+poller-shaped process(es) detected... with a different bot token" line
+for a sibling project's own poller (confirmed benign, different
+D2TG_TOKEN) - his own words: "that is noise and confusion to the agent."
+The same_token/unknown_token WARNING branches are unchanged.
+
 **Status: early implementation (v2.00).** BUGFIX (TGT-249, found via a
 scheduled JOB-003 hourly bug hunt): `D2TG::Download::retry_failed_download`
 and `retry_failed_transcription`'s own `$still_queued` 3rd return value

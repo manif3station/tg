@@ -4864,3 +4864,54 @@ no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced, and no
 change to what either function prints or persists - only to the
 accuracy of the `$still_queued` signal both already exposed.
+
+## TGT-250: poller.pl no longer prints the different-token sibling-poller NOTE
+
+Live request via Telegram, Michael, 2026-09-15 (msg #443, verbatim):
+"You don't need to mention that. To me, that is noise and confusion to
+the agent. Stop printing that note" - quoting the exact NOTE text
+`cli/poller.pl`'s `different_token` branch (TGT-141) printed every poll
+cycle a sibling project's own poller (different `D2TG_TOKEN`, no real
+`getUpdates` collision) was detected. That branch's own wording already
+said "no action needed unless you know otherwise" - a confirmed-benign
+finding that still surfaced as bridge noise on every occurrence, exactly
+the kind of report-with-nothing-to-do-about-it the owner objected to.
+
+Fix: removed the `if (@different_token) { print STDERR ... }` block
+entirely, replaced with an explanatory comment. `find_other_pollers`/
+`classify_other_poller_token`'s own detection/classification logic is
+completely unchanged - `@different_token` is still populated by the
+existing classification loop, simply no longer acted on. The
+`same_token` and `unknown_token` WARNING branches (TGT-102/TGT-141) are
+untouched - those remain genuinely actionable (a real orphaned poller
+sharing this bot token, or one that couldn't be classified either way).
+
+New regression test `t/250-poller-silence-different-token-note.t`
+(source-code structural check, matching `t/105-orphaned-poller-token-
+crosscheck.t`'s own established pattern of regex-extracting a named `if`
+block from `cli/poller.pl`'s own source rather than spawning a real
+process): asserts the old NOTE text string no longer appears anywhere in
+the file, the `different_token` block (if a bare shell of it still
+existed) prints nothing, and both the `same_token`/`unknown_token`
+blocks are still present with their original WARNING text. Confirmed
+genuinely red against the pre-fix code (2 of 8 assertions failed - the
+NOTE text was still present); confirmed green after the fix (8/8).
+
+A pre-existing integration test, `t/82-orphaned-poller-detection.t`
+(spawns a real different-token sibling poller process and reads the real
+poller.pl's own stderr), asserted the *old* behavior directly (`like
+$warning_line, qr/^NOTE.*sibling project/`) - this was a genuine,
+expected regression once the fix landed, not a false alarm, so it was
+updated in the same commit to assert the new behavior instead (no
+`WARNING` line, and the old NOTE text absent from stderr entirely),
+rather than left broken or silently skipped.
+
+Full suite run in Docker (`t/250-...t`, `t/105-...t`, `t/82-...t`
+together): 32 tests, all passing.
+
+perlsec.pl-style vulnerability-scan audit: pure stderr-output-removal
+change - deletes a `print STDERR` call and its already-safe interpolated
+values (PID list only, already collected by unchanged code); no new
+shell invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced, and no
+change to any function's return value or persisted state.

@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+2.01  2026-09-15
+      - BUGFIX (TGT-250, live request via Telegram from Michael): d2
+        tg.poller no longer prints the "NOTE: other poller-shaped
+        process(es) detected... with a different bot token" line when
+        it detects a sibling project's own poller on the same host
+        (different D2TG_TOKEN, no real getUpdates collision). His own
+        words: "that is noise and confusion to the agent." The
+        same_token and unknown_token WARNING branches are unchanged -
+        those remain genuinely actionable (a real orphaned/competing
+        poller). Detection/classification logic itself is untouched;
+        only the different_token case stopped reporting.
+
 2.00  2026-09-14
       - BUGFIX (TGT-249, found via a scheduled JOB-003 hourly bug hunt):
         D2TG::Download::retry_failed_download and

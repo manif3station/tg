@@ -271,8 +271,11 @@ sub _fake_proc {
 {
     # TGT-141 core scenario, live-reproduced: a sibling project's own
     # legitimate poller (different D2TG_TOKEN, no real getUpdates
-    # collision) must get the reassuring NOTE wording, never the
-    # urgent WARNING framing.
+    # collision) must never get the urgent WARNING framing. TGT-250
+    # (Michael, live via Telegram, 2026-09-15): it must also no longer
+    # print the reassuring NOTE either - that framing was itself pure
+    # noise with no action ever attached to it, so the different-token
+    # case now prints nothing at all about the sibling poller.
     my $poller_cli = File::Spec->catfile( $Bin, '..', 'cli', 'poller.pl' );
 
     my $fake_poller_dir = tempdir( CLEANUP => 1 );
@@ -321,17 +324,24 @@ sub _fake_proc {
     my ( $child_out, $child_err ) = ( Symbol::gensym(), Symbol::gensym() );
     my $poller_pid = IPC::Open3::open3( my $in, $child_out, $child_err, $poller_cli );
 
-    my $first_line   = <$child_out>;
-    my $warning_line = <$child_err>;
+    my $first_line = <$child_out>;
 
-    unlike( $warning_line, qr/^WARNING/,
-        'a sibling project\'s own poller (different token) never gets the urgent WARNING framing' );
-    like( $warning_line, qr/^NOTE.*\Q$child_pid\E.*sibling project/,
-        'it gets the reassuring NOTE wording instead, naming the sibling-project explanation' );
+    # Give the detection block a moment to run and print (if it were
+    # going to) before killing the child and reading whatever stderr it
+    # produced in that window.
+    select( undef, undef, undef, 0.2 );
 
     kill 'KILL', $poller_pid;
     waitpid( $poller_pid, 0 );
+
+    local $/;
+    my $err = <$child_err> // '';
     close $_ for grep { defined } ( $in, $child_out, $child_err );
+
+    unlike( $err, qr/^WARNING/m,
+        'a sibling project\'s own poller (different token) never gets the urgent WARNING framing' );
+    unlike( $err, qr/other poller-shaped process\(es\) detected/,
+        'it prints nothing about the sibling poller at all - not even the old reassuring NOTE' );
 
     kill 'KILL', $child_pid;
     waitpid( $child_pid, 0 );
