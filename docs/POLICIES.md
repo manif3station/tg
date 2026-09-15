@@ -4915,3 +4915,79 @@ values (PID list only, already collected by unchanged code); no new
 shell invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced, and no
 change to any function's return value or persisted state.
+
+## TGT-251: select_model routed short voice notes to the slowest Whisper tier
+
+Live request via Telegram, Michael, 2026-09-15 (msg #446, verbatim):
+"The voice note transcribing is very slow. A short 30 seconds voice
+note sent from TG to the tg.poller take like forever." He also sent a
+real ~30s test voice note (msg #450, later attached to this ticket per
+his own instruction, msg #451) purely as sample audio for verifying the
+fix - its transcribed content was explicitly not the subject of this
+ticket ("The content inside isn't for you", msg #449).
+
+Root cause, confirmed by reading `lib/D2TG/Transcribe.pm:63-71`:
+`select_model(duration)` returned `medium` (the largest, slowest Whisper
+tier) for ANY duration `<=300`, including a 30-second clip - there was
+no fast-path for genuinely short audio at all. The module's own prior
+comments (TGT-100's follow-up, added after Michael's earlier measured
+throughput data) already documented exactly why this hurt: `medium`
+runs at ~5.6x real time on his host, so a 30s clip legitimately took
+~168s (nearly 3 minutes) of wall time to finish - "forever" for a short
+voice note, even though it technically stayed within the scaled 300s
+timeout floor and never triggered the existing timeout-retry-at-a-
+faster-tier fallback.
+
+Fix: `select_model` now returns `base` (the fastest existing tier,
+already part of `@MODEL_TIERS`) for any duration that is both
+genuinely-parsed (matches `/^\s*[\d.]+\s*$/`) AND in `(0, 60]`. Critical
+invariant preserved: an unparsed or failed duration probe (duration
+`undef`, non-numeric, or otherwise falling through to the existing
+`$duration = 0` coercion) must NOT be swept into this new fast tier just
+because `0 <= 60` - an *unknown* duration is not the same claim as a
+*confirmed-short* one, and t/74's own long-documented guarantee ("a
+probe failure never behaves worse than pre-TGT-100 code did") requires
+it keep falling back to `medium` exactly as before. This is why the fix
+tracks a separate `$parsed` boolean rather than testing the
+already-coerced `$duration` alone. All pre-existing tier boundaries
+above 60s (300->medium, 301->small, 900->small, 901->base) are
+unchanged, confirmed both by inspection and by `t/74-transcribe-dynamic-
+model.t`'s own pre-existing assertions still passing unmodified.
+`_scaled_timeout` and `_next_tier` (the retry-on-timeout escalation
+ladder) are untouched.
+
+New regression test `t/251-transcribe-fast-tier-short-clips.t`: boundary
+assertions for `select_model` (1/30/60 -> base, 61/299/300 -> medium,
+301/900 -> small, 901 -> base), the unparsed/failed-probe invariant
+(`select_model(0)`, `select_model(undef)`, `select_model('garbage')` all
+still return `medium`), and an integration-style assertion via
+`transcribe()` with an injected `duration_fn` returning 30, confirming
+the real whisper invocation is built with `--model base`. Confirmed
+genuinely red against the pre-fix code (4 of 14 assertions failed - the
+new-tier cases and the 30-second `transcribe()` call); confirmed green
+after the fix (14/14). `t/74-transcribe-dynamic-model.t` and
+`t/102-transcribe-scaled-timeout.t` re-run alongside it, both still
+green (45 tests total across the three files, no regressions).
+
+A genuine constraint, disclosed rather than worked around: no `whisper`/
+`whisper-cli`/`faster-whisper` binary is installed in this project's
+Docker `perl-test` container, so a real, live timed comparison ("does a
+30s clip actually transcribe faster wall-clock now") was not feasible to
+run in this sandbox. Verification instead relies on (a) the module's own
+already-documented real-host throughput measurement (`medium` at ~5.6x
+real time, cited above, which is why a faster tier is expected to help
+materially rather than marginally) and (b) unit-level `select_model`
+boundary tests confirming the new tier logic is exactly what was
+intended, matching how this project has previously handled other
+genuinely-unavailable external tools (`cpan-audit`, `codex exec`) -
+documented as a real limitation, not silently skipped.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow/data
+change - one new local boolean (`$parsed`) derived from an existing
+regex match already used by unchanged code, and one new early-return
+branch comparing already-validated numeric input against literal
+constants. No new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/eval-STRING
+patterns introduced, and no change to what `transcribe()` persists or
+returns beyond which model tier string it passes to the (unchanged)
+whisper invocation.

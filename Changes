@@ -1,5 +1,28 @@
 Revision history for the tg skill
 
+2.02  2026-09-15
+      - BUGFIX (TGT-251, live request via Telegram from Michael - "The
+        voice note transcribing is very slow. A short 30 seconds voice
+        note sent from TG to the tg.poller take like forever"):
+        D2TG::Transcribe::select_model routed any duration <=300s
+        (including a 30-second clip) to `medium`, the largest/slowest
+        Whisper tier. The module's own prior comments already documented
+        why this hurt: TGT-100's follow-up cited Michael's own measured
+        throughput data - `medium` runs at ~5.6x real time on his host,
+        so a 30s clip legitimately took ~168s of wall time to finish. A
+        genuinely short, parsed duration (0 < duration <= 60) now gets
+        `base` (the fastest existing tier) immediately, instead of
+        waiting on a timeout-triggered retry to eventually get there. An
+        unparsed/failed duration probe (duration undef or non-numeric,
+        coerced to 0) still falls back to `medium` unchanged - t/74's
+        own documented invariant ("a probe failure never behaves worse
+        than pre-TGT-100 code did") is preserved, since an unknown
+        duration is not the same claim as a confirmed-short one. No live
+        timed whisper benchmark was feasible in the Docker perl-test
+        sandbox (no whisper binary installed there); verification relies
+        on the module's own already-documented real-host throughput
+        measurement plus unit-level `select_model` boundary tests.
+
 2.01  2026-09-15
       - BUGFIX (TGT-250, live request via Telegram from Michael): d2
         tg.poller no longer prints the "NOTE: other poller-shaped

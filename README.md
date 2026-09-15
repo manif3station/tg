@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.02).** BUGFIX (TGT-251, live Telegram
+request from Michael - "a short 30 seconds voice note... take like
+forever"): `D2TG::Transcribe::select_model` now routes a genuinely
+short, parsed duration (<=60s) to the fastest Whisper tier (`base`)
+immediately, instead of `medium` (measured at ~5.6x real time on his
+host). An unparsed/failed duration probe still falls back to `medium`
+unchanged.
+
 **Status: early implementation (v2.01).** BUGFIX (TGT-250, live Telegram
 request from Michael): `d2 tg.poller` no longer prints the "NOTE: other
 poller-shaped process(es) detected... with a different bot token" line

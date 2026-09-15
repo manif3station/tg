@@ -63,8 +63,21 @@ sub _scaled_timeout {
 sub select_model {
     my ($duration) = @_;
 
-    $duration = 0 unless defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+    # TGT-251 (Michael, live via Telegram, 2026-09-15): "medium" measured
+    # at ~5.6x real time on his host (TGT-100's own follow-up data, just
+    # below) meant even a genuinely short clip paid minutes of wall time.
+    # A definitively-parsed short duration now gets the fastest tier
+    # straight away - but $parsed is tracked separately from the
+    # coerced-to-0 duration below, so an unparsed/failed probe (duration
+    # undef or non-numeric) is never swept into this new tier just
+    # because 0 <= 60: it is an unknown duration, not a confirmed-short
+    # one, and must keep falling back to 'medium' exactly as before
+    # (t/74's own documented invariant - a probe failure never behaves
+    # worse than pre-TGT-100 code did).
+    my $parsed = defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+    $duration = $parsed ? $duration : 0;
 
+    return 'base'   if $parsed && $duration > 0 && $duration <= 60;
     return 'medium' if $duration <= 300;
     return 'small'  if $duration <= 900;
     return 'base';
@@ -307,14 +320,23 @@ cloud transcription service. Per the blueprint, refuses any C<*.en>
 =head2 select_model($duration_seconds)
 
 Returns a Whisper model name tiered by audio duration (TGT-100, a live
-user request): C<medium> up to 300 seconds (today's quality, unchanged
-for the common case), C<small> up to 900 seconds, C<base> beyond that -
-a I<starting-point guess> only. Per-host Whisper throughput varies far
-more than audio duration alone predicts (measured on one host: C<medium>
-ran at ~5.6x real time with no GPU, so a 102-second clip took 9m31s,
-well inside this function's own 300-second "stays on medium" boundary) -
-see L</transcribe>'s automatic retry-on-timeout for what actually
-guarantees a long/slow clip doesn't get lost.
+user request): C<base> for a genuinely short, parsed duration in
+C<(0, 60]> (TGT-251, a live user request - Michael reported a 30-second
+clip taking "like forever"; C<medium> at the ~5.6x real-time throughput
+measured below means a clip that short still cost roughly 168 seconds of
+wall time under the old C<<=300s>> boundary), C<medium> up to 300 seconds
+otherwise, C<small> up to 900 seconds, C<base> beyond that - a
+I<starting-point guess> only. An unparsed or failed duration (C<undef>,
+non-numeric, or a failed probe - see L</transcribe>) is deliberately
+I<not> swept into the new short-clip tier merely because it coerces to
+0: an unknown duration keeps falling back to C<medium> exactly as
+before TGT-251, since an unknown duration is not the same claim as a
+confirmed-short one. Per-host Whisper throughput varies far more than
+audio duration alone predicts (measured on one host: C<medium> ran at
+~5.6x real time with no GPU, so a 102-second clip took 9m31s, well
+inside this function's own 300-second "stays on medium" boundary) - see
+L</transcribe>'s automatic retry-on-timeout for what actually guarantees
+a long/slow clip doesn't get lost.
 
 =head2 _scaled_timeout($duration_seconds)
 
