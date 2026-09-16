@@ -1197,7 +1197,7 @@ lists and acts on this.
 
 Removes one row from the C<failed_transcriptions> queue by its own
 C<id> (TGT-237) - a harmless no-op if that id doesn't exist. Called by
-C<D2TG::Download::retry_failed_transcription> only after a retry
+C<D2TG::Transcribe::retry_failed_transcription> only after a retry
 actually succeeds; a failed retry leaves the row untouched.
 
 =head2 failed_transcriptions_due_for_retry(bot_key => $b)
@@ -1213,7 +1213,7 @@ C<failed_transcriptions> queue (TGT-237, explicitly modeled on
 C<failed_downloads>' own shape) never did - a transient transcription
 failure sat queued until a human/agent ran C<d2 tg.retry-transcription>
 by hand, with no automatic recovery at all. See
-L<D2TG::Download/auto_retry_failed_transcriptions>.
+L<D2TG::Transcribe/auto_retry_failed_transcriptions>.
 
 =head2 mark_failed_transcription_retried($id)
 

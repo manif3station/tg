@@ -127,7 +127,7 @@ package main;
         open my $fh, '>', \$err or die $!;
         local *STDERR = $fh;
         ( $ok, $result, $still_queued ) =
-          D2TG::Download::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+          D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
         close $fh;
     }
 

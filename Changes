@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+2.07  2026-09-16
+      - REFACTOR (TGT-261, found via TGT-258's own module-decomposition
+        survey): D2TG::Download.pm held both download-retry logic
+        (genuinely its own domain) and transcription-retry logic
+        (retry_failed_transcription/auto_retry_failed_transcriptions,
+        ~120 lines) - an organizational mismatch, not just a size
+        problem. Moved both functions into D2TG::Transcribe.pm, their
+        actual domain. No forwarder kept (unlike D2TG::Store's own
+        precedent) - every real caller (cli/poller.pl,
+        cli/retry-transcription.pl, 5 test files) updated to the new
+        fully-qualified name directly. Zero behavior change - full
+        test suite (194 files, 1976 tests) passes unchanged, 100%
+        coverage on both modules. Download.pm: 707 -> 500 lines (now
+        under this board's 500-line cap). Transcribe.pm: 507 -> 716
+        lines (now over the cap for the first time) - filed TGT-263 as
+        a follow-up survey. New t/261-transcribe-owns-retry-functions.t
+        proves the functions moved, confirmed genuinely red before the
+        move.
+
 2.06  2026-09-16
       - REFACTOR (TGT-260, found via TGT-258's own module-decomposition
         survey): D2TG::Config.pm was 1131 lines, mixing several

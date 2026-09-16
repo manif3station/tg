@@ -13,7 +13,7 @@ require D2TG::Transcribe;
 
 # TGT-248 (found via a scheduled JOB-003 hourly bug hunt): the exact
 # TGT-247 bug class in retry_failed_transcription's own documented
-# structural sibling. D2TG::Download::retry_failed_transcription always
+# structural sibling. D2TG::Transcribe::retry_failed_transcription always
 # returned (1, $transcript) once download+transcription succeeded,
 # regardless of whether the follow-up record_message write then
 # succeeded - unlike retry_failed_download, which gained a 3rd
@@ -87,7 +87,7 @@ package main;
         open my $fh, '>', \$err or die $!;
         local *STDERR = $fh;
         ( $ok, $result, $still_queued ) =
-          D2TG::Download::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+          D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
         close $fh;
     }
 
@@ -122,7 +122,7 @@ package main;
     local *D2TG::Transcribe::transcribe = sub { return 'a fully recorded transcript' };
 
     my ( $ok, $result, $still_queued ) =
-      D2TG::Download::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+      D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
 
     ok( $ok, 'success reported' );
     is( $result, 'a fully recorded transcript', 'transcript returned' );

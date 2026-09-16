@@ -101,7 +101,7 @@ package main;
     no warnings 'redefine', 'once';
     local *D2TG::Transcribe::transcribe = sub { return 'a recovered transcript' };
 
-    my ($ok) = D2TG::Download::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+    my ($ok) = D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
     ok( $ok, 'retry_failed_transcription reports success' );
 
     my $under_bot_b   = $store->get_message( 999, 56, bot_key => 'bot-B-token' );

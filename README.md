@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.07).** REFACTOR (TGT-261, found via
+TGT-258's own decomposition survey): moved retry_failed_transcription/
+auto_retry_failed_transcriptions from `D2TG::Download.pm` (an
+organizational mismatch) into `D2TG::Transcribe.pm`, their genuine
+domain. Zero behavior change - full suite still passes, 100% coverage
+on both modules. Download.pm: 707 -> 500 lines.
+
 **Status: early implementation (v2.06).** REFACTOR (TGT-260, found via
 TGT-258's own decomposition survey): `D2TG::Config.pm`'s 12-sub path/
 alias-resolution cluster (~350 lines) moved into a new

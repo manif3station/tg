@@ -475,7 +475,7 @@ until ($shutting_down) {
         # call exactly, same per-pair/per-cycle scoping and non-fatal
         # eval-wrap.
         eval {
-            D2TG::Download::auto_retry_failed_transcriptions(
+            D2TG::Transcribe::auto_retry_failed_transcriptions(
                 $pair->{telegram}, $store,
                 bot_key => $pair->{bot_key},
             );

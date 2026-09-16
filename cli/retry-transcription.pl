@@ -11,6 +11,7 @@ use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Telegram;
 use D2TG::Download;
+use D2TG::Transcribe;
 use D2TG::Reply;
 
 my ( $db_alias, @rest );
@@ -75,7 +76,7 @@ else {
 my $exit_code = 0;
 for my $row (@to_retry) {
     my ( $ok, $result_or_error, $still_queued ) =
-      D2TG::Download::retry_failed_transcription( $telegram, $store, $row );
+      D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row );
 
     if ( !$ok ) {
         if ( D2TG::Config::is_expired_file_error($result_or_error) ) {
@@ -152,7 +153,7 @@ neither numeric nor C<--all>) runs before C<--db> storage resolution,
 matching C<cli/retry-download.pl>'s own established ordering.
 
 With a numeric C<id>, retries exactly that queued entry via
-L<D2TG::Download/retry_failed_transcription> - re-downloads the voice
+L<D2TG::Transcribe/retry_failed_transcription> - re-downloads the voice
 file using its saved C<file_id> (transiently, never landing in the
 shared attachments vault, matching C<cli/poller.pl>'s own
 C<$transcribe_voice> coderef) and re-attempts transcription; on

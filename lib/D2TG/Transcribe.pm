@@ -9,6 +9,8 @@ use File::Path qw(remove_tree);
 use POSIX qw(WNOHANG);
 use Time::HiRes qw(time sleep);
 use D2TG::Subprocess;
+use D2TG::Poller;
+use D2TG::Download;
 
 our $TIMEOUT     = 300;
 our $CURRENT_PID = undef;
@@ -298,6 +300,140 @@ sub kill_current {
     return;
 }
 
+# TGT-237: retry_failed_download's own analogue for a queued failed
+# voice transcription. Re-downloads the voice file transiently (never
+# passed a `dir`, matching D2TG::Poller's own $transcribe_voice
+# coderef - this download must never land in the shared, deduplicated
+# attachments vault, and is always unlinked immediately below,
+# regardless of outcome) and re-attempts D2TG::Transcribe::transcribe;
+# on success, restores the message into D2TG::Store history via
+# record_message (mirroring retry_failed_download's own TGT-104 Codex
+# finding - a retry success must not only clear the queue row, leaving
+# nothing for d2 tg.history/d2 tg.unread to show) and only then
+# removes the queue row via D2TG::Poller::store_write_safe, the same
+# established non-fatal store-write pattern; a record_message failure
+# leaves the row queued rather than silently losing the transcript a
+# second time.
+sub retry_failed_transcription {
+    my ( $telegram, $store, $row, %args ) = @_;
+
+    my $local_path = eval { D2TG::Download::download_file( $telegram, $row->{file_id}, ua => $args{ua} ) };
+    if ($@) {
+        my $error = $@;
+        $error =~ s/\n\z//;
+        return ( 0, $error );
+    }
+
+    my $transcript = eval { transcribe($local_path) };
+    my $transcribe_error = $@;
+    unlink $local_path;
+
+    if ($transcribe_error) {
+        my $error = $transcribe_error;
+        $error =~ s/\n\z//;
+        return ( 0, $error );
+    }
+
+    # TGT-245: same fast-follow gap as retry_failed_download's own
+    # record_message call above - $row->{bot_key} (TGT-237) must be
+    # threaded through, or the restored transcript lands under the
+    # default bot's history instead of the bot that actually received it.
+    my ($record_ok) = D2TG::Poller::store_write_safe(
+        $row->{chat_id}, 'record_message',
+        sub {
+            $store->record_message(
+                $row->{chat_id}, $row->{message_id}, $row->{sender}, $transcript,
+                bot_key => $row->{bot_key},
+            );
+        }
+    );
+
+    my $remove_ok;
+    if ($record_ok) {
+
+        # TGT-249 (found via a scheduled JOB-003 hourly bug hunt): the
+        # removal write's own (ok, value) result must be inspected, not
+        # discarded - a locked/busy database can make it fail
+        # transiently too, and a still-queued row in that case (removal
+        # write failed) must never be reported as fully complete.
+        ($remove_ok) =
+          D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_transcription', sub { $store->remove_failed_transcription( $row->{id} ) } );
+    }
+    else {
+        print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
+          . "a future retry can still restore history for this message, without re-transcribing\n";
+    }
+
+    # TGT-248 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+    # retry_failed_download's own $still_queued 3rd return value
+    # (TGT-244/TGT-247) exactly. $ok=1 alone does not mean the retry is
+    # FULLY complete - when record_message fails above, the row is
+    # deliberately left in failed_transcriptions (never removed) and no
+    # row was ever written into the messages table, so a caller printing
+    # an unqualified success (as cli/retry-transcription.pl used to) is
+    # misleading. A true 3rd return value here signals exactly that case.
+    #
+    # TGT-249: also true when record_message succeeded but the removal
+    # write itself then failed - $remove_ok is undef in that case
+    # (never attempted removal at all, or the attempt itself failed),
+    # so still_queued must be true, not just when $record_ok is false.
+    return ( 1, $transcript, ( $record_ok && $remove_ok ) ? 0 : 1 );
+}
+
+# TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+# auto_retry_failed_downloads exactly, applied to failed_transcriptions
+# instead - closes the same class of gap TGT-221 already closed for
+# failed_downloads (Q-015 answered by Michael: retry every 60s for up to
+# 5 minutes total, independent of poll cadence), which
+# retry_failed_transcription (TGT-237) never got despite being built as
+# failed_downloads' own explicit structural sibling. Called once per
+# (chat_id group, bot) pair per poll cycle from cli/poller.pl's main
+# loop, scoped to that pair's own bot_key (a retry needs the matching
+# bot's own $telegram, since Telegram's file_id values are bot-token-
+# scoped). Reuses retry_failed_transcription itself for the actual
+# retry - only the "which rows, how often" selection logic is new
+# (D2TG::Store::failed_transcriptions_due_for_retry). A row past the
+# 5-minute window is silently skipped, not deleted - it stays fully
+# visible/retryable via d2 tg.unread/d2 tg.retry-transcription exactly
+# as before. Never dies - a locked/busy database or a retry failure
+# must not turn this non-essential housekeeping into a poll-cycle
+# failure, matching auto_retry_failed_downloads' own established
+# non-fatal call-site pattern.
+sub auto_retry_failed_transcriptions {
+    my ( $telegram, $store, %args ) = @_;
+
+    my $due = $store->failed_transcriptions_due_for_retry(
+        defined $args{bot_key} ? ( bot_key => $args{bot_key} ) : ()
+    );
+
+    for my $row (@$due) {
+        retry_failed_transcription( $telegram, $store, $row, ua => $args{ua} );
+
+        # TGT-246: deliberately does NOT branch on retry_failed_transcription's
+        # own ($ok, $result) return value - unlike retry_failed_download,
+        # retry_failed_transcription always returns (1, $transcript) once
+        # download+transcription succeed, EVEN when the bookkeeping
+        # record_message write that follows then fails and the row is
+        # deliberately left queued (its own "STORE ERROR ... queue row
+        # not removed" comment). Trusting $ok alone here would repeat
+        # exactly the throttle-bypass bug TGT-244 fixed for
+        # auto_retry_failed_downloads: a row stuck in that partial-
+        # success state would never get last_retry_at stamped and would
+        # be retried on every single poll cycle instead of once per
+        # AUTO_RETRY_INTERVAL_SECONDS. Checking the queue directly after
+        # the attempt is unambiguous regardless of which step failed
+        # (download, transcription, or record_message) and needs no
+        # change to retry_failed_transcription's own existing contract
+        # (out of this ticket's scope).
+        my $still_queued = grep { $_->{id} == $row->{id} } @{ $store->failed_transcriptions };
+        if ($still_queued) {
+            eval { $store->mark_failed_transcription_retried( $row->{id} ) };
+        }
+    }
+
+    return;
+}
+
 1;
 
 =head1 NAME
@@ -492,6 +628,79 @@ own timeout-path process-group protection - without this, a clean
 poller shutdown could still leave a child C<whisper> itself spawned
 running, even though the same process's own timeout path already
 reached it.
+
+=head2 retry_failed_transcription($telegram, $store, $row, ua => $optional_client)
+
+TGT-237: L<D2TG::Download/retry_failed_download>'s own analogue for one
+L<D2TG::Store/failed_transcriptions> row - C<$row> is one of the
+hashrefs that method returns (C<id>, C<chat_id>, C<message_id>,
+C<file_id>, C<sender>, C<error>). Returns C<(1, $transcript)> on
+success or C<(0, $error)> on failure, the same shape convention as
+L<D2TG::Download/retry_failed_download>.
+
+Re-downloads the voice file via L<D2TG::Download/download_file> with no C<dir>
+argument (transient, matching C<cli/poller.pl>'s own
+C<$transcribe_voice> coderef exactly - this download must never land
+in the shared, deduplicated attachments vault) and re-attempts
+L<D2TG::Transcribe/transcribe>; the downloaded file is C<unlink>ed
+immediately afterward regardless of outcome. On success, restores the
+message into C<$store>'s own history via C<record_message> (the
+transcript itself as the summary - unlike L<D2TG::Download/retry_failed_download>,
+there is no real local path to hide, since a transcript is text, not a
+filesystem location), also passing C<< bot_key => $row->{bot_key} >>
+through (TGT-245 - the same missed-call-site fast-follow gap from
+TGT-232 that L<D2TG::Download/retry_failed_download> above had, fixed the same way)
+before removing the queue row via
+L<D2TG::Store/remove_failed_transcription> - both calls go through
+L<D2TG::Poller/store_write_safe>, matching L<D2TG::Download/retry_failed_download>'s
+own established non-fatal store-write pattern; a C<record_message>
+failure leaves the row queued (logged as C<STORE ERROR [chat_id]:
+queue row not removed - ...>) rather than losing the transcript a
+second time. On a download or transcription failure, the row is left
+completely untouched - never removed - so the caller (C<cli/retry-transcription.pl>)
+can retry again later.
+
+=head2 auto_retry_failed_transcriptions($telegram, $store, bot_key => $b, ua => $optional_client)
+
+TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
+L<D2TG::Download/auto_retry_failed_downloads> exactly, applied to
+C<failed_transcriptions> instead - closes the same class of gap TGT-221
+already closed for C<failed_downloads> (Q-015 answered by Michael:
+retry every 60s for up to 5 minutes total, independent of poll cadence),
+which C<retry_failed_transcription> (TGT-237) never got despite being
+explicitly built as C<failed_downloads>' own structural sibling - before
+this, a transient transcription failure sat queued until a human/agent
+ran C<d2 tg.retry-transcription> by hand, with no automatic recovery at
+all. Selects rows via L<D2TG::Store/failed_transcriptions_due_for_retry>
+and reuses L</retry_failed_transcription> itself for the actual retry
+attempt (no duplicated retry logic).
+
+Deliberately does NOT branch on C<retry_failed_transcription>'s own
+C<($ok, $result)> return value to decide whether to stamp
+C<last_retry_at> - unlike L<D2TG::Download/retry_failed_download>, C<retry_failed_transcription>
+always returns C<(1, $transcript)> once download and transcription both
+succeed, I<even when> the bookkeeping C<record_message> write that
+follows then fails and the row is deliberately left queued (its own
+C<STORE ERROR ... queue row not removed> path). Trusting C<$ok> alone
+here would repeat exactly the throttle-bypass bug TGT-244 fixed for
+L<D2TG::Download/auto_retry_failed_downloads>: a row stuck in that partial-success
+state would never get C<last_retry_at> stamped and would be retried on
+every single poll cycle instead of once per
+C<AUTO_RETRY_INTERVAL_SECONDS>. Instead, this checks
+L<D2TG::Store/failed_transcriptions> directly after the attempt for
+whether the row still exists - unambiguous regardless of which step
+failed (download, transcription, or C<record_message>), and requires no
+change to C<retry_failed_transcription>'s own existing return contract.
+
+Intended to be called once per C<(chat_id group, bot)> pair per poll
+cycle from C<cli/poller.pl>'s main loop, scoped to that pair's own
+C<bot_key> - a retry needs the matching bot's own C<$telegram>, since
+Telegram's C<file_id> values are bot-token-scoped. Never dies - a
+locked/busy database or a retry failure must not turn this non-essential
+housekeeping into a poll-cycle failure, matching
+L<D2TG::Download/auto_retry_failed_downloads>'s own established non-fatal call-site
+pattern.
+
 
 =head1 KNOWN LIMITATION
 
