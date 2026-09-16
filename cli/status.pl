@@ -7,6 +7,7 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Lock;
 use D2TG::Transcribe;
 
@@ -42,7 +43,7 @@ use constant STALE_THRESHOLD_SECONDS =>
   int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
 
 my ( $db_alias, @rest );
-( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 if (@ARGV) {
@@ -100,7 +101,7 @@ status - report whether the poller is currently running, dispatched as C<d2 tg.s
 
 =head1 DESCRIPTION
 
-C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> (TGT-124,
+C<--db>/C<-d> is resolved via L<D2TG::Config::Flags/extract_db_flag> (TGT-124,
 found via a scheduled improvement-hunt fixing a hand-rolled duplicate
 loop), the same shared helper every other C<d2 tg.*> command uses -
 this command accepts no other flags, so the fix is a behavior-preserving

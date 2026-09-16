@@ -7,9 +7,10 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 
 my ( $db_alias, @rest );
-( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 if (@ARGV) {
@@ -47,7 +48,7 @@ whoami - report which token/chat/storage a d2 tg.* invocation is actually config
 
 =head1 DESCRIPTION
 
-C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> (TGT-124,
+C<--db>/C<-d> is resolved via L<D2TG::Config::Flags/extract_db_flag> (TGT-124,
 found via a scheduled improvement-hunt fixing a hand-rolled duplicate
 loop), the same shared helper every other C<d2 tg.*> command uses -
 this command accepts no other flags, so the fix is a behavior-preserving

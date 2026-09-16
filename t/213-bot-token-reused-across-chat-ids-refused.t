@@ -4,9 +4,10 @@ use Test::More;
 use FindBin qw($Bin);
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 # TGT-213 (found via a scheduled JOB-004 improvement hunt): TGT-202's own
-# duplicate-pair guard in D2TG::Config::bot_groups keys its dedup check
+# duplicate-pair guard in D2TG::Config::Flags::bot_groups keys its dedup check
 # on (chat_id, bot_token) combined - but the actual hazard TGT-202 was
 # fixing (two poller @pairs entries racing the same get_offset/
 # set_offset calls for one bot token) is keyed on the bot TOKEN ALONE:
@@ -19,7 +20,7 @@ require D2TG::Config;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', '111', '--bot', 'shared-token', '--chat_id', '222', '--bot', 'shared-token' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -40,7 +41,7 @@ require D2TG::Config;
 # swallow or change.
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', '999', '--bot', 'dup-token' ],
             env_chat_id => '999',
             env_token   => 'dup-token',
@@ -51,7 +52,7 @@ require D2TG::Config;
 
 # Regression: genuinely distinct multi-bot groups are unaffected.
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--chat_id', '4567', '--bot', 't3' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -62,7 +63,7 @@ require D2TG::Config;
 # Regression: the same chat_id with two DIFFERENT bot tokens is still a
 # legitimate multi-bot-on-one-chat setup, not a duplicate.
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--bot', 't2' ],
         env_chat_id => undef,
         env_token   => undef,

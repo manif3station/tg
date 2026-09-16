@@ -1,0 +1,195 @@
+=head1 NAME
+
+D2TG::Config::Flags - CLI flag-parsing helpers (--db/-d, --chat_id/--bot groups)
+
+=head1 SYNOPSIS
+
+    my $value = D2TG::Config::Flags::shift_flag_value( \@args, '--flag' );
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag(@ARGV);
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups( argv => \@ARGV );
+
+=head1 DESCRIPTION
+
+TGT-267: extracted out of L<D2TG::Config> (which owned these four
+functions since TGT-049/TGT-051/TGT-072/TGT-177) into their own module
+- CLI flag-parsing is a distinct concern from L<D2TG::Config>'s own
+env-reading/version/error-classification concerns. Mirrors
+L<D2TG::Reply::Args>/L<D2TG::Config::Paths>'s own precedent.
+
+=head1 FUNCTIONS
+
+=head2 shift_flag_value($args_arrayref, $flag_label)
+
+Shared helper (TGT-072) extracted after TGT-068/069/070/071
+independently rediscovered and hand-patched the same bug four times:
+shifts the next value off C<$args_arrayref> and dies with
+C<"$flag_label requires a value\n"> unless it's defined, non-empty, and
+doesn't itself look like a I<flag> - one or two leading dashes followed
+by a letter (C<--since>, C<-d>), not merely anything starting with a
+dash. A Codex review during TGT-072 caught that the original, simpler
+C<!~ /^-/> check would have rejected a legitimate negative Telegram
+group/supergroup chat id (e.g. C<-1001234567890>, always negative for
+those chat types) passed to C<--chat_id>, which would have been a real
+regression despite passing every then-existing test (none exercised a
+negative chat id). C<-100...> and similar numeric-negative values pass
+through fine; only a dash immediately followed by a letter is rejected.
+Used by L</extract_db_flag>, L</bot_groups>'s C<--chat_id> handling,
+C<cli/reply.pl>'s own C<--db> extraction, and C<cli/history.pl>'s
+C<--since>/C<--until> handling - one implementation instead of four,
+so a fifth call site (or a fifth future flag) gets this guard for free
+instead of needing its own copy.
+
+=head2 extract_db_flag(@ARGV)
+
+Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
+(TGT-051), recognized anywhere in the list. Since TGT-177, every
+C<cli/*.pl> script that uses this whole-list scan (10 total) goes
+through L</extract_db_flag_or_die> rather than calling this function
+directly - see that function's own POD below for the full list. Most
+of those take no free-form text arguments that could collide with this
+flag's own name, so a whole-list scan is unambiguously safe for them;
+C<cli/send.pl> is the one exception (its own C<--caption> is free-form
+text) and accepts a narrow, already-documented ambiguity in its own
+POD/comments as a deliberate trade-off for staying consistent with
+every other script here, rather than getting its own bespoke
+position-aware extraction. C<cli/reply.pl> does I<not> use this
+function - it has its own leading-position-only
+extraction
+instead (see its own POD), for the same reason
+C<D2TG::Reply::Args::parse_cli_args>'s C<--reply-to-message-id> is
+trailing-only (TGT-042): reply text passed as free-form words could
+otherwise collide with the flag's own name. Returns C<($alias,
+@remaining_args)> - C<$alias> is C<undef> if the flag wasn't given.
+
+Dies with C<--db/-d requires a value> (TGT-071, a real live-reproduced
+incident, same bug class as TGT-069/070) if the token immediately after
+C<--db>/C<-d> is missing, empty, or itself looks like a flag (starts
+with C<->) - a bare trailing C<--db>, or C<--db> immediately followed by
+another real flag (e.g. C<cli/history.pl --db --since 2026-01-01>, C<cli/reply.pl
+--db --bot TOKEN ...>, C<cli/history.pl --db --chat_id>), would otherwise
+silently swallow that flag's own name as the alias and fail later with a
+misleading C<Unknown --db/-d alias '--since'>-style message instead of
+naming the real problem. Since TGT-177, every CLI caller except C<cli/reply.pl> goes through
+L</extract_db_flag_or_die> instead of wrapping this call in its own
+C<eval { ... }> - see that function's own POD below. C<cli/reply.pl>'s
+separate leading-position-only C<--db> extraction (see above) has the
+identical validation added directly in its own loop, since it doesn't
+call this function. A consequence (flagged in TGT-071's Codex review):
+a Developer Dashboard path alias can no longer itself begin with C<->
+- not a real-world constraint, since C<d2 paths> aliases are plain
+names, not flag-like strings. The validation itself is now delegated to
+L</shift_flag_value> (TGT-072), which also backs L</bot_groups>'s
+C<--chat_id> handling and C<cli/history.pl>'s C<--since>/C<--until>
+handling - one implementation instead of four.
+
+=head2 extract_db_flag_or_die(@ARGV)
+
+TGT-177 (found via a scheduled improvement hunt): wraps L</extract_db_flag>
+in the identical C<eval { ... }; if ($@) { print STDERR $@; exit 1; }>
+pattern 10 C<cli/*.pl> scripts (C<approve>/C<attachment>/C<history>/
+C<poller>/C<retry-download>/C<send>/C<status>/C<text-only-replies>/
+C<unread>/C<whoami>) had each independently duplicated - matching
+L<D2TG::Config::Paths/resolve_alias_dir_or_die>'s own identical TGT-172
+extraction of the same shape for C<resolve_alias_dir>. Pure refactor:
+same exit code, same STDERR text (byte-for-byte, not just the same
+wording), same return shape C<($alias, @remaining_args)> - no caller's
+own observable behavior changes. C<cli/reply.pl> is not among the
+callers, since it uses its own separate leading-position-only C<--db>
+extraction (see L</extract_db_flag>'s own POD above) rather than this
+function.
+
+=head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
+
+Parses repeatable C<--chat_id <id>>/C<--bot <token>> pairs (TGT-049)
+into an ordered list of groups: each C<--chat_id> starts a new group,
+and each C<--bot> attaches to the most recently declared C<--chat_id>.
+Returns C<(\@groups, @rest)> - C<@groups> is a list of
+C<{ chat_id => ..., bots => [...] }> hashrefs in declaration order;
+C<@rest> is every argument that wasn't part of a C<--chat_id>/C<--bot>
+pair, unconsumed and in order, for the caller to keep parsing.
+
+C<env_chat_id>/C<env_token> default to C<$ENV{D2TG_CHAT_ID}>/
+C<$ENV{D2TG_TOKEN}> (pass explicit values, including C<undef>, to
+override for testing). Neither is special-cased: whichever is defined
+and non-empty is appended to C<argv> as an ordinary trailing
+C<--chat_id>/C<--bot> pair I<before> parsing, so the exact same grouping
+algorithm handles every case without a separate merge path:
+
+=over 4
+
+=item * Only env vars set, no CLI args at all (today's only mode): the
+appended stream is exactly one C<--chat_id>/C<--bot> pair, producing a
+single group - byte-for-byte equivalent to today's single-bot behavior.
+
+=item * C<env_token> set alone, with existing CLI-declared groups: only
+C<--bot $token> is appended, with no preceding C<--chat_id>, so it
+attaches to the I<last> already-open group.
+
+=item * Both env vars set, with existing CLI-declared groups: C<--chat_id
+$env_chat_id --bot $env_token> is appended as its own new, separate
+group.
+
+=back
+
+Dies if a C<--bot> is encountered (from either C<argv> or the appended
+env pair) with no C<--chat_id> having been declared yet. Also dies
+(TGT-074, same bug class as TGT-069/071/072's C<--chat_id>/C<--db>
+fixes) if C<--bot>'s own shifted value is missing or itself flag-like -
+a bare trailing C<--bot>, or C<--bot> immediately followed by another
+flag, would otherwise silently push C<undef> (or that flag's own name)
+into the group's C<bots> list instead of erroring. Delegated to
+L</shift_flag_value>, same as C<--chat_id>'s own validation above.
+
+Dies (TGT-069, a real live-reproduced incident: a bare trailing
+C<--chat_id> reached D2TG::Store's SQL bind as an opaque
+C<DBD::SQLite::db do failed: datatype mismatch>, several layers away
+from the actual mistake) if a C<--chat_id> has no usable value following
+it - either nothing at all, or another recognized flag token
+(C<--chat_id>/C<--bot>). The latter case matters specifically because of
+the env-merge behavior above: if C<env_token> is set, it appends its own
+C<--bot $token> pair to C<argv> I<before> parsing, so a bare trailing
+C<--chat_id> in the caller's own args is never actually the last element
+of the combined stream - a naive "is anything left" check would let
+C<--bot> itself be consumed as the chat_id value instead of failing.
+This validation is now delegated to L</shift_flag_value> (TGT-072),
+which checks generically for any flag-like value (starts with C<->)
+rather than only the two specific sibling flag names.
+
+Dies (TGT-202, found via a scheduled JOB-003 hourly bug hunt) if the
+same C<(chat_id, bot token)> pair appears more than once across all
+groups, including the appended env pair - the env-merge behavior above
+means a caller who already declared C<--chat_id $id --bot $token>
+explicitly and I<also> has C<D2TG_CHAT_ID>/C<D2TG_TOKEN> set to the
+exact same values would otherwise silently get two separate group
+entries sharing that one pair, and C<cli/poller.pl>'s own C<@pairs>
+construction would poll that one bot token twice per cycle, racing its
+own C<get_offset>/C<set_offset> calls against itself. A genuinely
+distinct configuration - two different chat ids, or the same chat id
+with two different bot tokens - is unaffected; only an EXACT duplicate
+pair refuses.
+
+Also dies (TGT-213, found via a scheduled JOB-004 improvement hunt) if
+the same bot token is configured under two I<different> C<chat_id>
+groups - the check above alone doesn't catch this, since its key
+includes C<chat_id>, but the actual hazard is keyed on the token alone:
+L<D2TG::Store>'s C<get_offset>/C<set_offset> key the shared offset row
+purely on C<bot_key> (the token), and C<cli/poller.pl>'s own C<@pairs>
+construction sets C<bot_key> to the token alone with no C<chat_id>
+folded in - so two groups sharing a token would still race the same
+offset row even though their C<(chat_id, token)> pairs differ. The
+message names the masked token (never the raw value) and both
+conflicting C<chat_id>s.
+
+Also dies (TGT-218, found via a scheduled JOB-003 hourly bug hunt) if a
+C<--chat_id> value doesn't match Telegram's own canonical chat-id shape
+(C<^-?\d+$> - bare digits, or a leading C<-> for a group/supergroup/
+channel), reusing the identical check L<D2TG::Config/require_chat_id_or_warn>
+already enforces for C<D2TG_CHAT_ID> (TGT-155/164) - a mangled value
+can never string-eq match a real inbound C<chat_id>, so it previously
+started the poller successfully while silently locking the owner out
+forever, since C<cli/poller.pl>'s own re-validation only ever re-checked
+C<D2TG_CHAT_ID> when set alongside CLI groups, never the CLI-declared
+value itself.
+
+=cut

@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 # TGT-218 (found via a scheduled JOB-003 hourly bug hunt): D2TG::Config
 # ::require_chat_id_or_warn (TGT-155/164) validates D2TG_CHAT_ID against
@@ -20,7 +21,7 @@ require D2TG::Config;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', ' 12345', '--bot', 'tok1' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -32,7 +33,7 @@ require D2TG::Config;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', 'abc', '--bot', 'tok1' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -45,7 +46,7 @@ require D2TG::Config;
 # Regression: valid positive and negative (group/channel) chat_ids are
 # completely unaffected.
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -54,7 +55,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '-987654321', '--bot', 't1' ],
         env_chat_id => undef,
         env_token   => undef,

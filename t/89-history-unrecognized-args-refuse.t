@@ -56,7 +56,7 @@ $ENV{D2TG_CHAT_ID} = '999999';
 
 # A Codex review raised whether the new check (placed after --since/
 # --until parsing) could regress --db/-d, which is consumed earlier
-# still (D2TG::Config::extract_db_flag, before the --since/--until
+# still (D2TG::Config::Flags::extract_db_flag, before the --since/--until
 # loop even runs) - live-verified as a false alarm, but these cases
 # make that verification a permanent regression test rather than a
 # one-off manual check.

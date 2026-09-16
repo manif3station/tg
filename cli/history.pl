@@ -7,13 +7,14 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Reply;
 use D2TG::Reply::Args;
 
 my ( $db_alias, @after_db );
-( $db_alias, @after_db ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @after_db ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @after_db;
 
 # TGT-233 (fast-follow from TGT-232's own scope decision): TGT-232 made
@@ -35,7 +36,7 @@ my ( $since, $until );
     while (@ARGV) {
         my $arg = shift @ARGV;
         if ( $arg eq '--since' || $arg eq '--until' ) {
-            my $value = eval { D2TG::Config::shift_flag_value( \@ARGV, $arg ) };
+            my $value = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, $arg ) };
             if ($@) {
                 print STDERR "d2 tg.history: $@";
                 exit 2;
@@ -150,13 +151,13 @@ matches, rather than a blank/confusing output.
 
 C<--since>/C<--until> validate their shifted value (TGT-070, a real
 live-reproduced incident, same class of bug as TGT-069's
-C<D2TG::Config::bot_groups> fix): a bare trailing flag with nothing
+C<D2TG::Config::Flags::bot_groups> fix): a bare trailing flag with nothing
 following it, or one immediately followed by the other flag (which
 would otherwise silently swallow that flag's own name as the value),
 exits 2 with a clear C<requires a value> message instead of silently
 running the query unscoped or mis-scoped to match nothing. This
-validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072),
-shared with C<--db>/C<-d>'s own validation and C<D2TG::Config::bot_groups>'s
+validation is delegated to L<D2TG::Config::Flags/shift_flag_value> (TGT-072),
+shared with C<--db>/C<-d>'s own validation and C<D2TG::Config::Flags::bot_groups>'s
 C<--chat_id> validation.
 
 C<--since>/C<--until> also validate the *shape* of their value (TGT-209,

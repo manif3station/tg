@@ -7,6 +7,7 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Telegram;
 use D2TG::Reply;
 use D2TG::Reply::Args;
@@ -45,7 +46,7 @@ my $reply_to_message_id;
 # defeat the entire point of this ticket (consistency with those 7
 # scripts) for a scenario with no legitimate real usage.
 my ( $db_alias, @after_db );
-( $db_alias, @after_db ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @after_db ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @after_db;
 
 while (@ARGV) {
@@ -54,7 +55,7 @@ while (@ARGV) {
 
             # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
             # reproduced live): extract_bot_flag delegates to
-            # D2TG::Config::shift_flag_value, which dies when --bot is
+            # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
             # immediately followed by another flag - previously
             # uncaught here, crashing with Perl's raw exit 255 instead
             # of this project's own clean-refusal convention, matching
@@ -70,7 +71,7 @@ while (@ARGV) {
     }
     elsif ( $ARGV[0] eq '--caption' ) {
         shift @ARGV;
-        $caption = eval { D2TG::Config::shift_flag_value( \@ARGV, '--caption' ) };
+        $caption = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, '--caption' ) };
         if ($@) {
             print STDERR $@;
             exit 1;
@@ -78,7 +79,7 @@ while (@ARGV) {
     }
     elsif ( $ARGV[0] eq '--reply-to-message-id' ) {
         shift @ARGV;
-        $reply_to_message_id = eval { D2TG::Config::shift_flag_value( \@ARGV, '--reply-to-message-id' ) };
+        $reply_to_message_id = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, '--reply-to-message-id' ) };
         if ($@) {
             print STDERR $@;
             exit 1;
@@ -169,7 +170,7 @@ C<.png>/C<.gif>/C<.webp> (case-insensitive) send as a photo; everything
 else sends as a document. No content sniffing - Telegram itself accepts
 any file type via C<sendDocument> regardless.
 
-C<--db>/C<-d> is resolved via L<D2TG::Config/extract_db_flag> and may
+C<--db>/C<-d> is resolved via L<D2TG::Config::Flags/extract_db_flag> and may
 appear anywhere in the argument list, not just before the other flags/
 positionals (TGT-124, found via a scheduled improvement-hunt: the
 previous hand-rolled loop stopped at the first non-flag token, so
@@ -182,7 +183,7 @@ optional free text attached to the sent photo/document.
 C<--reply-to-message-id> (numeric) threads the send under an existing
 Telegram message, matching C<d2 tg.reply>'s own flag. C<--bot> matches
 C<d2 tg.reply>'s own leading-flag shape and validation
-(L<D2TG::Config/shift_flag_value>). Any argument left over after
+(L<D2TG::Config::Flags/shift_flag_value>). Any argument left over after
 C<chat_id>/C<file_path> refuses with C<Usage> (exit 2) rather than being
 silently dropped (a real gap caught by Codex review before shipping -
 previously C<--caption>/C<--reply-to-message-id> given I<after>

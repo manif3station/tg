@@ -7,13 +7,14 @@ use lib "$Bin/../lib";
 use Encode qw(decode);
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::TTS;
 
 my $out;
 while (@ARGV) {
     if ( $ARGV[0] eq '--out' ) {
         shift @ARGV;
-        $out = eval { D2TG::Config::shift_flag_value( \@ARGV, '--out' ) };
+        $out = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, '--out' ) };
         if ($@) {
             print STDERR $@;
             exit 1;

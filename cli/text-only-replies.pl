@@ -7,11 +7,12 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Poller;
 use D2TG::Store;
 
 my ( $db_alias, @rest );
-( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 if (@ARGV) {

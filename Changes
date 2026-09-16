@@ -1,5 +1,31 @@
 Revision history for the tg skill
 
+2.12  2026-09-16
+      - REFACTOR (TGT-267, found via TGT-266's own qa gate finding):
+        D2TG::Config.pm was 939 lines, over this board's 500-line cap,
+        after TGT-260's own narrower path/alias-resolution extraction
+        never brought it fully under. Surveyed the module and found
+        the CLI flag-parsing cluster (shift_flag_value, extract_db_flag,
+        extract_db_flag_or_die, bot_groups) was a distinct concern from
+        the module's own env-reading/version/error-classification
+        concerns. Extracted into new module D2TG::Config::Flags,
+        mirroring D2TG::Reply::Args/D2TG::Config::Paths's own
+        precedent. No forwarder kept - every real caller (~31 files
+        across cli/, lib/, t/) updated to the new fully-qualified name
+        directly; die message text preserved byte-for-byte (still
+        prefixed D2TG::Config::bot_groups:) for true zero-behavior-
+        change. Also (consistent with TGT-263/265's own precedent for
+        a touched module, not just a new one) split Config.pm's own
+        remaining POD into Config.pod - this brought Config.pm down to
+        237 lines, better than the originally-planned partial
+        progress: BOTH Config.pm and Config/Flags.pm now fully under
+        the 500-line cap. Zero behavior change - full test suite (199
+        files, 2185 tests) passes unchanged, 100% coverage on both
+        modules. New t/267-config-flags-module.t proves the functions
+        moved, confirmed genuinely red before the move. Also fixed
+        t/216's own doc-accuracy check (was reading Config.pm for POD
+        text that moved to Config.pod).
+
 2.11  2026-09-16
       - DOC FIX (TGT-266, found via a scheduled JOB-005 doc-accuracy
         hunt): lib/D2TG/Config.pm's extract_db_flag POD still linked

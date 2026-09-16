@@ -6,6 +6,7 @@ use lib "$Bin/../lib";
 use File::Temp qw(tempdir);
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 {
     local $ENV{D2TG_DB};
@@ -124,19 +125,19 @@ require D2TG::Config;
 }
 
 {
-    my ( $alias, @rest ) = D2TG::Config::extract_db_flag( '--db', 'foobar', '123456', 'hello' );
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag( '--db', 'foobar', '123456', 'hello' );
     is( $alias, 'foobar', 'extract_db_flag pulls out the --db value' );
     is_deeply( \@rest, [ '123456', 'hello' ], 'extract_db_flag leaves the remaining args in order' );
 }
 
 {
-    my ( $alias, @rest ) = D2TG::Config::extract_db_flag( '123456', '-d', 'foobar', 'hello' );
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag( '123456', '-d', 'foobar', 'hello' );
     is( $alias, 'foobar', 'extract_db_flag recognizes -d as well as --db, anywhere in the list' );
     is_deeply( \@rest, [ '123456', 'hello' ], 'extract_db_flag leaves the remaining args in order regardless of flag position' );
 }
 
 {
-    my ( $alias, @rest ) = D2TG::Config::extract_db_flag( '123456', 'hello' );
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag( '123456', 'hello' );
     is( $alias, undef, 'extract_db_flag returns undef when neither --db nor -d is given' );
     is_deeply( \@rest, [ '123456', 'hello' ], 'extract_db_flag leaves args completely unchanged when the flag is absent' );
 }
@@ -146,13 +147,13 @@ require D2TG::Config;
     # another flag, must not silently swallow that flag's own name as
     # the alias - same bug class as TGT-069/070, live-reproduced as
     # `cli/history --db --since 2026-01-01` swallowing --since.
-    eval { D2TG::Config::extract_db_flag('--db') };
+    eval { D2TG::Config::Flags::extract_db_flag('--db') };
     like( $@, qr/--db\/-d requires a value/i, 'a bare trailing --db dies naming --db/-d as requiring a value' );
 
-    eval { D2TG::Config::extract_db_flag( '-d', '--since', '2026-01-01' ) };
+    eval { D2TG::Config::Flags::extract_db_flag( '-d', '--since', '2026-01-01' ) };
     like( $@, qr/--db\/-d requires a value/i, '-d immediately followed by another flag dies instead of swallowing that flag as the alias' );
 
-    eval { D2TG::Config::extract_db_flag( '123456', '--db', '--chat_id' ) };
+    eval { D2TG::Config::Flags::extract_db_flag( '123456', '--db', '--chat_id' ) };
     like( $@, qr/--db\/-d requires a value/i, '--db appearing mid-list followed by another flag also dies, not just when --db is first/last' );
 }
 

@@ -5,9 +5,10 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv         => [],
         env_chat_id  => '7890',
         env_token    => 'tok6',
@@ -20,7 +21,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--bot', 't2', '--chat_id', '4567', '--bot', 't3' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -34,7 +35,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--bot', 't2', '--chat_id', '4567', '--bot', 't3' ],
         env_chat_id => undef,
         env_token   => 'tok6',
@@ -46,7 +47,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--bot', 't2', '--chat_id', '4567', '--bot', 't3' ],
         env_chat_id => '7890',
         env_token   => 'tok6',
@@ -59,7 +60,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ 'stray1', '--chat_id', '1234', '--bot', 't1', 'stray2' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -70,7 +71,7 @@ require D2TG::Config;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--bot', 't1' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -85,7 +86,7 @@ require D2TG::Config;
     # would otherwise reach D2TG::Store's SQL bind as an opaque
     # DBD::SQLite error several layers away from the actual mistake.
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -95,7 +96,7 @@ require D2TG::Config;
 }
 
 {
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -110,7 +111,7 @@ require D2TG::Config;
     # id is always negative (e.g. -1001234567890) - the shared helper's
     # flag-like check must not reject a negative number, only a value
     # that starts with a dash immediately followed by a letter.
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '-1001234567890', '--bot', 't1' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -128,7 +129,7 @@ require D2TG::Config;
     # chat_id value instead of a real id. Must still die, not silently
     # store chat_id => '--bot'.
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id' ],
             env_chat_id => undef,
             env_token   => 'sometoken',

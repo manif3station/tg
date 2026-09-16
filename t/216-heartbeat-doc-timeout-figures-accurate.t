@@ -24,7 +24,11 @@ require D2TG::Transcribe;
 my $per_tier_worst_case = $D2TG::Transcribe::TIMEOUT_CEILING;
 my $full_ladder_worst_case = $per_tier_worst_case * scalar(@D2TG::Transcribe::MODEL_TIERS);
 
-for my $file (qw(lib/D2TG/Config.pm cli/poller.pl)) {
+# TGT-267: D2TG::Config's own POD (including write_heartbeat/
+# heartbeat_age's timeout-figure text this test checks) moved out of
+# Config.pm into Config.pod when the CLI flag-parsing cluster was
+# extracted - checking Config.pod here instead of Config.pm.
+for my $file (qw(lib/D2TG/Config.pod cli/poller.pl)) {
     open my $fh, '<', File::Spec->catfile( $Bin, '..', $file ) or die $!;
     my $text = do { local $/; <$fh> };
     close $fh;

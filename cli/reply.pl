@@ -7,6 +7,7 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Poller;
 use D2TG::Telegram;
 use D2TG::Reply;
@@ -19,7 +20,7 @@ my $voice_only = 0;
 while (@ARGV) {
     if ( $ARGV[0] eq '--db' || $ARGV[0] eq '-d' ) {
         shift @ARGV;
-        $db_alias = eval { D2TG::Config::shift_flag_value( \@ARGV, '--db/-d' ) };
+        $db_alias = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, '--db/-d' ) };
         if ($@) {
             print STDERR $@;
             exit 1;
@@ -30,7 +31,7 @@ while (@ARGV) {
 
             # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
             # reproduced live): extract_bot_flag delegates to
-            # D2TG::Config::shift_flag_value, which dies when --bot is
+            # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
             # immediately followed by another flag - previously
             # uncaught here, crashing with Perl's raw exit 255 instead
             # of this project's own clean-refusal convention, matching
@@ -178,7 +179,7 @@ L<D2TG::Reply/format_send_error> exactly like the normal path.
 C<--db <alias>>/C<-d <alias>> (TGT-051, or C<D2TG_DB=<alias>> as a
 fallback) is recognized only in the I<leading> position - the very
 first one or two arguments, before C<chat_id> - unlike
-L<D2TG::Config/extract_db_flag>'s whole-list scan used by the other
+L<D2TG::Config::Flags/extract_db_flag>'s whole-list scan used by the other
 C<cli/tg.*> entrypoints. This is deliberate, for the same reason
 C<--reply-to-message-id> is trailing-only (TGT-042): a whole-list scan
 here could misinterpret reply text that happens to contain the literal
@@ -211,7 +212,7 @@ as TGT-068/069/070): if it's missing, empty, or itself looks like a flag
 followed by C<--bot> - the command dies with C<--db/-d requires a value>
 instead of silently treating that flag's own name as the alias and
 failing later with a misleading C<Unknown --db/-d alias '--bot'>. This
-validation is delegated to L<D2TG::Config/shift_flag_value> (TGT-072).
+validation is delegated to L<D2TG::Config::Flags/shift_flag_value> (TGT-072).
 
 A C<send_reply> failure (TGT-096) is caught and routed through
 L<D2TG::Reply/format_send_error> before being printed to STDERR - a

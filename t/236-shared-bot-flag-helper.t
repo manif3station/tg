@@ -84,7 +84,7 @@ require D2TG::Reply::Args;
 # Regression: all 7 scripts now call the shared helper instead of
 # duplicating the eval-wrap themselves, but must refuse malformed
 # --bot input identically to before this refactor. '-x' unambiguously
-# looks like a flag (D2TG::Config::shift_flag_value's own regex), so
+# looks like a flag (D2TG::Config::Flags::shift_flag_value's own regex), so
 # this triggers extract_bot_flag's "--bot requires a value" die
 # regardless of each script's own other flags/argv-parsing order -
 # unlike '--db', which several scripts strip out in a separate pass

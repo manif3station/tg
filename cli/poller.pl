@@ -7,6 +7,7 @@ use lib "$Bin/../lib";
 use File::Spec;
 
 use D2TG::Config;
+use D2TG::Config::Flags;
 use D2TG::Telegram;
 use D2TG::Poller;
 use D2TG::Store;
@@ -69,7 +70,7 @@ if ( grep { $_ eq '--help' || $_ eq '-h' } @ARGV ) {
 my @original_argv = @ARGV;
 
 my ( $db_alias, @rest );
-( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
+( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 # TGT-107 (Codex review finding): validate every remaining CLI token is
@@ -84,7 +85,7 @@ my ( $db_alias, @rest );
 # real, env-folding call die with "--bot given before any --chat_id" -
 # irrelevant here, since this pass only looks at what the CLI itself
 # declared).
-my ( undef, @cli_leftover ) = D2TG::Config::bot_groups(
+my ( undef, @cli_leftover ) = D2TG::Config::Flags::bot_groups(
     argv         => [@ARGV],
     env_chat_id  => undef,
     env_token    => undef,
@@ -103,7 +104,7 @@ my $has_cli_groups = grep { $_ eq '--chat_id' } @ARGV;
 exit 1 if !$has_cli_groups && !D2TG::Config::require_chat_id_or_warn();
 
 # TGT-164 (found via a scheduled bug hunt): even when the CLI supplies
-# its own --chat_id group(s), D2TG::Config::bot_groups below still
+# its own --chat_id group(s), D2TG::Config::Flags::bot_groups below still
 # silently folds a SET D2TG_CHAT_ID in as an additional implicit group
 # with no shape validation at all - the same canonical-shape check
 # require_chat_id_or_warn already enforces (TGT-155) never ran in this
@@ -117,7 +118,7 @@ exit 1
   && length $ENV{D2TG_CHAT_ID}
   && !D2TG::Config::require_chat_id_or_warn();
 
-my ( $groups, @leftover ) = D2TG::Config::bot_groups( argv => [@ARGV] );
+my ( $groups, @leftover ) = D2TG::Config::Flags::bot_groups( argv => [@ARGV] );
 @ARGV = @leftover;
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
@@ -292,7 +293,7 @@ if ($@) {
 # TGT-185 investigation note: in practice this branch is unreachable
 # given the two earlier guards above (require_chat_id_or_warn, and the
 # has_cli_groups/D2TG_CHAT_ID shape re-check) - every combination that
-# would leave D2TG::Config::bot_groups() returning an empty list is
+# would leave D2TG::Config::Flags::bot_groups() returning an empty list is
 # already refused by one of those first. Kept as defense-in-depth
 # rather than removed, since it costs nothing and guards against a
 # future change to the earlier checks silently reopening this gap.
@@ -644,7 +645,7 @@ more bot/chat groups: each C<--chat_id> starts a new group, and each
 following C<--bot> attaches to it, so multiple bots can be polled under
 multiple admin chat ids in a single process. C<D2TG_CHAT_ID>/
 C<D2TG_TOKEN> fold in as an implicit trailing group rather than being a
-separate code path - see L<D2TG::Config/bot_groups> for the exact
+separate code path - see L<D2TG::Config::Flags/bot_groups> for the exact
 merge rule (which also documents why the plain single-env-var case,
 with no C<--chat_id>/C<--bot> given at all, is byte-identical to this
 skill's original single-bot behavior). Every real (chat_id, bot token)
@@ -669,7 +670,7 @@ C<D2TG_CHAT_ID> is missing in that case. Also refuses (TGT-164, found
 via a scheduled bug hunt) whenever C<D2TG_CHAT_ID> is non-empty but fails the
 same canonical-shape check, even when a CLI C<--chat_id> group was
 given - before this fix, that combination skipped validation entirely
-and L<D2TG::Config/bot_groups> still silently folded the malformed
+and L<D2TG::Config::Flags/bot_groups> still silently folded the malformed
 value in as an extra, broken poll group instead of refusing. Once past every guard, prints a
 startup line naming each group's chat id and its bots' masked tokens
 (L<D2TG::Config/masked_token>, TGT-045; the single-bot case keeps the

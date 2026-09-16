@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.12).** REFACTOR (TGT-267, found via
+TGT-266's own qa gate finding): `D2TG::Config.pm` was 939 lines, over
+this board's 500-line cap. Extracted the CLI flag-parsing cluster
+(`shift_flag_value`, `extract_db_flag`, `extract_db_flag_or_die`,
+`bot_groups`) into new module `D2TG::Config::Flags`, and split
+Config.pm's own remaining POD into `Config.pod` - both now fully under
+the cap (Config.pm: 939 -> 237 lines, Config/Flags.pm: 122 lines).
+Zero behavior change - full suite still passes, 100% coverage.
+
 **Status: early implementation (v2.11).** DOC FIX (TGT-266, found via a
 scheduled JOB-005 doc-accuracy hunt): `lib/D2TG/Config.pm`'s
 `extract_db_flag` POD still linked to `D2TG::Reply::parse_cli_args`, a

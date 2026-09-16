@@ -22,7 +22,7 @@ Test::CaptureStdio->import(qw(run_capturing_stderr));
 #   cli/history --db --since 2026-01-01   -> "Unknown --db/-d alias '--since'"
 #   cli/reply --db --bot sometoken ...    -> "Unknown --db/-d alias '--bot'"
 #   cli/history --db --chat_id            -> "Unknown --db/-d alias '--chat_id'"
-# D2TG::Config::extract_db_flag's own unit coverage lives in
+# D2TG::Config::Flags::extract_db_flag's own unit coverage lives in
 # t/40-db-alias-resolution.t; this file adds CLI-process-level
 # integration assurance across every cli/* script that parses --db,
 # mirroring t/42-db-flag-cli-integration.t's own pattern (no hang risk

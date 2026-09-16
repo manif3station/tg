@@ -3,6 +3,7 @@ package D2TG::Reply::Args;
 use strict;
 use warnings;
 use D2TG::Config;
+use D2TG::Config::Flags;
 use Encode qw(decode);
 
 # TGT-265: extract_bot_flag/extract_bot_flag_or_die/parse_cli_args
@@ -20,7 +21,7 @@ sub extract_bot_flag {
     my $bot_token;
     if ( @args >= 1 && $args[0] eq '--bot' ) {
         shift @args;
-        $bot_token = D2TG::Config::shift_flag_value( \@args, '--bot' );
+        $bot_token = D2TG::Config::Flags::shift_flag_value( \@args, '--bot' );
     }
 
     return ( $bot_token, @args );

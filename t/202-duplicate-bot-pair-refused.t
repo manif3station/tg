@@ -8,7 +8,7 @@ use lib "$Bin/lib";
 use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 # TGT-202 (found via a scheduled JOB-003 hourly bug hunt):
-# D2TG::Config::bot_groups folds D2TG_CHAT_ID/D2TG_TOKEN in as an
+# D2TG::Config::Flags::bot_groups folds D2TG_CHAT_ID/D2TG_TOKEN in as an
 # implicit trailing group (TGT-049) even when the CLI already declared
 # an identical --chat_id/--bot pair explicitly - producing two
 # entries sharing the exact same (chat_id, bot token) pair.
@@ -66,10 +66,11 @@ sub run_capturing_stderr {
 # Unit-level: bot_groups itself must refuse (die) when the CLI's own
 # --chat_id/--bot pair exactly duplicates the env-folded pair.
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', '999', '--bot', 'dup-token' ],
             env_chat_id => '999',
             env_token   => 'dup-token',
@@ -84,7 +85,7 @@ require D2TG::Config;
 
 {
     # Regression: genuinely distinct multi-bot groups are unaffected.
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--chat_id', '4567', '--bot', 't3' ],
         env_chat_id => undef,
         env_token   => undef,
@@ -97,7 +98,7 @@ require D2TG::Config;
 {
     # Regression: the same chat_id with two DIFFERENT bot tokens is a
     # legitimate multi-bot-on-one-chat setup, not a duplicate.
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 't1', '--bot', 't2' ],
         env_chat_id => undef,
         env_token   => undef,

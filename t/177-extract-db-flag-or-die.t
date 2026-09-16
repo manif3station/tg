@@ -26,9 +26,10 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 
 {
-    my ( $alias, @rest ) = D2TG::Config::extract_db_flag_or_die( '--db', 'myalias', 'positional' );
+    my ( $alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die( '--db', 'myalias', 'positional' );
     is( $alias, 'myalias', 'extract_db_flag_or_die returns the alias on success, same as extract_db_flag' );
     is_deeply( \@rest, ['positional'], '...and the remaining args, same as extract_db_flag' );
 }
@@ -42,9 +43,9 @@ require D2TG::Config;
     local *STDERR = $stderr_fh;
 
     my $direct_error;
-    { eval { D2TG::Config::extract_db_flag('--db') }; $direct_error = $@; }
+    { eval { D2TG::Config::Flags::extract_db_flag('--db') }; $direct_error = $@; }
 
-    my $survived = eval { D2TG::Config::extract_db_flag_or_die('--db'); 1 };
+    my $survived = eval { D2TG::Config::Flags::extract_db_flag_or_die('--db'); 1 };
     my $catch_error = $@;
     close $stderr_fh;
 

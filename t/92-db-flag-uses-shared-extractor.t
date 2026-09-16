@@ -9,7 +9,7 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 
 # TGT-124 (found via a scheduled improvement-hunt): cli/status.pl,
 # cli/whoami.pl, and cli/send.pl each hand-rolled their own --db/-d
-# parsing loop instead of using the shared D2TG::Config::extract_db_flag
+# parsing loop instead of using the shared D2TG::Config::Flags::extract_db_flag
 # helper every other cli/*.pl script already uses. extract_db_flag scans
 # the ENTIRE argument list, so --db can appear anywhere; the hand-rolled
 # loops stopped at the first non---db/-d token, so --db was only
@@ -50,7 +50,7 @@ for my $case ( [ 'status.pl', qr/^poller: not running$/m ], [ 'whoami.pl', qr/^d
         'the error names the exact bogus alias - proving the value was genuinely resolved, not just consumed from argv' );
 
     # A bare trailing --db (no value at all) must still refuse clearly,
-    # matching D2TG::Config::shift_flag_value's own existing contract.
+    # matching D2TG::Config::Flags::shift_flag_value's own existing contract.
     my $bare_out = `$cli --db 2>&1`;
     isnt( $? >> 8, 0, "cli/$script refuses a bare trailing --db with no value" );
     like( $bare_out, qr/--db\/-d requires a value/, 'the message names the actual problem' );

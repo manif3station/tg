@@ -23,7 +23,7 @@ use Test::CaptureStdio qw(run_capturing_stderr);
 # by the time that check runs, two earlier guards (the
 # require_chat_id_or_warn call and the has_cli_groups/D2TG_CHAT_ID
 # shape check) have already forced an exit for every combination that
-# would leave D2TG::Config::bot_groups() returning an empty list -
+# would leave D2TG::Config::Flags::bot_groups() returning an empty list -
 # any --chat_id present in @ARGV, or a validly-shaped D2TG_CHAT_ID env
 # var, always yields at least one group. Confirmed empirically below:
 # the actual refusal message for a true no-groups run is

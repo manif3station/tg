@@ -12,7 +12,7 @@ Test::CaptureStdio->import(qw(run_capturing_stderr));
 # inside their own --bot branch with no eval wrapper, unlike
 # cli/approve.pl/cli/retry-download.pl, which already eval-wrap the
 # identical call. extract_bot_flag delegates to
-# D2TG::Config::shift_flag_value, which dies ("--bot requires a
+# D2TG::Config::Flags::shift_flag_value, which dies ("--bot requires a
 # value\n") when --bot is immediately followed by another flag
 # (TGT-074's own validation) - that die propagated completely
 # uncaught, crashing both scripts with Perl's raw exit-255 default

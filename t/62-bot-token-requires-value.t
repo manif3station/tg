@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 require D2TG::Config;
+require D2TG::Config::Flags;
 require D2TG::Reply;
 require D2TG::Reply::Args;
 
@@ -18,7 +19,7 @@ require D2TG::Reply::Args;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', '1234', '--bot' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -29,7 +30,7 @@ require D2TG::Reply::Args;
 
 {
     eval {
-        D2TG::Config::bot_groups(
+        D2TG::Config::Flags::bot_groups(
             argv        => [ '--chat_id', '1234', '--bot', '--chat_id', '5678' ],
             env_chat_id => undef,
             env_token   => undef,
@@ -40,7 +41,7 @@ require D2TG::Reply::Args;
 
 {
     # Existing behavior unaffected: a well-formed --bot <token>.
-    my ( $groups, @rest ) = D2TG::Config::bot_groups(
+    my ( $groups, @rest ) = D2TG::Config::Flags::bot_groups(
         argv        => [ '--chat_id', '1234', '--bot', 'realtoken' ],
         env_chat_id => undef,
         env_token   => undef,

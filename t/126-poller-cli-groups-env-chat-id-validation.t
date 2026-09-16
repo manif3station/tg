@@ -11,7 +11,7 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # shape validation (TGT-155's require_chat_id_or_warn) is only ever
 # called when the CLI does NOT declare its own --chat_id group
 # ($has_cli_groups). When the CLI DOES declare its own group (TGT-049's
-# multi-bot support), cli/poller.pl's second D2TG::Config::bot_groups
+# multi-bot support), cli/poller.pl's second D2TG::Config::Flags::bot_groups
 # call still silently folds the raw, unvalidated D2TG_CHAT_ID in as an
 # ADDITIONAL implicit group - the malformed env value is never caught,
 # it just becomes a broken third poll group.
@@ -111,7 +111,7 @@ sub run_with_timeout {
 {
     # A Codex review during this ticket asked whether an empty-but-set
     # D2TG_CHAT_ID ('') should also be refused here. It deliberately is
-    # NOT: D2TG::Config::bot_groups' own env-folding condition (defined
+    # NOT: D2TG::Config::Flags::bot_groups' own env-folding condition (defined
     # $env_chat_id && length $env_chat_id) never folds an empty string
     # in as a group either, so there is no broken extra group for this
     # guard to prevent - an empty env value behaves identically to an
