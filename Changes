@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+2.04  2026-09-16
+      - DOCS (TGT-262, found via a scheduled JOB-005 doc-accuracy hunt):
+        TGT-257 extracted 11 retry-queue methods out of D2TG::Store.pm
+        into D2TG::Store::RetryQueue, but Store.pm's own POD never said
+        so - a reader of Store.pm's perldoc would reasonably assume
+        those 11 methods were still implemented directly in that file.
+        Added a short note before the first affected method's own POD
+        block, naming D2TG::Store::RetryQueue as the real implementation
+        and confirming behavior/signatures are unchanged. No code
+        change; the existing method-level POD blocks stay accurate as
+        written.
+
 2.03  2026-09-16
       - REFACTOR (TGT-257, found via a scheduled JOB-004 improvement
         hunt): D2TG::Store.pm had grown to 1528 lines. Its

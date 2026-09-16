@@ -1079,6 +1079,16 @@ it does not include the rest of that same day; this narrower behavior
 predates this fix and is unchanged by it, a separate question from the
 separator mismatch this fix addresses.
 
+=head2 Retry queue methods
+
+TGT-257: the eleven methods below (C<record_failed_download> through
+C<mark_failed_transcription_retried>) are thin forwarders onto a
+L<D2TG::Store::RetryQueue> instance built once in L</new>, sharing this
+object's own C<$dbh> - same names, same behavior, same signatures as
+before the extraction. The behavioral documentation below is unchanged
+and still accurate; it just no longer describes code that lives directly
+in this file. See L<D2TG::Store::RetryQueue> for the implementation.
+
 =head2 record_failed_download($chat_id, $message_id, $file_id, sender => $s, media_kind => $k, caption_note => $c, error => $e, bot_key => $b)
 
 Persists a failed inbound photo/document download for later retry

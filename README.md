@@ -1,5 +1,10 @@
 # tg
 
+**Status: early implementation (v2.04).** DOCS (TGT-262, found via a
+scheduled JOB-005 doc-accuracy hunt): `D2TG::Store.pm`'s own POD never
+said its 11 retry-queue methods (TGT-257) now delegate to
+`D2TG::Store::RetryQueue` - added a note pointing there.
+
 **Status: early implementation (v2.03).** REFACTOR (TGT-257, found via a
 scheduled JOB-004 improvement hunt): `D2TG::Store.pm` had grown to 1528
 lines. Its failed-downloads/failed-transcriptions retry-queue subs
