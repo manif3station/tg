@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use File::Spec;
 use File::Path qw(make_path);
+use D2TG::Config::Paths;
 
 sub token      { return $ENV{D2TG_TOKEN}; }
 sub chat_id    { return $ENV{D2TG_CHAT_ID}; }
@@ -146,125 +147,18 @@ sub changes_summary {
     return $first_bullet_line;
 }
 
-sub state_db_path {
-    my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.messages.db' );
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
-      // $args{default_root}
-      // '.';
-
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
-
-    return File::Spec->catfile( $state_dir, 'store.sqlite' );
-}
-
-sub attachments_dir {
-    my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $dir = File::Spec->catdir( $args{base_dir}, '.tira', 'attachments' );
-        make_path($dir) unless -d $dir;
-        return $dir;
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} // $args{default_root} // '.';
-
-    my $dir = File::Spec->catdir( $skill_root, 'files' );
-    make_path($dir) unless -d $dir;
-
-    return $dir;
-}
-
-sub lock_path {
-    my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.pid' );
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
-      // $args{default_root}
-      // '.';
-
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
-
-    return File::Spec->catfile( $state_dir, 'poller.pid' );
-}
-
-sub heartbeat_path {
-    my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.heartbeat' );
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
-      // $args{default_root}
-      // '.';
-
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
-
-    return File::Spec->catfile( $state_dir, 'poller.heartbeat' );
-}
-
-sub write_heartbeat {
-    my ( $path, %args ) = @_;
-
-    # Codex review finding (TGT-116): opening the live path with '>'
-    # truncates it before the new timestamp is written, so a concurrent
-    # 'd2 tg.status' read - or a crash between truncate and write - could
-    # see an empty file (misread as heartbeat: never) or permanently lose
-    # the last valid timestamp. Write to a temp file in the same
-    # directory, then rename() over the real path - rename is atomic on
-    # the same filesystem, so a reader never observes a partial write.
-    my $tmp_path = "$path.tmp.$$";
-    my $renamer  = $args{renamer} || sub { return rename( $_[0], $_[1] ); };
-
-    open my $fh, '>', $tmp_path
-      or die "D2TG::Config::write_heartbeat: cannot write $tmp_path: $!\n";
-    print {$fh} time()
-      or die "D2TG::Config::write_heartbeat: cannot write $tmp_path: $!\n";
-    close $fh
-      or die "D2TG::Config::write_heartbeat: cannot close $tmp_path: $!\n";
-
-    unless ( $renamer->( $tmp_path, $path ) ) {
-        # TGT-139: a failed rename() must not leave the staging file
-        # behind - every failed write attempt would otherwise add
-        # another orphaned $path.tmp.$$ file to the state directory.
-        # unlink is best-effort; $! is captured first since unlink
-        # itself can clobber it before the die message reads it.
-        my $rename_error = $!;
-        unlink $tmp_path;
-        die "D2TG::Config::write_heartbeat: cannot rename $tmp_path to $path: $rename_error\n";
-    }
-
-    return;
-}
-
-sub heartbeat_age {
-    my ($path) = @_;
-
-    open my $fh, '<', $path or return undef;
-    my $written = <$fh>;
-    close $fh;
-
-    return undef unless defined $written && $written =~ /^\d+$/;
-
-    return time() - $written;
-}
+# TGT-260: state_db_path/attachments_dir/lock_path/heartbeat_path/
+# write_heartbeat/heartbeat_age moved into D2TG::Config::Paths - thin
+# forwarders below so every existing caller (many cli/*.pl scripts and
+# lib/ modules, all via fully-qualified D2TG::Config::<name> calls)
+# keeps working unchanged. See D2TG::Config::Paths's own POD for the
+# full behavior each one documents.
+sub state_db_path   { return D2TG::Config::Paths::state_db_path(@_) }
+sub attachments_dir { return D2TG::Config::Paths::attachments_dir(@_) }
+sub lock_path        { return D2TG::Config::Paths::lock_path(@_) }
+sub heartbeat_path    { return D2TG::Config::Paths::heartbeat_path(@_) }
+sub write_heartbeat   { return D2TG::Config::Paths::write_heartbeat(@_) }
+sub heartbeat_age     { return D2TG::Config::Paths::heartbeat_age(@_) }
 
 sub shift_flag_value {
     my ( $args, $flag_label ) = @_;
@@ -405,97 +299,15 @@ sub bot_groups {
     return ( \@groups, @rest );
 }
 
-sub resolve_alias_dir {
-    my (%args) = @_;
-
-    my $alias = $args{alias} // $ENV{D2TG_DB};
-
-    if ( !defined $alias || !length $alias ) {
-        my $tira_home = exists $args{tira_home} ? $args{tira_home} : $ENV{TIRA_HOME};
-
-        if ( defined $tira_home && length $tira_home ) {
-
-            # TGT-091 (live production incident): TIRA_HOME's real-world
-            # value is a d2-paths alias name (e.g. "tira-zen"), not
-            # necessarily a raw filesystem path - resolve it the same
-            # way an explicit --db/-d/D2TG_DB alias would be, and only
-            # fall back to treating it as a literal path if it doesn't
-            # match any registered alias (preserving the original
-            # TGT-081 behavior for a caller that really did set
-            # TIRA_HOME to a raw absolute path).
-            my $paths = $args{paths} || _developer_dashboard_paths();
-            return $paths->{$tira_home} if defined $paths->{$tira_home};
-
-            return $tira_home;
-        }
-
-        die "D2TG_DB (or --db/-d <alias>) is not set - refusing to start. "
-          . "Run 'd2 paths' to see valid aliases.\n";
-    }
-
-    my $paths = $args{paths} || _developer_dashboard_paths();
-    my $dir   = $paths->{$alias};
-
-    die "Unknown --db/-d alias '$alias' - run 'd2 paths' to see valid aliases\n"
-      unless defined $dir;
-
-    return $dir;
-}
-
-# TGT-172: extracted after this exact eval/print-STDERR/exit(1) wrapper
-# around resolve_alias_dir was found duplicated identically across 11 of
-# the 13 cli/*.pl scripts - matches the established shift_flag_value
-# (TGT-072) / _classify_store_error (TGT-167) / _format_forwarded_sender
-# (TGT-170) / _validate_reply_to_message_id (TGT-171) precedent for this
-# shape of duplication.
-sub resolve_alias_dir_or_die {
-    my (%args) = @_;
-
-    my $base_dir = eval { resolve_alias_dir(%args) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-    return $base_dir;
-}
-
-sub require_existing_base_dir {
-    my ($base_dir) = @_;
-
-    return $base_dir if -d $base_dir;
-
-    die "Storage location '$base_dir' does not exist - refusing to start. "
-      . "This resolves a --db/-d/D2TG_DB alias or a TIRA_HOME fallback to a "
-      . "real, already-existing directory; it never creates one. Check the "
-      . "value (typo?) or create the directory yourself first.\n";
-}
-
-sub require_existing_base_dir_or_die {
-    my ($base_dir) = @_;
-
-    # TGT-230 (found via a scheduled JOB-004 improvement hunt): the
-    # eval/print-STDERR/exit(1) wrapper around require_existing_base_dir
-    # was duplicated byte-for-byte across 11 cli/*.pl scripts - the one
-    # remaining startup-guard call still hand-wrapped everywhere instead
-    # of having its own _or_die sibling, unlike resolve_alias_dir_or_die
-    # (TGT-172) and D2TG::Poller::open_store_or_die. Pure refactor: no
-    # change to the printed message, exit code, or control flow.
-    my $result = eval { require_existing_base_dir($base_dir) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-    return $result;
-}
-
-sub resolve_self_exec_path {
-    my (%args) = @_;
-
-    my $candidate = File::Spec->catfile( $args{bin_dir}, $args{basename} );
-
-    return $candidate if -f $candidate;
-    return $args{fallback};
-}
+# TGT-260: resolve_alias_dir/resolve_alias_dir_or_die/
+# require_existing_base_dir/require_existing_base_dir_or_die/
+# resolve_self_exec_path moved into D2TG::Config::Paths alongside the
+# path helpers above - same forwarder pattern, no behavior change.
+sub resolve_alias_dir                { return D2TG::Config::Paths::resolve_alias_dir(@_) }
+sub resolve_alias_dir_or_die         { return D2TG::Config::Paths::resolve_alias_dir_or_die(@_) }
+sub require_existing_base_dir        { return D2TG::Config::Paths::require_existing_base_dir(@_) }
+sub require_existing_base_dir_or_die { return D2TG::Config::Paths::require_existing_base_dir_or_die(@_) }
+sub resolve_self_exec_path           { return D2TG::Config::Paths::resolve_self_exec_path(@_) }
 
 sub is_transient_error {
     my ($error) = @_;
@@ -532,10 +344,6 @@ sub is_expired_file_error {
     return 0;
 }
 
-sub _developer_dashboard_paths {
-    require Developer::Dashboard;
-    return Developer::Dashboard::d2()->paths;
-}
 
 # TGT-173: extracted after this exact SIGALRM-based hard-timeout wrapper
 # was found to have identical control flow across D2TG::Telegram and

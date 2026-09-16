@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.06).** REFACTOR (TGT-260, found via
+TGT-258's own decomposition survey): `D2TG::Config.pm`'s 12-sub path/
+alias-resolution cluster (~350 lines) moved into a new
+`D2TG::Config::Paths`, with 11 thin forwarders kept on Config.pm. Zero
+behavior change - full suite still passes, 100% coverage on both
+modules. Config.pm: 1131 -> 939 lines.
+
 **Status: early implementation (v2.05).** REFACTOR (TGT-259, found via
 TGT-258's own decomposition survey): `D2TG::Poller.pm`'s 13-sub stdout-
 formatting cluster (~244 lines, no poll-loop state) moved into a new

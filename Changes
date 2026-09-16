@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+2.06  2026-09-16
+      - REFACTOR (TGT-260, found via TGT-258's own module-decomposition
+        survey): D2TG::Config.pm was 1131 lines, mixing several
+        concerns. Its 12-sub path/alias-resolution cluster (~350
+        lines, the single largest cohesive concern in the file) moved
+        into a new lib/D2TG/Config/Paths.pm; D2TG::Config keeps thin
+        forwarders for 11 of the 12 (every real external caller -
+        many cli/*.pl scripts and lib/ modules). _developer_dashboard_
+        paths moved with them and got no forwarder, since it was only
+        ever called from within the same extracted cluster. Zero
+        behavior change - full test suite (193 files, 1970 tests)
+        passes unchanged, 100% coverage on both modules (no dead
+        forwarders this time). Config.pm: 1131 -> 939 lines. New
+        t/260-config-paths-module.t (15 assertions) proves the
+        extracted module works standalone, confirmed genuinely red
+        before the extraction.
+
 2.05  2026-09-16
       - REFACTOR (TGT-259, found via TGT-258's own module-decomposition
         survey): D2TG::Poller.pm was the largest module in the project
