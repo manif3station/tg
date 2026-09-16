@@ -262,7 +262,15 @@ sub extract_bot_flag {
     my (@args) = @_;
 
     my $bot_token;
-    if ( @args >= 2 && $args[0] eq '--bot' ) {
+    if ( @args >= 1 && $args[0] eq '--bot' ) {
+
+        # TGT-264 (found via a scheduled JOB-003 hourly bug hunt): this
+        # guard used to require @args >= 2, so a sole bare --bot (array
+        # length exactly 1) bypassed detection entirely and fell
+        # through to returning (undef, '--bot') instead of dying like
+        # every other malformed --bot shape does (TGT-074). Widened to
+        # >= 1 - shift_flag_value below already dies "--bot requires a
+        # value" correctly when @args is empty after the shift.
         shift @args;
         $bot_token = D2TG::Config::shift_flag_value( \@args, '--bot' );
     }
@@ -456,15 +464,21 @@ trailing-only recognition (TGT-042): free reply text passed as multiple
 unquoted shell words could otherwise contain the literal token C<--bot>
 and be misread as the flag.
 
-When C<--bot> I<is> present with at least one more argument following
-it, that value is validated via L<D2TG::Config/shift_flag_value>
-(TGT-074, same bug class as TGT-071's C<--db> fix): dies with C<--bot
-requires a value> if it's missing, empty, or itself flag-like, instead
-of silently returning another flag's own name as the bot token (e.g.
+When C<--bot> is the first argument, its value is validated via
+L<D2TG::Config/shift_flag_value> (TGT-074, same bug class as TGT-071's
+C<--db> fix): dies with C<--bot requires a value> if it's missing,
+empty, or itself flag-like, instead of silently returning another
+flag's own name as the bot token (e.g.
 C<extract_bot_flag('--bot','--db','myalias',...)> previously returned
-C<'--db'> as the token). A bare trailing C<--bot> with I<no> value at
-all (C<@args> too short) is unaffected here - C<cli/reply.pl>'s own caller
-already handles that case directly (TGT-068).
+C<'--db'> as the token). This includes a sole bare C<--bot> with I<no>
+other argument at all (TGT-264, found via a scheduled JOB-003 hourly
+bug hunt) - the guard used to require at least 2 args before even
+checking, so C<extract_bot_flag('--bot')> silently fell through to
+returning C<(undef, '--bot')> instead of dying like every other
+malformed shape above; now C<--bot> alone is the same
+C<--bot requires a value> die as any other empty-value case, since
+L</shift_flag_value> already dies correctly when shifted off an empty
+list.
 
 =head2 extract_bot_flag_or_die(@args)
 

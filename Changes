@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+2.09  2026-09-16
+      - BUGFIX (TGT-264, found via a scheduled JOB-003 hourly bug
+        hunt): D2TG::Reply::extract_bot_flag's guard required at
+        least 2 args before checking for --bot, so a sole bare --bot
+        (array length exactly 1) silently fell through to returning
+        (undef, '--bot') instead of dying "--bot requires a value"
+        like every other malformed --bot shape TGT-074 already
+        covers - reproduced live via cli/approve.pl --bot, which
+        exited with a generic Usage message instead of the specific
+        error. Guard widened from @args >= 2 to @args >= 1;
+        shift_flag_value already dies correctly when shifted off an
+        empty list, so no other code change was needed. Low severity
+        (no crash, every caller still refused cleanly) but a genuine
+        behavioral inconsistency. New t/264-extract-bot-flag-sole-
+        bare-bot.t, confirmed genuinely red before the fix. Filed
+        TGT-265 (backlog) for the pre-existing, unrelated finding
+        that D2TG::Reply.pm is now 534 lines, over this board's
+        500-line cap - out of scope for this small bugfix.
+
 2.08  2026-09-16
       - REFACTOR (TGT-263, found via TGT-261's own qa gate line-count
         check): D2TG::Transcribe.pm grew from 507 to 716 lines after

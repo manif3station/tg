@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.09).** BUGFIX (TGT-264, found via a
+scheduled JOB-003 hourly bug hunt): `D2TG::Reply::extract_bot_flag`'s
+guard required at least 2 args before checking for `--bot`, so a sole
+bare `--bot` silently fell through instead of dying "--bot requires a
+value" like every other malformed shape. Guard widened from `>= 2` to
+`>= 1`. Low severity, no crash - a misleading-error-message bug, not a
+correctness/security one. Filed TGT-265 (backlog) for the unrelated
+finding that `D2TG::Reply.pm` is now 534 lines, over the 500-line cap.
+
 **Status: early implementation (v2.08).** REFACTOR (TGT-263, found via
 TGT-261's own qa gate line-count check): `D2TG::Transcribe.pm` grew past
 this board's 500-line cap after TGT-261 moved the retry-orchestration

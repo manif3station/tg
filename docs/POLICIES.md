@@ -4991,3 +4991,52 @@ external-input handling, no system/exec/backtick/piped-open/eval-STRING
 patterns introduced, and no change to what `transcribe()` persists or
 returns beyond which model tier string it passes to the (unchanged)
 whisper invocation.
+
+## TGT-264: extract_bot_flag silently ignored a sole bare --bot instead of dying "requires a value"
+
+Found via a scheduled JOB-003 hourly bug hunt. TGT-074 made
+`D2TG::Reply::extract_bot_flag` die `--bot requires a value` for a
+trailing bare `--bot` (with other args already present) or `--bot`
+immediately followed by another flag, matching
+`D2TG::Config::shift_flag_value`'s established validation for every
+other malformed-shape call. But the function's own guard was
+`if (@args >= 2 && $args[0] eq '--bot')` - when `--bot` was the ONLY
+argument (`@args` length exactly 1), the `>= 2` check was false, so the
+guard never fired at all and the function fell through to
+`return (undef, '--bot')` instead of dying. The caller then treated the
+leftover `'--bot'` string as an unrecognized positional argument,
+producing a generic `Usage: ...` refusal (still exit non-zero, no
+crash) rather than the specific `--bot requires a value` message every
+other malformed `--bot` shape gets.
+
+Reproduced live in the `perl-test` container:
+`perl -Ilib -MD2TG::Reply -e 'print extract_bot_flag(qw(--bot))'`
+returned `token=undef, rest=(--bot)` instead of dying; end-to-end via
+`D2TG_TOKEN=x D2TG_CHAT_ID=1 perl -Ilib cli/approve.pl --bot` exited 2
+with the generic `Usage: d2 tg.approve ...` message rather than the
+specific one. Low severity - no crash, no data risk, every affected
+script (all 8 `cli/*.pl` scripts using `extract_bot_flag_or_die` as
+their leading-position `--bot` parser) still refuses cleanly with a
+non-zero exit - but a genuine behavioral inconsistency against every
+other malformed-`--bot` case and against `t/62`'s own documented
+TGT-074 contract.
+
+Fixed by widening the guard from `@args >= 2` to `@args >= 1` -
+`D2TG::Config::shift_flag_value` already dies correctly when shifted
+off an empty list (`shift @$args` returns `undef`, which fails the
+"defined and non-empty and not flag-like" check), so no other code
+change was needed. A well-formed `--bot TOKEN` call is completely
+unaffected regardless of total arg count.
+
+New test `t/264-extract-bot-flag-sole-bare-bot.t`: confirmed genuinely
+red before the fix (`extract_bot_flag('--bot')` returned an empty
+string instead of dying), confirmed green after. `t/62`'s own existing
+assertions (the `>= 2` cases, and the well-formed-token case) re-run
+unchanged, still green.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow change -
+one comparison operator widened (`>=2` to `>=1`) in an existing branch
+condition already gating an existing, already-reviewed validation call.
+No new shell invocation, no new file I/O, no new external-input
+handling, no system/exec/backtick/piped-open/eval-STRING patterns
+introduced.
