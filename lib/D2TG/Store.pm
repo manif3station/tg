@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use DBI;
 use Digest::SHA qw(sha256_hex);
+use D2TG::Store::RetryQueue;
 
 # TGT-101: the single-bot/unscoped sentinel for allow_list/pending's
 # bot_key column (TGT-098) - named once here rather than repeated as a
@@ -43,6 +44,12 @@ sub new {
 
     my $self = bless { dbh => $dbh }, $class;
     $self->_ensure_schema;
+
+    # TGT-257: failed_downloads/failed_transcriptions storage now lives
+    # in D2TG::Store::RetryQueue - built once here and reused by every
+    # forwarding method below, same $dbh, no behavior change for any
+    # existing caller.
+    $self->{retry_queue} = D2TG::Store::RetryQueue->new( dbh => $dbh );
 
     if ( defined $args{admin_chat_id} ) {
         my @ids = ref $args{admin_chat_id} eq 'ARRAY' ? @{ $args{admin_chat_id} } : ( $args{admin_chat_id} );
@@ -674,211 +681,24 @@ sub messages_in_range {
     return @$rows;
 }
 
-sub record_failed_download {
-    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
-
-    my ( $sender, $media_kind, $caption_note, $error ) =
-      @args{qw(sender media_kind caption_note error)};
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    # ON CONFLICT (chat_id, bot_key, message_id) - TGT-219 added bot_key
-    # to this key so the same message_id failing under two different
-    # bots in a multi-bot config queues two independent rows, not one
-    # collapsed into the other. Telegram's own at-least-once delivery
-    # can still reprocess the same update under the SAME bot (e.g. the
-    # poller crashes after this call but before its offset advances) -
-    # that case still refreshes the existing row's file_id/error/
-    # timestamp instead of inserting a second queue entry.
-    $self->{dbh}->do(
-        'INSERT INTO failed_downloads (chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
-             file_id = excluded.file_id, sender = excluded.sender,
-             media_kind = excluded.media_kind, caption_note = excluded.caption_note,
-             error = excluded.error, created_at = CURRENT_TIMESTAMP',
-        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
-    );
-
-    # TGT-225 (found via a scheduled JOB-003 hourly bug hunt): this
-    # id-lookup was never updated for TGT-219's own bot_key-scoped
-    # UNIQUE constraint above - with two rows sharing (chat_id,
-    # message_id) but different bot_key, an unscoped SELECT could
-    # return either row's id at random (in practice, SQLite's own
-    # insertion order), not necessarily the one just written here.
-    my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT id FROM failed_downloads WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
-        undef, $chat_id, $bot_key, $message_id,
-    );
-
-    return $row->{id};
-}
-
-sub failed_downloads {
-    my ( $self, %args ) = @_;
-
-    # TGT-219: optional bot_key filter, matching pending_chat_ids' own
-    # established pattern - the unscoped case keeps its existing shape
-    # (now also naming each row's own bot_key, so a caller can tell
-    # which bot queued it even without filtering).
-    if ( defined $args{bot_key} ) {
-        return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-             FROM failed_downloads WHERE bot_key = ? ORDER BY id',
-            { Slice => {} }, $args{bot_key},
-        );
-    }
-
-    return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-         FROM failed_downloads ORDER BY id',
-        { Slice => {} }
-    );
-}
-
-# TGT-221 (Q-015 answered by Michael: retry every 60s for up to 5
-# minutes total, independent of poll cadence): rows still within the
-# 5-minute auto-retry window (measured from created_at, when the
-# failure was first queued) and not attempted in the last 60s
-# (last_retry_at NULL - never attempted - or older than 60s). A row
-# past the 5-minute window is deliberately excluded here, not deleted -
-# it stays fully visible/retryable via failed_downloads/
-# d2 tg.retry-download exactly as before, only automatic retry gives up.
-use constant AUTO_RETRY_INTERVAL_SECONDS => 60;
-use constant AUTO_RETRY_WINDOW_SECONDS   => 300;
-
-sub failed_downloads_due_for_retry {
-    my ( $self, %args ) = @_;
-
-    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-         FROM failed_downloads
-         WHERE datetime(created_at) >= datetime('now', ?)
-           AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
-    my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
-
-    if ( defined $args{bot_key} ) {
-        $sql .= ' AND bot_key = ?';
-        push @bind, $args{bot_key};
-    }
-    $sql .= ' ORDER BY id';
-
-    return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
-}
-
-sub mark_failed_download_retried {
-    my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'UPDATE failed_downloads SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
-
-    return;
-}
-
-sub remove_failed_download {
-    my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
-
-    return;
-}
-
-# TGT-237: mirrors record_failed_download/failed_downloads/
-# remove_failed_download's own shape exactly (upsert on
-# (chat_id, bot_key, message_id), optional bot_key filter on listing) -
-# see that trio's own comments above for the redelivery-refresh and
-# multi-bot-isolation rationale, unchanged here.
-sub record_failed_transcription {
-    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
-
-    my ( $sender, $error ) = @args{qw(sender error)};
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    $self->{dbh}->do(
-        'INSERT INTO failed_transcriptions (chat_id, bot_key, message_id, file_id, sender, error)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
-             file_id = excluded.file_id, sender = excluded.sender,
-             error = excluded.error, created_at = CURRENT_TIMESTAMP',
-        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $error,
-    );
-
-    my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT id FROM failed_transcriptions WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
-        undef, $chat_id, $bot_key, $message_id,
-    );
-
-    return $row->{id};
-}
-
-sub failed_transcriptions {
-    my ( $self, %args ) = @_;
-
-    if ( defined $args{bot_key} ) {
-        return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-             FROM failed_transcriptions WHERE bot_key = ? ORDER BY id',
-            { Slice => {} }, $args{bot_key},
-        );
-    }
-
-    return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-         FROM failed_transcriptions ORDER BY id',
-        { Slice => {} }
-    );
-}
-
-sub remove_failed_transcription {
-    my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'DELETE FROM failed_transcriptions WHERE id = ?', undef, $id );
-
-    return;
-}
-
-# TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
-# failed_downloads_due_for_retry/mark_failed_download_retried exactly
-# (TGT-221) - same AUTO_RETRY_INTERVAL_SECONDS/AUTO_RETRY_WINDOW_SECONDS
-# constants, same created_at/last_retry_at windowing logic. See that
-# pair's own comments above for the full rationale; unchanged here other
-# than the table name.
-sub failed_transcriptions_due_for_retry {
-    my ( $self, %args ) = @_;
-
-    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-         FROM failed_transcriptions
-         WHERE datetime(created_at) >= datetime('now', ?)
-           AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
-    my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
-
-    if ( defined $args{bot_key} ) {
-        $sql .= ' AND bot_key = ?';
-        push @bind, $args{bot_key};
-    }
-    $sql .= ' ORDER BY id';
-
-    return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
-}
-
-sub mark_failed_transcription_retried {
-    my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'UPDATE failed_transcriptions SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
-
-    return;
-}
-
-# TGT-196: persists a queued row's own successfully-downloaded local
-# path once download_file has already succeeded, so a future retry
-# (D2TG::Download::retry_failed_download) can see it via failed_downloads
-# and skip download_file entirely - retrying only the record_message
-# write that's actually still failing, instead of re-fetching the same
-# file from Telegram on every pass.
-sub mark_failed_download_downloaded {
-    my ( $self, $id, $local_path ) = @_;
-
-    $self->{dbh}->do( 'UPDATE failed_downloads SET local_path = ? WHERE id = ?', undef, $local_path, $id );
-
-    return;
-}
+# TGT-257: failed_downloads/failed_transcriptions storage moved into
+# D2TG::Store::RetryQueue (built once in new() above, sharing this same
+# $dbh) - these ten methods are now thin forwarders so every existing
+# caller (cli/retry-download.pl, cli/unread.pl, cli/poller.pl,
+# D2TG::Download, D2TG::Transcribe, and their tests) keeps working
+# unchanged via $store->method_name(...). See D2TG::Store::RetryQueue's
+# own POD for the full behavior each one documents.
+sub record_failed_download          { my $self = shift; return $self->{retry_queue}->record_failed_download(@_) }
+sub failed_downloads                { my $self = shift; return $self->{retry_queue}->failed_downloads(@_) }
+sub failed_downloads_due_for_retry  { my $self = shift; return $self->{retry_queue}->failed_downloads_due_for_retry(@_) }
+sub mark_failed_download_retried    { my $self = shift; return $self->{retry_queue}->mark_failed_download_retried(@_) }
+sub remove_failed_download          { my $self = shift; return $self->{retry_queue}->remove_failed_download(@_) }
+sub mark_failed_download_downloaded { my $self = shift; return $self->{retry_queue}->mark_failed_download_downloaded(@_) }
+sub record_failed_transcription         { my $self = shift; return $self->{retry_queue}->record_failed_transcription(@_) }
+sub failed_transcriptions               { my $self = shift; return $self->{retry_queue}->failed_transcriptions(@_) }
+sub remove_failed_transcription         { my $self = shift; return $self->{retry_queue}->remove_failed_transcription(@_) }
+sub failed_transcriptions_due_for_retry { my $self = shift; return $self->{retry_queue}->failed_transcriptions_due_for_retry(@_) }
+sub mark_failed_transcription_retried   { my $self = shift; return $self->{retry_queue}->mark_failed_transcription_retried(@_) }
 
 sub record_sent_text {
     my ( $self, $chat_id, $text_message_id, %args ) = @_;

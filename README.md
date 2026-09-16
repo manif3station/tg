@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.03).** REFACTOR (TGT-257, found via a
+scheduled JOB-004 improvement hunt): `D2TG::Store.pm` had grown to 1528
+lines. Its failed-downloads/failed-transcriptions retry-queue subs
+(~200 lines, the largest cleanly-separable concern) moved into a new
+`D2TG::Store::RetryQueue`, with `D2TG::Store` keeping thin forwarders
+for every existing caller. Zero behavior change - full suite still
+passes, 100% coverage on both modules.
+
 **Status: early implementation (v2.02).** BUGFIX (TGT-251, live Telegram
 request from Michael - "a short 30 seconds voice note... take like
 forever"): `D2TG::Transcribe::select_model` now routes a genuinely

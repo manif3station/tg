@@ -1,5 +1,27 @@
 Revision history for the tg skill
 
+2.03  2026-09-16
+      - REFACTOR (TGT-257, found via a scheduled JOB-004 improvement
+        hunt): D2TG::Store.pm had grown to 1528 lines. Its
+        failed_downloads/failed_transcriptions retry-queue subs (10 of
+        them, ~200 lines) were the largest cleanly-separable concern -
+        no cross-dependency on the allow-list/messages/offset logic
+        beyond sharing the same DBI handle. Extracted into a new
+        lib/D2TG/Store/RetryQueue.pm; D2TG::Store now builds one
+        instance in its constructor and keeps thin forwarding methods
+        with the same names for every existing caller
+        (cli/retry-download.pl, cli/unread.pl, cli/poller.pl,
+        D2TG::Download, D2TG::Transcribe). Zero behavior change - the
+        full test suite (191 files, 1928 tests) passes unchanged, and
+        both modules hold 100% statement+subroutine coverage. Store.pm:
+        1528 -> 1348 lines. New t/257-store-retry-queue-module.t proves
+        the extracted module works standalone, confirmed genuinely red
+        (module didn't exist) before the extraction. Filed TGT-258 as a
+        follow-up: Store.pm and 3 other lib/D2TG/*.pm modules
+        (Poller.pm, Config.pm, Download.pm) still exceed this board's
+        500-line-per-module cap - out of this ticket's own scope, so
+        tracked separately rather than expanded into here.
+
 2.02  2026-09-15
       - BUGFIX (TGT-251, live request via Telegram from Michael - "The
         voice note transcribing is very slow. A short 30 seconds voice
