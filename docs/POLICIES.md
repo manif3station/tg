@@ -5040,3 +5040,70 @@ condition already gating an existing, already-reviewed validation call.
 No new shell invocation, no new file I/O, no new external-input
 handling, no system/exec/backtick/piped-open/eval-STRING patterns
 introduced.
+
+## TGT-268: cli/reply.pl and cli/send.pl each re-swallowed a sole bare --bot, bypassing TGT-264's own fix
+
+Found via a scheduled JOB-003 hourly bug hunt. TGT-264 fixed
+`D2TG::Reply::Args::extract_bot_flag` to die `--bot requires a value`
+for a sole bare `--bot` argument (array length exactly 1), instead of
+silently falling through to `return (undef, '--bot')`. But
+`cli/reply.pl` and `cli/send.pl` each independently pre-check
+`if (@ARGV >= 2) { call extract_bot_flag_or_die } else { shift @ARGV }`
+around their own `--bot` branch - a special-case dating to TGT-068,
+whose own comment reasoned that a bare trailing `--bot` "can't be
+consumed by extract_bot_flag (it needs 2 elements)". That reasoning
+was true before TGT-264, but TGT-264 made it stale: since then,
+`extract_bot_flag_or_die` (via `extract_bot_flag`) already handles the
+single-element case correctly, dying with the specific error instead
+of needing a caller-side workaround. Both scripts kept their old
+special-case regardless, so when `--bot` was the ONLY remaining
+argument, they took the `else` branch, silently shifted it off, and
+fell through to a generic `chat_id`/`Usage` error instead of TGT-264's
+own clear message - reintroducing the exact silent-discard bug TGT-264
+fixed, one layer up at these two callers.
+
+Reproduced live: simulating `cli/reply.pl`'s exact loop logic with
+`@ARGV=('--bot')` yielded `bot_token=undef, remaining_argv=()`
+(silently discarded) instead of dying. `cli/send.pl` has the
+byte-for-byte identical pattern at its own `--bot` branch. Every OTHER
+`--bot` caller (`approve`/`attachment`/`history`/`unread`/
+`retry-download`/`retry-transcription`) already calls
+`extract_bot_flag_or_die` unconditionally and was unaffected - only
+`reply.pl`/`send.pl` had this extra local special-case, both built
+around the same TGT-068 hang-avoidance fix from before
+`extract_bot_flag_or_die` existed.
+
+Fixed by removing the `if (@ARGV >= 2) / else shift` special case in
+both scripts - they now call `extract_bot_flag_or_die(@ARGV)`
+unconditionally whenever `$ARGV[0] eq '--bot'`. Forward progress on
+`@ARGV` (TGT-068's own original concern, a real live-reproduced
+infinite loop) is still guaranteed: `extract_bot_flag_or_die` either
+returns having consumed at least the `--bot` token, or dies and calls
+`exit(1)`, so the loop can never spin on the same unconsumed argument
+either way.
+
+New test `t/268-reply-send-sole-bare-bot.t`: end-to-end checks (not a
+unit test against `D2TG::Reply::Args`, which TGT-264's own t/264
+already covers) that both `cli/reply.pl --bot` and `cli/send.pl --bot`
+(sole argument) die `--bot requires a value` and exit 1. Confirmed
+genuinely red against the pre-fix code: stashed the fix
+(`git stash push -- cli/reply.pl cli/send.pl`), ran the test (2 of 4
+assertions failed, both matching against the generic `Usage` message
+instead of the specific one), then restored the fix
+(`git stash pop`) and confirmed green.
+
+`t/57-reply-bare-bot-flag-no-hang.t`'s own two pre-existing assertions
+(written for TGT-068, before `extract_bot_flag_or_die` existed)
+checked for the generic `Usage` message this fix removes - updated to
+assert the new, more specific `--bot requires a value` message
+instead. That test's own core purpose (no hang, non-zero exit) is
+unaffected; only the exact error text changed, which is the intended
+outcome of this fix, not a regression in the test's own guarantee.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow
+simplification - an existing conditional branch removed, its
+surviving branch (an existing, already-reviewed function call)
+now runs unconditionally instead of behind a now-obsolete arg-count
+guard. No new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/eval-STRING
+patterns introduced.

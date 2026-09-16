@@ -424,12 +424,18 @@ clears that flag via `D2TG::Store::record_sent_voice`.
 already fills this in when it applies. Omitting it is unchanged from
 before this ticket - falls back to `D2TG_TOKEN`, exactly as every
 single-bot-mode reply always has. A bare trailing `--bot` with no value
-following it is rejected with the usual `Usage` error instead of
-hanging (TGT-068, a real live-reproduced infinite loop before this fix).
-`--bot` immediately followed by another flag (e.g. `--bot --db myalias`)
-is also rejected (TGT-074, same bug class as `--db`'s own case above):
-it dies with a clear `--bot requires a value` message instead of
-silently treating that flag's own name as the bot token.
+following it does not hang (TGT-068, a real live-reproduced infinite
+loop before this fix) and dies with a clear `--bot requires a value`
+message (TGT-268, found via a scheduled JOB-003 hourly bug hunt -
+originally fell through to a generic `Usage` error, since this script
+special-cased a short `@ARGV` instead of always calling
+`extract_bot_flag_or_die`, which reintroduced one layer up the exact
+silent-discard bug TGT-264 already fixed inside `extract_bot_flag`
+itself). `--bot` immediately followed by another flag (e.g. `--bot
+--db myalias`) is also rejected (TGT-074, same bug class as `--db`'s
+own case above): it dies with the same clear `--bot requires a value`
+message instead of silently treating that flag's own name as the bot
+token.
 
 Sends `text` to `chat_id` as **both** a text message and a gTTS voice
 note. As of TGT-083 (a live, explicit user request), the text message is

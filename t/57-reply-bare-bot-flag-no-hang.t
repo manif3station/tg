@@ -35,7 +35,18 @@ setup_mandatory_db_env( $Bin, tempdir( CLEANUP => 1 ) );
 
     ok( !$timed_out, 'cli/reply --bot (bare, no value) does not hang - exits within 3s' );
     unless ($timed_out) {
-        like( $out, qr/Usage/i, 'cli/reply --bot (bare, no value) reports the same Usage error as any other malformed invocation' );
+
+        # TGT-268 (found via a scheduled JOB-003 hourly bug hunt): this
+        # used to fall through to the generic Usage error, since
+        # cli/reply.pl special-cased @ARGV < 2 by shifting --bot off
+        # directly instead of calling extract_bot_flag_or_die - a
+        # caller-side reintroduction of the exact bug TGT-264 already
+        # fixed inside extract_bot_flag_or_die itself. Now dies the
+        # same specific "--bot requires a value" message any other
+        # malformed --bot shape gets, not the generic Usage fallback -
+        # this test's own core purpose (no hang, non-zero exit) is
+        # unaffected, only the exact error text improved.
+        like( $out, qr/--bot requires a value/, 'cli/reply --bot (bare, no value) reports the specific "--bot requires a value" error' );
         isnt( $? >> 8, 0, 'cli/reply --bot (bare, no value) exits non-zero, like any other malformed invocation' );
     }
 }
@@ -61,7 +72,10 @@ setup_mandatory_db_env( $Bin, tempdir( CLEANUP => 1 ) );
     waitpid( $pid, 0 ) unless $timed_out;
 
     ok( !$timed_out, '--db testalias --bot (bare, no value) does not hang either' );
-    like( $out, qr/Usage/i, '--db testalias --bot (bare, no value) reports Usage' ) unless $timed_out;
+
+    # TGT-268: same fix as the first block above - the specific message
+    # now, not the generic Usage fallback.
+    like( $out, qr/--bot requires a value/, '--db testalias --bot (bare, no value) reports the specific "--bot requires a value" error' ) unless $timed_out;
 }
 
 # A normal --bot <token> pair must still be consumed correctly and

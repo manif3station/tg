@@ -51,23 +51,26 @@ my ( $db_alias, @after_db );
 
 while (@ARGV) {
     if ( $ARGV[0] eq '--bot' ) {
-        if ( @ARGV >= 2 ) {
 
-            # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
-            # reproduced live): extract_bot_flag delegates to
-            # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
-            # immediately followed by another flag - previously
-            # uncaught here, crashing with Perl's raw exit 255 instead
-            # of this project's own clean-refusal convention, matching
-            # cli/approve.pl/cli/retry-download.pl's own existing
-            # eval-wrap of this identical call. TGT-236 centralized the
-            # eval-wrap idiom itself into
-            # D2TG::Reply::Args::extract_bot_flag_or_die.
-            ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
-        }
-        else {
-            shift @ARGV;
-        }
+        # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
+        # reproduced live): extract_bot_flag delegates to
+        # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
+        # immediately followed by another flag - previously
+        # uncaught here, crashing with Perl's raw exit 255 instead
+        # of this project's own clean-refusal convention, matching
+        # cli/approve.pl/cli/retry-download.pl's own existing
+        # eval-wrap of this identical call. TGT-236 centralized the
+        # eval-wrap idiom itself into
+        # D2TG::Reply::Args::extract_bot_flag_or_die.
+        #
+        # TGT-268 (found via a scheduled JOB-003 hourly bug hunt): this
+        # used to special-case @ARGV < 2 by shifting --bot off directly
+        # instead of calling extract_bot_flag_or_die - unnecessary and
+        # actively wrong since TGT-264 made extract_bot_flag_or_die
+        # itself die "--bot requires a value" for exactly this
+        # single-element case. Always call it unconditionally now - see
+        # cli/reply.pl's matching fix for the full history.
+        ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
     }
     elsif ( $ARGV[0] eq '--caption' ) {
         shift @ARGV;

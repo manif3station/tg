@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.13).** BUGFIX (TGT-268, found via a
+scheduled JOB-003 hourly bug hunt): `cli/reply.pl` and `cli/send.pl`
+each independently special-cased a sole bare `--bot` by silently
+discarding it instead of calling `extract_bot_flag_or_die` -
+reintroducing, one layer up at these two callers, the exact bug
+TGT-264 already fixed inside `extract_bot_flag` itself. Removed the
+stale special-case in both scripts; they now call
+`extract_bot_flag_or_die` unconditionally. New regression test,
+confirmed genuinely red before the fix.
+
 **Status: early implementation (v2.12).** REFACTOR (TGT-267, found via
 TGT-266's own qa gate finding): `D2TG::Config.pm` was 939 lines, over
 this board's 500-line cap. Extracted the CLI flag-parsing cluster

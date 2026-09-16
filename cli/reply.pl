@@ -27,29 +27,32 @@ while (@ARGV) {
         }
     }
     elsif ( $ARGV[0] eq '--bot' ) {
-        if ( @ARGV >= 2 ) {
 
-            # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
-            # reproduced live): extract_bot_flag delegates to
-            # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
-            # immediately followed by another flag - previously
-            # uncaught here, crashing with Perl's raw exit 255 instead
-            # of this project's own clean-refusal convention, matching
-            # cli/approve.pl/cli/retry-download.pl's own existing
-            # eval-wrap of this identical call. TGT-236 centralized the
-            # eval-wrap idiom itself into
-            # D2TG::Reply::Args::extract_bot_flag_or_die.
-            ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
-        }
-        else {
-            # A bare trailing --bot with no value can't be consumed by
-            # extract_bot_flag (it needs 2 elements) - shift it off
-            # directly so the loop always makes forward progress instead
-            # of spinning forever on the same unconsumed argument. Falls
-            # through to the chat_id/text Usage check below, same as any
-            # other malformed invocation.
-            shift @ARGV;
-        }
+        # TGT-231 (found via a scheduled JOB-003 hourly bug hunt,
+        # reproduced live): extract_bot_flag delegates to
+        # D2TG::Config::Flags::shift_flag_value, which dies when --bot is
+        # immediately followed by another flag - previously
+        # uncaught here, crashing with Perl's raw exit 255 instead
+        # of this project's own clean-refusal convention, matching
+        # cli/approve.pl/cli/retry-download.pl's own existing
+        # eval-wrap of this identical call. TGT-236 centralized the
+        # eval-wrap idiom itself into
+        # D2TG::Reply::Args::extract_bot_flag_or_die.
+        #
+        # TGT-268 (found via a scheduled JOB-003 hourly bug hunt): this
+        # used to special-case @ARGV < 2 by shifting --bot off directly
+        # instead of calling extract_bot_flag_or_die, reasoning that a
+        # bare trailing --bot "can't be consumed" by it - true before
+        # TGT-264, which fixed extract_bot_flag_or_die's own underlying
+        # extract_bot_flag to die "--bot requires a value" for exactly
+        # this single-element case instead of falling through. That
+        # made this special-case not just unnecessary but actively
+        # wrong: it silently discarded a sole bare --bot instead of
+        # producing TGT-264's own clear error, reintroducing the bug
+        # one layer up at this caller. Always call
+        # extract_bot_flag_or_die unconditionally now - it already
+        # handles both shapes correctly.
+        ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
     }
     elsif ( $ARGV[0] eq '--voice-only' ) {
 
@@ -193,18 +196,26 @@ relative to C<--db>/C<-d>, and sends via that token instead of
 C<D2TG_TOKEN> - required to reply to a message received under C<d2
 tg.poller>'s multi-bot mode (TGT-049) by a bot other than the one
 C<D2TG_TOKEN> names; the poller's own C<REPLY WITH> template already
-fills this in when it applies. See L<D2TG::Reply/extract_bot_flag>. A
-bare trailing C<--bot> with no value following it is shifted off
-directly (TGT-068) rather than left for C<extract_bot_flag> (which needs
-two elements to consume anything) - falls through to the C<chat_id>/text
-C<Usage> check below like any other malformed invocation, instead of
-looping forever on the same unconsumed argument (a real, live-reproduced
-hang before this fix). C<--bot> immediately followed by another flag
-(e.g. C<--bot --db myalias>) is also rejected (TGT-074, same bug class
-as C<--db>'s own fix below): C<extract_bot_flag> dies with C<--bot
-requires a value> instead of silently treating that flag's own name as
-the bot token - see L<D2TG::Reply/extract_bot_flag>'s own POD for the
-exact predicate.
+fills this in when it applies. See L<D2TG::Reply::Args/extract_bot_flag>.
+Both a bare trailing C<--bot> with no value following it, and C<--bot>
+immediately followed by another flag (e.g. C<--bot --db myalias>), die
+with C<--bot requires a value> (TGT-074, same bug class as C<--db>'s
+own fix below) instead of silently treating that flag's own name as
+the bot token, or (TGT-068/TGT-268) silently discarding C<--bot> and
+falling through to the generic C<chat_id>/text C<Usage> check - always
+calling L<D2TG::Reply::Args/extract_bot_flag_or_die> unconditionally
+(TGT-268, found via a scheduled JOB-003 hourly bug hunt: this script
+used to special-case a short C<@ARGV> by shifting C<--bot> off
+directly instead, reasoning that C<extract_bot_flag> "needs two
+elements to consume anything" - true before TGT-264 fixed
+C<extract_bot_flag> itself to handle that single-element case
+correctly, which made this script's own special-case not just
+unnecessary but actively wrong, reintroducing the silent-discard bug
+one layer up at this caller) makes forward progress on C<@ARGV>
+exactly as reliably as the old special-case did (a die always exits
+the process, never leaves an unconsumed argument to loop on) - see
+L<D2TG::Reply::Args/extract_bot_flag>'s own POD for the exact
+predicate.
 
 C<--db>/C<-d>'s own shifted value is validated (TGT-071, same bug class
 as TGT-068/069/070): if it's missing, empty, or itself looks like a flag

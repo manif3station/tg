@@ -1,5 +1,28 @@
 Revision history for the tg skill
 
+2.13  2026-09-16
+      - BUGFIX (TGT-268, found via a scheduled JOB-003 hourly bug
+        hunt): TGT-264 fixed D2TG::Reply::Args::extract_bot_flag to
+        die "--bot requires a value" for a sole bare --bot argument,
+        instead of silently falling through - but cli/reply.pl and
+        cli/send.pl each independently special-cased "if (@ARGV >= 2)
+        { call extract_bot_flag_or_die } else { shift @ARGV }" around
+        their own --bot branch, so when --bot was the ONLY remaining
+        argument, both scripts took the else branch, silently
+        discarded it, and fell through to a generic Usage error
+        instead of TGT-264's own clear message - reintroducing the
+        exact bug TGT-264 fixed, one layer up at these two callers.
+        Removed the stale special-case in both scripts; they now call
+        extract_bot_flag_or_die unconditionally, which already handles
+        both shapes correctly since TGT-264. New
+        t/268-reply-send-sole-bare-bot.t, confirmed genuinely red
+        before the fix (stashed the fix, ran the test, confirmed 2/4
+        assertions failed at exactly the expected lines, then restored
+        it). Also updated t/57's own pre-existing assertions, which
+        checked for the old generic Usage message and needed to assert
+        the new, more specific one instead - this test's own core
+        purpose (no hang, non-zero exit) is unaffected.
+
 2.12  2026-09-16
       - REFACTOR (TGT-267, found via TGT-266's own qa gate finding):
         D2TG::Config.pm was 939 lines, over this board's 500-line cap,
