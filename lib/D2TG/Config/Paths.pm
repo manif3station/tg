@@ -273,7 +273,8 @@ to a real directory. Dies if neither is set, or the alias is unknown.
 =head2 resolve_alias_dir_or_die(%args)
 
 L</resolve_alias_dir>, printing to STDERR and exiting 1 on failure
-instead of propagating the die.
+instead of propagating the die - a one-line forwarder onto the shared
+L<D2TG::OrDie/or_die> helper (TGT-269).
 
 =head2 require_existing_base_dir($base_dir)
 
@@ -282,7 +283,8 @@ Dies unless C<$base_dir> already exists - never creates one.
 =head2 require_existing_base_dir_or_die($base_dir)
 
 L</require_existing_base_dir>, printing to STDERR and exiting 1 on
-failure instead of propagating the die.
+failure instead of propagating the die - a one-line forwarder onto the
+shared L<D2TG::OrDie/or_die> helper (TGT-269).
 
 =head2 resolve_self_exec_path(bin_dir => $d, basename => $b, fallback => $f)
 

@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.16).** DOC FIX (TGT-272, found via
+a scheduled JOB-005 doc-accuracy hunt): TGT-269's `D2TG::OrDie`
+extraction left 3 POD locations plus a `docs/commands.md` row still
+describing each `_or_die` wrapper's own hand-rolled implementation,
+now delegated. Also fixed a doubly-stale claim that `cli/send.pl`/
+`reply.pl` still pre-check `@ARGV>=2` around `--bot` handling (TGT-268
+removed that). All 5 locations corrected; new structural regression
+test guards this drift class. Pure documentation fix, no code
+behavior changed.
+
 **Status: early implementation (v2.15).** BUGFIX (TGT-270, a live
 report from Michael via the budget project): a poller version-change
 restart re-emitted a stale `MEDIA DOWNLOAD ERROR` that read exactly
