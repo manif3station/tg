@@ -1,5 +1,21 @@
 # tg
 
+**Status: early implementation (v2.17).** BUGFIX (TGT-273, found via a
+scheduled JOB-004 improvement hunt): the poller's `edited_message`
+branch had no redelivery-dedup guard at all, unlike the plain-message/
+media/voice branch TGT-270 already hardened - a redelivered Telegram
+edit would print a duplicate `NEW TG EDIT` line every time. Reusing
+`get_message` presence alone (TGT-270's own approach) doesn't work here
+since `record_message` upserts on `(chat_id, bot_key, message_id)` and
+so already returns non-null for the ORIGINAL pre-edit send too; fixed
+instead by comparing the incoming edited text against the already-
+stored summary - identical means already-announced (skip), different
+or absent means genuinely new (announce and record as before). Only
+applies when the edit carries text; a caption/media-only edit remains a
+documented, accepted gap. `lib/D2TG/Poller.pm`'s own POD was also
+extracted to `Poller.pod` while this fix touched the file - the module
+is still over the 500-line cap afterward, filed as follow-up TGT-275.
+
 **Status: early implementation (v2.16).** DOC FIX (TGT-272, found via
 a scheduled JOB-005 doc-accuracy hunt): TGT-269's `D2TG::OrDie`
 extraction left 3 POD locations plus a `docs/commands.md` row still

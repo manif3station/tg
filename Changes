@@ -1,5 +1,36 @@
 Revision history for the tg skill
 
+2.17  2026-09-17
+      - BUG FIX (TGT-273, found via a scheduled JOB-004 improvement
+        hunt): run_once's edited_message branch had no redelivery-dedup
+        guard at all, unlike the plain-message/media/voice branch which
+        TGT-270 (this same session) hardened against Telegram's own
+        at-least-once delivery. A redelivered edited_message update
+        would print a duplicate NEW TG EDIT line every time. Naively
+        reusing D2TG::Store::get_message the way TGT-270 did (checking
+        mere row presence) does NOT work here - record_message UPSERTs
+        on (chat_id, bot_key, message_id), so get_message already
+        returns non-null for ANY message ever recorded, including the
+        ORIGINAL pre-edit send; a presence check would wrongly suppress
+        a genuinely new edit too. Fixed instead by comparing the
+        incoming (sanitized) edited text against the already-stored
+        summary: identical means this exact edit was already announced
+        (a redelivery, skip); different or absent means a genuinely new
+        edit or the first one (announce and record as before). Only
+        applies when the edit carries text - a caption/media-only edit
+        has no stored summary to compare against and is a documented,
+        accepted gap. New t/273-edited-message-redelivery-skips-
+        duplicate-announce.t covers redelivered-identical-edit (skip),
+        genuinely-different-edit (still announces, summary updated),
+        and first-ever-edit (no prior row, still announces).
+      - MAINTENANCE: lib/D2TG/Poller.pm's own embedded POD (605 lines)
+        extracted to lib/D2TG/Poller.pod while this ticket's fix
+        touched the file, matching the Transcribe/Reply/Config
+        precedent (REQ-028). Poller.pm is still 854 lines after that
+        extraction, over this board's 500-line-per-module cap - filed
+        as follow-up TGT-275 for a full decomposition rather than
+        folding a large refactor into this bugfix (REQ-029).
+
 2.16  2026-09-16
       - DOC FIX (TGT-272, found via a scheduled JOB-005 doc-accuracy
         hunt): TGT-269 converted extract_bot_flag_or_die,

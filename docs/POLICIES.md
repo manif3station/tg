@@ -5212,3 +5212,66 @@ seeding). All four are internal Tira correctness/performance fixes -
 none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
+
+## TGT-273: edited_message branch had no redelivery-dedup guard at all
+
+Found via a scheduled JOB-004 improvement hunt, as a direct follow-up
+sweep after TGT-270 (this same session) hardened the plain-message/
+media/voice branch of `run_once` against a Telegram redelivery of an
+already-processed update. Checked the sibling `edited_message` branch
+for the same class of gap: confirmed by direct source read that it had
+NO dedup guard whatsoever - it unconditionally printed `NEW TG EDIT`
+every time it was reached, with zero check against whether this exact
+edit had already been announced on a prior poll cycle.
+
+The design fix is genuinely different from TGT-270's, not a copy-paste
+of it. TGT-270's fix works by checking mere row *presence*
+(`get_message`/`has_failed_download`/`has_failed_transcription`) because
+none of those tables are ever populated for a message that hasn't yet
+been successfully processed or hasn't yet failed. That assumption does
+NOT hold for `edited_message`: `record_message` upserts on
+`(chat_id, bot_key, message_id)`, so `get_message` is already non-null
+for ANY message ever recorded, including the ORIGINAL pre-edit send -
+reusing presence-alone here would wrongly suppress a genuinely new
+(never-before-announced) edit the very first time it arrived, since the
+original message's own row already exists.
+
+Fixed instead by comparing the incoming (sanitized) edited text against
+the row's already-stored `summary`: identical means this exact edit was
+already recorded (a redelivery - skip, matching TGT-270's own
+skip-and-degrade-on-lookup-error philosophy); different, or no row at
+all, means a genuinely new edit or the very first one (announce and
+record exactly as before). Scoped to the `has_text` case only - a
+caption/media-only edit has never been recorded via `record_message` at
+all (a pre-existing, documented scope boundary from this same branch's
+own TGT-217 history), so there is no stored state to compare against;
+a redelivered caption-only edit still re-announces, an accepted,
+documented gap rather than an attempt to invent a new persisted marker
+for it.
+
+New test `t/273-edited-message-redelivery-skips-duplicate-announce.t`:
+seeds a stored message whose summary already equals the incoming edit's
+text, feeds `run_once` that same `edited_message` update again, and
+confirms `NEW TG EDIT` is not re-printed (confirmed genuinely red
+before the fix - 1 of 4 subtests failed at exactly this assertion). Two
+further scenarios confirm the fix doesn't over-suppress: a genuinely
+different edit (summary differs from the incoming text) still announces
+and updates the stored summary; a first-ever edit (no prior row at all)
+still announces and records normally.
+
+While implementing, `lib/D2TG/Poller.pm`'s own embedded POD (605 lines,
+present since before this ticket, never previously split) was extracted
+to `lib/D2TG/Poller.pod`, matching this session's own established
+convention (Transcribe/Reply/Config) for any module touched under the
+board's POD-in-a-separate-file requirement. The module is still 854
+lines after that extraction - over the board's 500-line-per-module cap,
+a pre-existing size issue not introduced by this ticket's own small
+diff - filed as follow-up `TGT-275` for a full decomposition, matching
+the TGT-264->265/TGT-266->267 precedent of not folding a large
+refactor into an unrelated bugfix.
+
+perlsec.pl-style vulnerability-scan audit: one new read-only
+`get_message` call (already an existing, already-reviewed method - no
+new SQL, no new external-input handling) plus a plain string
+equality comparison. No new shell invocation, no new file I/O, no new
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
