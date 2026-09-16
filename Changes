@@ -1,5 +1,33 @@
 Revision history for the tg skill
 
+2.15  2026-09-16
+      - BUGFIX (TGT-270, a live report from Michael via the budget
+        project, filed as /tmp/ask-for-more-from-d2tg/20260916T194918-
+        budget-oldmessage-replay.md): a poller version-change restart
+        re-emitted a stale MEDIA DOWNLOAD ERROR that read exactly like
+        a fresh live failure for a message that had actually already
+        failed and been queued days earlier. Root cause:
+        D2TG::Poller::run_once's redelivery-dedup guard only checked
+        D2TG::Store::get_message (the messages table) before
+        re-announcing a redelivered update - a media-download failure
+        never calls record_message (only record_failed_download, a
+        different table), so a genuine Telegram redelivery of that
+        update_id (its own documented at-least-once delivery) was
+        invisible to the guard and got legitimately re-processed as
+        brand new. The same gap applied to voice/failed_transcriptions.
+        record_failed_download's own ON CONFLICT upsert already makes
+        the DATA layer idempotent for a redelivery - the gap was
+        purely in the POLLER's own live announce/re-attempt path
+        having no visibility into the retry queue before acting.
+        Fixed by adding D2TG::Store::RetryQueue::has_failed_download/
+        has_failed_transcription (forwarded through D2TG::Store) and
+        extending run_once's redelivery-dedup guard to check both,
+        alongside the existing messages-table check. New
+        t/270-run-once-redelivery-skips-queued-failures.t (both
+        download and transcription cases), confirmed genuinely red
+        before the fix. Full test suite (202 files, 2216 tests) passes
+        unchanged, 100% coverage on all 3 touched modules.
+
 2.14  2026-09-16
       - REFACTOR (TGT-269, found via a scheduled JOB-004 improvement
         hunt): extract_bot_flag_or_die (D2TG::Reply::Args),

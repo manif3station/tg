@@ -91,6 +91,24 @@ sub failed_downloads {
     );
 }
 
+# TGT-270 (a live report from Michael via the budget project): a
+# redelivered update whose media download already failed and was
+# queued had no way to be recognized as such by D2TG::Poller::run_once
+# - only D2TG::Store::get_message (the messages table) was checked
+# before re-announcing/re-attempting, and a failed download never
+# calls record_message. Used by run_once's own redelivery-dedup guard
+# alongside get_message.
+sub has_failed_download {
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
+
+    my $row = $self->{dbh}->selectrow_arrayref(
+        'SELECT 1 FROM failed_downloads WHERE chat_id = ? AND bot_key = ? AND message_id = ? LIMIT 1',
+        undef, $chat_id, $bot_key, $message_id,
+    );
+    return $row ? 1 : 0;
+}
+
 sub failed_downloads_due_for_retry {
     my ( $self, %args ) = @_;
 
@@ -183,6 +201,19 @@ sub failed_transcriptions {
          FROM failed_transcriptions ORDER BY id',
         { Slice => {} }
     );
+}
+
+# TGT-270: has_failed_download's own analogue for transcriptions - used
+# by run_once's redelivery-dedup guard alongside get_message.
+sub has_failed_transcription {
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
+
+    my $row = $self->{dbh}->selectrow_arrayref(
+        'SELECT 1 FROM failed_transcriptions WHERE chat_id = ? AND bot_key = ? AND message_id = ? LIMIT 1',
+        undef, $chat_id, $bot_key, $message_id,
+    );
+    return $row ? 1 : 0;
 }
 
 sub remove_failed_transcription {

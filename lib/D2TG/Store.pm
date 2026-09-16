@@ -694,11 +694,13 @@ sub failed_downloads_due_for_retry  { my $self = shift; return $self->{retry_que
 sub mark_failed_download_retried    { my $self = shift; return $self->{retry_queue}->mark_failed_download_retried(@_) }
 sub remove_failed_download          { my $self = shift; return $self->{retry_queue}->remove_failed_download(@_) }
 sub mark_failed_download_downloaded { my $self = shift; return $self->{retry_queue}->mark_failed_download_downloaded(@_) }
+sub has_failed_download              { my $self = shift; return $self->{retry_queue}->has_failed_download(@_) }
 sub record_failed_transcription         { my $self = shift; return $self->{retry_queue}->record_failed_transcription(@_) }
 sub failed_transcriptions               { my $self = shift; return $self->{retry_queue}->failed_transcriptions(@_) }
 sub remove_failed_transcription         { my $self = shift; return $self->{retry_queue}->remove_failed_transcription(@_) }
 sub failed_transcriptions_due_for_retry { my $self = shift; return $self->{retry_queue}->failed_transcriptions_due_for_retry(@_) }
 sub mark_failed_transcription_retried   { my $self = shift; return $self->{retry_queue}->mark_failed_transcription_retried(@_) }
+sub has_failed_transcription            { my $self = shift; return $self->{retry_queue}->has_failed_transcription(@_) }
 
 sub record_sent_text {
     my ( $self, $chat_id, $text_message_id, %args ) = @_;
@@ -1131,6 +1133,18 @@ its own C<bot_key> (matching L</pending_chat_ids>' own established
 optional-C<bot_key>-filter pattern). C<cli/retry-download.pl> lists and
 acts on this.
 
+=head2 has_failed_download($chat_id, $message_id, bot_key => $b)
+
+TGT-270 (a live report from Michael via the budget project): a cheap
+existence check - true if this exact C<(chat_id, bot_key, message_id)>
+already has a queued C<failed_downloads> row. C<bot_key> is optional,
+defaulting to the single-bot sentinel like every other method here.
+Backs L<D2TG::Poller/run_once>'s own redelivery-dedup guard, alongside
+L</get_message> - a media-download failure never calls
+L</record_message>, so that check alone couldn't recognize a
+Telegram-redelivered update whose download had already failed and been
+queued, letting it be re-processed live as brand new.
+
 =head2 mark_failed_download_downloaded($id, $local_path)
 
 Persists C<$local_path> onto a queued row (TGT-196), without removing
@@ -1192,6 +1206,12 @@ C<file_id>, C<sender>, C<error>, C<created_at>, C<last_retry_at>
 (TGT-246). C<bot_key> is optional, matching L</failed_downloads>'s own
 established optional-filter pattern. C<cli/retry-transcription.pl>
 lists and acts on this.
+
+=head2 has_failed_transcription($chat_id, $message_id, bot_key => $b)
+
+TGT-270: L</has_failed_download>'s own analogue for transcriptions -
+same existence-check shape, same role in
+L<D2TG::Poller/run_once>'s redelivery-dedup guard.
 
 =head2 remove_failed_transcription($id)
 

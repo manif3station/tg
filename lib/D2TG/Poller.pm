@@ -341,6 +341,28 @@ sub run_once {
         if ( $store && defined $message_id ) {
             my $already_recorded = eval { $store->get_message( $chat_id, $message_id, bot_key => $bot_token ) };
             next if !$@ && $already_recorded;
+
+            # TGT-270 (a live report from Michael via the budget
+            # project): the check above alone missed a real case of the
+            # exact same redelivery problem it exists to solve - a
+            # media/voice message whose download or transcription
+            # already failed and was queued is NEVER recorded via
+            # record_message (only record_failed_download/
+            # record_failed_transcription, different tables), so a
+            # Telegram redelivery of that update_id (its own documented
+            # at-least-once delivery) was invisible to this guard and
+            # got legitimately re-processed as brand new - re-printing
+            # a MEDIA DOWNLOAD ERROR/re-attempting a download that read
+            # exactly like a fresh live failure, when it was actually
+            # the same already-queued one from days earlier. Same
+            # transient-error degradation as the check above: treated
+            # as "not previously queued" on lookup failure, proceed as
+            # normal.
+            my $already_queued = eval {
+                $store->has_failed_download( $chat_id, $message_id, bot_key => $bot_token )
+                  || $store->has_failed_transcription( $chat_id, $message_id, bot_key => $bot_token );
+            };
+            next if !$@ && $already_queued;
         }
 
         # TGT-092 (live production incident): a photo/document's caption

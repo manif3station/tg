@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.15).** BUGFIX (TGT-270, a live
+report from Michael via the budget project): a poller version-change
+restart re-emitted a stale `MEDIA DOWNLOAD ERROR` that read exactly
+like a fresh live failure. Root cause: `run_once`'s redelivery-dedup
+guard only checked the `messages` table, never `failed_downloads`/
+`failed_transcriptions` - a media/voice failure never calls
+`record_message`, so a genuine Telegram redelivery of that update was
+invisible to the guard. Fixed by extending the guard to check both
+retry-queue tables too. New regression test, confirmed genuinely red
+before the fix.
+
 **Status: early implementation (v2.14).** REFACTOR (TGT-269, found via
 a scheduled JOB-004 improvement hunt): 4 separate `_or_die` wrapper
 functions across 3 modules each hand-rolled the identical

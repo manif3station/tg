@@ -5107,3 +5107,93 @@ now runs unconditionally instead of behind a now-obsolete arg-count
 guard. No new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/eval-STRING
 patterns introduced.
+
+## TGT-270: poller version-change restart re-emitted a stale MEDIA DOWNLOAD ERROR as if it were a fresh live failure
+
+Live report from Michael via the budget project's own agent, filed at
+`/tmp/ask-for-more-from-d2tg/20260916T194918-budget-oldmessage-replay.md`,
+surfaced via a scheduled JOB-008 feature-request-triage sweep. At
+17:38:17, a poller version-change restart (2.02->2.06) printed the
+version-change notice immediately followed by a `MEDIA DOWNLOAD ERROR`
+line for a chat that read exactly like a brand-new live failure for a
+message Michael had just sent. Investigated at the time: `d2
+tg.history --since <that window>` found nothing genuinely new; `d2
+tg.retry-download --all` reported no failed downloads queued; `d2
+tg.status` showed a healthy poller. So the error was NOT a genuinely
+new failure at that moment - it was old output re-surfaced at the
+exact moment of the restart, matching the shape of an already-resolved
+download error from days earlier.
+
+Root cause, confirmed by direct source investigation: two hypotheses
+were ruled out first. Stdout buffering was NOT the cause -
+`cli/poller.pl` already sets `$|=1` (autoflush) at line 26,
+specifically to prevent exactly this class of delayed-output issue
+(per its own TGT-028 comment). `D2TG::Download::auto_retry_failed_downloads`
+was NOT the source either - grepping the whole codebase confirmed the
+literal string `MEDIA DOWNLOAD ERROR` is only ever printed from
+`D2TG::Poller::run_once`'s own live, synchronous media-download-failure
+path - never from the retry/auto-retry code path, which prints a
+different `AUTO RETRY ERROR` string instead.
+
+The actual gap: `run_once`'s own redelivery-dedup guard (added by
+TGT-178, at `lib/D2TG/Poller.pm` around line 341) only checks
+`D2TG::Store::get_message` - the `messages` table - before
+re-announcing/re-processing a redelivered update. A media-download
+failure never calls `record_message` (only `record_failed_download`, a
+different table entirely) - so when Telegram redelivers that same
+update_id (its own documented at-least-once delivery, explicitly
+acknowledged in `D2TG::Store::RetryQueue::record_failed_download`'s
+own TGT-219 comment: "Telegram's own at-least-once delivery can still
+reprocess the same update under the SAME bot"), the guard has no way
+to recognize it as already-queued, and `run_once` legitimately
+re-processes it as brand new - re-printing `MEDIA DOWNLOAD ERROR` and
+re-attempting the download live, exactly matching the reported
+symptom. The same gap applies to voice messages and
+`failed_transcriptions`.
+
+`record_failed_download` is itself already idempotent
+(`INSERT ... ON CONFLICT (chat_id, bot_key, message_id) DO UPDATE`) -
+the DATA layer already handles a redelivered update gracefully. The
+gap was purely in the POLLER's own live announce/re-attempt path
+having no visibility into the retry queue before acting on an update.
+
+Fixed by adding `D2TG::Store::RetryQueue::has_failed_download`/
+`has_failed_transcription($chat_id, $message_id, bot_key => $b)` (a
+cheap `SELECT 1 ... LIMIT 1` existence check, forwarded through
+`D2TG::Store`) and extending `run_once`'s existing redelivery-dedup
+guard to also check both, alongside the pre-existing `get_message`
+check - skipping (treating as already-seen) whenever any of the three
+already has a row for that `(chat_id, message_id, bot_key)`. A
+transient lookup error on the two new checks degrades the same way
+the existing `get_message` check already does (treated as
+not-previously-seen, proceed as normal, matching this file's
+established degrade-not-crash philosophy).
+
+New test `t/270-run-once-redelivery-skips-queued-failures.t`: seeds a
+`failed_downloads`/`failed_transcriptions` row for a given
+`(chat_id, message_id)`, then feeds `run_once` the same update again
+with a `download_media`/`transcribe_voice` coderef that WOULD succeed
+if actually invoked - proving the guard skips it before ever reaching
+the attempt, not merely that a second failure is handled gracefully.
+Confirmed genuinely red before the fix (2 of 7 assertions failed,
+showing the download genuinely re-attempted and re-announced as a
+brand-new `NEW TG MEDIA` success). A second scenario confirms a
+genuinely NEW media failure (never queued before) is still announced
+and queued exactly as before - the fix narrows re-processing only for
+an already-queued redelivery, nothing else.
+
+Not investigated as part of this ticket (noted, not reproduced): a
+secondary `skill_version_check_safe: ... cannot read
+/home/mv/.developer-dashboard/skills/tg/.env: No such file or
+directory` error Michael also flagged in the same block - possibly
+related to why old output surfaces at that exact restart moment (e.g.
+a race during the install step's own file replacement), but left for
+a follow-up investigation rather than guessed at here.
+
+perlsec.pl-style vulnerability-scan audit: two new read-only
+existence-check queries (parameterized, no string interpolation into
+SQL) added to an already-reviewed retry-queue module, plus one
+additional `eval`-guarded boolean check in an already-reviewed
+control-flow branch. No new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/eval-STRING
+patterns introduced.

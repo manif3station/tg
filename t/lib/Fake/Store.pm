@@ -82,6 +82,13 @@ sub failed_downloads {
     return $self->{failed_downloads} || [];
 }
 
+# TGT-270: mirrors the real D2TG::Store::RetryQueue's own
+# has_failed_download - used by run_once's redelivery-dedup guard.
+sub has_failed_download {
+    my ( $self, $chat_id, $message_id ) = @_;
+    return !!grep { $_->{chat_id} == $chat_id && $_->{message_id} == $message_id } @{ $self->{failed_downloads} || [] };
+}
+
 # TGT-237: mirrors record_failed_download/failed_downloads' own shape.
 sub record_failed_transcription {
     my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
@@ -110,6 +117,12 @@ sub record_failed_transcription {
 sub failed_transcriptions {
     my ($self) = @_;
     return $self->{failed_transcriptions} || [];
+}
+
+# TGT-270: mirrors has_failed_download's own shape for transcriptions.
+sub has_failed_transcription {
+    my ( $self, $chat_id, $message_id ) = @_;
+    return !!grep { $_->{chat_id} == $chat_id && $_->{message_id} == $message_id } @{ $self->{failed_transcriptions} || [] };
 }
 
 1;
