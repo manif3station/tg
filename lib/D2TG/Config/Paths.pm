@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use File::Spec;
 use File::Path qw(make_path);
+use D2TG::OrDie;
 
 # TGT-260: extracted out of D2TG::Config.pm (which had grown to 1131
 # lines) - these functions resolve where every piece of this skill's
@@ -171,16 +172,12 @@ sub resolve_alias_dir {
 
 # TGT-172: extracted after this exact eval/print-STDERR/exit(1) wrapper
 # around resolve_alias_dir was found duplicated identically across 11 of
-# the 13 cli/*.pl scripts.
+# the 13 cli/*.pl scripts. TGT-269: the wrapper idiom itself moved into
+# D2TG::OrDie::or_die (found duplicated a further 3 times across other
+# modules) - this is now a one-line forwarder.
 sub resolve_alias_dir_or_die {
     my (%args) = @_;
-
-    my $base_dir = eval { resolve_alias_dir(%args) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-    return $base_dir;
+    return D2TG::OrDie::or_die( \&resolve_alias_dir, %args );
 }
 
 sub require_existing_base_dir {
@@ -194,18 +191,13 @@ sub require_existing_base_dir {
       . "value (typo?) or create the directory yourself first.\n";
 }
 
+# TGT-230: the eval/print-STDERR/exit(1) wrapper around
+# require_existing_base_dir was duplicated byte-for-byte across 11
+# cli/*.pl scripts. TGT-269: now a one-line forwarder onto
+# D2TG::OrDie::or_die.
 sub require_existing_base_dir_or_die {
     my ($base_dir) = @_;
-
-    # TGT-230: the eval/print-STDERR/exit(1) wrapper around
-    # require_existing_base_dir was duplicated byte-for-byte across 11
-    # cli/*.pl scripts.
-    my $result = eval { require_existing_base_dir($base_dir) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-    return $result;
+    return D2TG::OrDie::or_die( \&require_existing_base_dir, $base_dir );
 }
 
 sub resolve_self_exec_path {

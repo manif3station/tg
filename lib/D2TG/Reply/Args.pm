@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use D2TG::Config;
 use D2TG::Config::Flags;
+use D2TG::OrDie;
 use Encode qw(decode);
 
 # TGT-265: extract_bot_flag/extract_bot_flag_or_die/parse_cli_args
@@ -27,16 +28,12 @@ sub extract_bot_flag {
     return ( $bot_token, @args );
 }
 
+# TGT-269: this eval/print-STDERR/exit(1) wrapper was found duplicated
+# a further 3 times across other modules - now a one-line forwarder
+# onto the shared D2TG::OrDie::or_die helper.
 sub extract_bot_flag_or_die {
     my (@args) = @_;
-
-    my ( $bot_token, @rest ) = eval { extract_bot_flag(@args) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-
-    return ( $bot_token, @rest );
+    return D2TG::OrDie::or_die( \&extract_bot_flag, @args );
 }
 
 sub parse_cli_args {

@@ -1,0 +1,46 @@
+=head1 NAME
+
+D2TG::OrDie - shared eval/print-STDERR/exit(1) wrapper idiom
+
+=head1 SYNOPSIS
+
+    sub some_flag_or_die {
+        my (@args) = @_;
+        return D2TG::OrDie::or_die( \&some_flag, @args );
+    }
+
+=head1 DESCRIPTION
+
+TGT-269 (found via a scheduled JOB-004 improvement hunt):
+C<extract_bot_flag_or_die> (L<D2TG::Reply::Args>),
+C<extract_db_flag_or_die> (L<D2TG::Config::Flags>), and
+C<resolve_alias_dir_or_die>/C<require_existing_base_dir_or_die>
+(L<D2TG::Config::Paths>) each independently hand-rolled the identical
+C<eval { inner_call(...) }; if ($@) { print STDERR $@; exit 1; }
+return $result;> idiom - the same duplication class TGT-172/230/236
+already extracted (for callers wrapping ONE specific function each),
+just never noticed at the wrapper-generator level itself, since each
+wrapper was added in a separate ticket.
+
+Deliberately a leaf module with zero C<use> dependencies on
+L<D2TG::Config>/L<D2TG::Config::Paths>/L<D2TG::Reply> - C<D2TG::Config>
+already C<use>s C<D2TG::Config::Paths>, so C<D2TG::Config::Paths>
+cannot C<use> C<D2TG::Config> back, and a shared helper needed by both
+of those plus C<D2TG::Reply::Args> must live outside that whole family
+entirely to avoid a circular C<use>.
+
+=head1 FUNCTIONS
+
+=head2 or_die($coderef, @args)
+
+Calls C<< $coderef->(@args) >> inside C<eval>. On failure, prints
+C<$@> to C<STDERR> and calls C<exit(1)> - never returns in that case.
+On success, returns C<wantarray>-aware: the full result list in list
+context (for a wrapped function like C<extract_bot_flag> that returns
+C<($token, @rest)>), or just the first value in scalar context (for a
+wrapped function like C<resolve_alias_dir> that returns a single
+scalar) - so both shapes of existing C<_or_die> wrapper convert to a
+one-line forwarder unchanged, with no caller-visible difference in
+exit code, C<STDERR> text, or return shape.
+
+=cut

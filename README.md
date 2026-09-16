@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.14).** REFACTOR (TGT-269, found via
+a scheduled JOB-004 improvement hunt): 4 separate `_or_die` wrapper
+functions across 3 modules each hand-rolled the identical
+eval/print-STDERR/exit(1) idiom. Extracted into new leaf module
+`D2TG::OrDie` (`or_die($coderef, @args)`, wantarray-aware, zero
+use-dependencies to avoid a circular-use trap). All 4 wrappers now
+one-line forwarders - zero behavior change, full suite still passes,
+100% coverage.
+
 **Status: early implementation (v2.13).** BUGFIX (TGT-268, found via a
 scheduled JOB-003 hourly bug hunt): `cli/reply.pl` and `cli/send.pl`
 each independently special-cased a sole bare `--bot` by silently

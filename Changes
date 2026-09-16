@@ -1,5 +1,27 @@
 Revision history for the tg skill
 
+2.14  2026-09-16
+      - REFACTOR (TGT-269, found via a scheduled JOB-004 improvement
+        hunt): extract_bot_flag_or_die (D2TG::Reply::Args),
+        extract_db_flag_or_die (D2TG::Config::Flags), and
+        resolve_alias_dir_or_die/require_existing_base_dir_or_die
+        (D2TG::Config::Paths) each independently hand-rolled the
+        identical eval/print-STDERR/exit(1) wrapper idiom - the same
+        duplication class TGT-172/230/236 already extracted (for
+        callers wrapping ONE specific function each), just never
+        noticed at the wrapper-generator level itself since each
+        wrapper was added in a separate ticket. Extracted into new
+        leaf module D2TG::OrDie (deliberately zero use-dependencies on
+        D2TG::Config/D2TG::Config::Paths/D2TG::Reply, avoiding the
+        circular-use trap: Config already uses Config::Paths, so
+        Config::Paths cannot use Config back) with a single
+        wantarray-aware or_die($coderef, @args) helper. All 4 wrappers
+        reduced to one-line forwarders - zero behavior change, no
+        caller-visible difference in exit code, STDERR text, or return
+        shape. Full test suite (201 files, 2206 tests) passes
+        unchanged, 100% coverage on all 4 touched/created modules. New
+        t/269-or-die-shared-helper.t exercises the helper standalone.
+
 2.13  2026-09-16
       - BUGFIX (TGT-268, found via a scheduled JOB-003 hourly bug
         hunt): TGT-264 fixed D2TG::Reply::Args::extract_bot_flag to

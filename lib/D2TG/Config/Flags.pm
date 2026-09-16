@@ -3,6 +3,7 @@ package D2TG::Config::Flags;
 use strict;
 use warnings;
 use D2TG::Config;
+use D2TG::OrDie;
 
 # TGT-267: shift_flag_value/extract_db_flag/extract_db_flag_or_die/
 # bot_groups were an organizational mismatch in D2TG::Config.pm - CLI
@@ -39,15 +40,12 @@ sub extract_db_flag {
     return ( $alias, @rest );
 }
 
+# TGT-269: this eval/print-STDERR/exit(1) wrapper was found duplicated
+# a further 3 times across other modules - now a one-line forwarder
+# onto the shared D2TG::OrDie::or_die helper.
 sub extract_db_flag_or_die {
     my (@args) = @_;
-
-    my @result = eval { extract_db_flag(@args) };
-    if ($@) {
-        print STDERR $@;
-        exit 1;
-    }
-    return @result;
+    return D2TG::OrDie::or_die( \&extract_db_flag, @args );
 }
 
 sub bot_groups {
