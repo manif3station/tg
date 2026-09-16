@@ -5197,3 +5197,18 @@ additional `eval`-guarded boolean check in an already-reviewed
 control-flow branch. No new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/eval-STRING
 patterns introduced.
+
+## TGT-271: Tira upgrade-gate review (5.139 -> 5.143) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.139 to 5.143 mid-session. Reviewed per the card's own
+instructions: ran `d2 tira.policy.undeclared` (empty result - no
+undeclared rules for this board to answer) and read all 4 changelog
+entries between 5.140 and 5.143 (TKT-885: a test-only uninitialized-
+value warning fix; TKT-905: a `--comment` option-reader ledger gap
+fix; TKT-1114: a race-condition fix for concurrent upgrade-gate card
+raising; TKT-1116: a 3.6x police-pass performance fix via path-cache
+seeding). All four are internal Tira correctness/performance fixes -
+none introduce a new event type, command, or board-visible concept
+this board's own 53 active + 10 declined policy set doesn't already
+cover. Conclusion: no policy change needed for this upgrade.
