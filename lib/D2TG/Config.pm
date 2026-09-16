@@ -543,7 +543,7 @@ position-aware extraction. C<cli/reply.pl> does I<not> use this
 function - it has its own leading-position-only
 extraction
 instead (see its own POD), for the same reason
-C<D2TG::Reply::parse_cli_args>'s C<--reply-to-message-id> is
+C<D2TG::Reply::Args::parse_cli_args>'s C<--reply-to-message-id> is
 trailing-only (TGT-042): reply text passed as free-form words could
 otherwise collide with the flag's own name. Returns C<($alias,
 @remaining_args)> - C<$alias> is C<undef> if the flag wasn't given.

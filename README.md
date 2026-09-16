@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.11).** DOC FIX (TGT-266, found via a
+scheduled JOB-005 doc-accuracy hunt): `lib/D2TG/Config.pm`'s
+`extract_db_flag` POD still linked to `D2TG::Reply::parse_cli_args`, a
+location that no longer existed after TGT-265 (this same session)
+moved it into `D2TG::Reply::Args`. Fixed the link; new structural
+regression test sweeps for this whole drift class, not just this one
+instance. Filed TGT-267 (backlog) for the unrelated finding that
+`D2TG::Config.pm` is still 939 lines, over the 500-line cap.
+
 **Status: early implementation (v2.10).** REFACTOR (TGT-265, found via
 TGT-264's own qa gate finding): `D2TG::Reply.pm` was 534 lines, over
 this board's 500-line cap. Extracted the CLI argv-parsing cluster

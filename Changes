@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+2.11  2026-09-16
+      - DOC FIX (TGT-266, found via a scheduled JOB-005 doc-accuracy
+        hunt): lib/D2TG/Config.pm's extract_db_flag POD still linked
+        to D2TG::Reply::parse_cli_args, a location that no longer
+        existed after TGT-265 (this same session) moved it into
+        D2TG::Reply::Args - TGT-265's own documentation gate updated
+        docs/commands.md and the moved-into/out-of modules' own POD,
+        but missed this one incoming cross-reference from a third
+        module. Fixed by updating the link to
+        D2TG::Reply::Args::parse_cli_args. New structural regression
+        test t/266-config-pod-no-stale-reply-cross-link.t sweeps every
+        live (non-doc) .pm/.pod/.pl file for this whole drift class
+        (both this session's module moves), not just this one
+        instance - confirmed genuinely red before the fix (exactly 1
+        of 166 assertions failed, at the expected line). Filed TGT-267
+        (backlog) for the pre-existing, unrelated finding that
+        D2TG::Config.pm is still 939 lines, over the 500-line cap,
+        after TGT-260's own narrower extraction.
+
 2.10  2026-09-16
       - REFACTOR (TGT-265, found via TGT-264's own qa gate finding):
         D2TG::Reply.pm was 534 lines (already 526 before TGT-264's own
