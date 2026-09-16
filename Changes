@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+2.05  2026-09-16
+      - REFACTOR (TGT-259, found via TGT-258's own module-decomposition
+        survey): D2TG::Poller.pm was the largest module in the project
+        at 1604 lines. Its 13-sub stdout-formatting cluster (~244
+        lines, no poll-loop state - pure functions of their inputs)
+        moved into a new lib/D2TG/Poller/Format.pm; D2TG::Poller keeps
+        thin forwarders for 11 of the 13 (every internal call site and
+        the one confirmed external caller, t/226). The other 2
+        (_stored_summary, _forward_origin_name) got no forwarder -
+        coverage proved their only caller was another sub in the same
+        cluster, now calling Format's own bare functions directly, so
+        a forwarder for either would be permanently-uncallable dead
+        code. Zero behavior change - full test suite (192 files, 1955
+        tests) passes unchanged, 100% coverage on both modules.
+        Poller.pm: 1604 -> 1410 lines. New t/259-poller-format-module.t
+        (27 assertions) proves the extracted module works standalone,
+        confirmed genuinely red before the extraction.
+
 2.04  2026-09-16
       - DOCS (TGT-262, found via a scheduled JOB-005 doc-accuracy hunt):
         TGT-257 extracted 11 retry-queue methods out of D2TG::Store.pm

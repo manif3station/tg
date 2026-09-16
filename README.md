@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.05).** REFACTOR (TGT-259, found via
+TGT-258's own decomposition survey): `D2TG::Poller.pm`'s 13-sub stdout-
+formatting cluster (~244 lines, no poll-loop state) moved into a new
+`D2TG::Poller::Format`, with 11 thin forwarders kept on Poller.pm. Zero
+behavior change - full suite still passes, 100% coverage on both
+modules. Poller.pm: 1604 -> 1410 lines.
+
 **Status: early implementation (v2.04).** DOCS (TGT-262, found via a
 scheduled JOB-005 doc-accuracy hunt): `D2TG::Store.pm`'s own POD never
 said its 11 retry-queue methods (TGT-257) now delegate to

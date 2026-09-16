@@ -5,6 +5,7 @@ use warnings;
 use POSIX qw(strftime);
 use D2TG::Config;
 use D2TG::Store;
+use D2TG::Poller::Format;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
@@ -744,225 +745,30 @@ sub skill_version_check_safe {
     return $version;
 }
 
-sub _display_name {
-    my ( $chat_id, $username ) = @_;
-
-    my $owner_chat_id = D2TG::Config::chat_id();
-    my $owner_name    = D2TG::Config::owner_name();
-
-    if (   defined $chat_id
-        && defined $owner_chat_id
-        && $chat_id eq $owner_chat_id
-        && defined $owner_name
-        && length $owner_name )
-    {
-        return $owner_name;
-    }
-
-    return $username // 'unknown';
-}
-
-sub _reply_context_suffix {
-    my ( $message, $store, $chat_id, $bot_token ) = @_;
-
-    my $original = $message->{reply_to_message};
-    return '' unless $original;
-
-    my $original_sender = _display_name( $chat_id, $original->{from}{username} );
-
-    # TGT-142: the replied-to message can itself be a forward - same
-    # gap, same fix, so a reply-context line never attributes a
-    # forwarded message to its forwarder either.
-    $original_sender = _format_forwarded_sender( $original_sender, $original->{forward_origin} );
-
-    my $original_message_id = $original->{message_id};
-    my $id_note = defined $original_message_id ? " [msg #$original_message_id]" : '';
-
-    my $what = _stored_summary( $store, $chat_id, $original_message_id, $bot_token );
-
-    unless ( defined $what ) {
-        my $original_text = $original->{text};
-        if ( defined $original_text && length $original_text ) {
-            my $safe = _sanitize_for_stdout($original_text);
-            $safe = substr( $safe, 0, 5000 ) . '...' if length $safe > 5000;
-            $what = $safe;
-        }
-        else {
-            $what = _media_kind($original) // 'message';
-        }
-    }
-
-    return qq{ (replying to $original_sender$id_note: $what)};
-}
-
-sub _stored_summary {
-    my ( $store, $chat_id, $message_id, $bot_token ) = @_;
-
-    return undef unless $store && defined $chat_id && defined $message_id;
-
-    my $stored = $store->get_message( $chat_id, $message_id, bot_key => $bot_token );
-
-    return $stored ? $stored->{summary} : undef;
-}
-
-sub _timestamp_prefix {
-    my ($message) = @_;
-
-    my $epoch = $message->{date} // time;
-
-    return '[' . strftime( '%Y-%m-%d %H:%M:%S', localtime($epoch) ) . ']';
-}
-
-sub _sanitize_for_stdout {
-    my ($text) = @_;
-
-    ( my $safe = $text ) =~ s/\r?\n/\\n/g;
-    $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
-
-    return $safe;
-}
-
-sub _bot_flag {
-    my ($bot_token) = @_;
-
-    # TGT-086: never print the real token here - both this helper's
-    # callers reach the target project's tira.policy.bridge as a
-    # monitor-output event (visible to anyone who can read that
-    # board), and the token is a real credential (whoever has it can
-    # send/receive as that bot). Masked the same way
-    # D2TG::Config::masked_token already masks the startup line
-    # (TGT-045). Extracted (TGT-226, found via a scheduled JOB-004
-    # improvement hunt) from _print_reply_template and the NEW TG
-    # MEDIA FAILED branch (TGT-220), which had duplicated this exact
-    # ternary verbatim.
-    return defined $bot_token
-      ? ' --bot ' . D2TG::Config::masked_token($bot_token)
-      : '';
-}
-
-sub _print_reply_template {
-    my ( $chat_id, $message_id, $bot_token ) = @_;
-
-    # TGT-227 (found via a scheduled JOB-003 hourly bug hunt): --bot
-    # must be printed BEFORE $chat_id, not after - cli/reply.pl's own
-    # flag-parsing loop (matching cli/approve.pl/cli/retry-download.pl's
-    # established convention) only recognizes --bot while it is the
-    # leading unconsumed argument; D2TG::Reply::parse_cli_args has no
-    # trailing-position handling for --bot at all (only for
-    # --reply-to-message-id). Printing it after chat_id/text (the old
-    # behavior) meant it was never parsed as a flag - it fell straight
-    # into the joined reply text and was sent to Telegram verbatim,
-    # while the actual send silently fell back to the wrong bot. Worse,
-    # substituting the real token in place (as this module's own docs
-    # instruct) leaked the real credential into the sent message text.
-    my $bot_flag   = _bot_flag($bot_token);
-    my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
-    print qq{REPLY WITH: d2 tg.reply$bot_flag $chat_id "..."$reply_flag\n};
-    return;
-}
-
-sub _print_attachment_template {
-    my ( $chat_id, $message_id ) = @_;
-
-    # TGT-133: never print the real local filesystem path here (or
-    # persist it into D2TG::Store's own summary text, which
-    # cli/history.pl/cli/unread.pl display verbatim) - the same
-    # never-expose-the-real-path convention this project's own Tira
-    # board already follows for tira.attachment.get. The watching
-    # agent fetches the raw bytes via this command instead.
-    print "GET ATTACHMENT WITH: d2 tg.attachment $chat_id $message_id\n";
-    return;
-}
-
-sub _reaction_key {
-    my ($reaction) = @_;
-
-    my $type = $reaction->{type} // '';
-    return "emoji:@{[ $reaction->{emoji} // '' ]}"               if $type eq 'emoji';
-    return "custom_emoji:@{[ $reaction->{custom_emoji_id} // '' ]}" if $type eq 'custom_emoji';
-    return 'paid'                                                 if $type eq 'paid';
-    return "unknown:$type";
-}
-
-sub _reaction_label {
-    my ($reaction) = @_;
-
-    my $type = $reaction->{type} // '';
-    return $reaction->{emoji}                if $type eq 'emoji' && defined $reaction->{emoji};
-    return 'a custom emoji'                  if $type eq 'custom_emoji';
-    return 'a paid reaction'                 if $type eq 'paid';
-    return 'an unrecognized reaction type';
-}
-
-sub _forward_origin_name {
-    my ($origin) = @_;
-
-    return undef unless $origin;
-
-    my $type = $origin->{type} // '';
-
-    if ( $type eq 'user' ) {
-        my $u = $origin->{sender_user} // {};
-
-        # TGT-142, Michael's own instruction: use the origin's NAME,
-        # never the numeric user id - username first (matching
-        # _display_name's own convention), first_name as fallback.
-        return $u->{username} // $u->{first_name} // 'unknown';
-    }
-    elsif ( $type eq 'hidden_user' ) {
-
-        # MessageOriginHiddenUser: the original sender's privacy
-        # settings withhold their real identity from bots entirely -
-        # Telegram supplies only a display name string, no id. Print
-        # exactly what Telegram gives, never claim more certainty than
-        # the API itself has.
-        return $origin->{sender_user_name} // 'unknown (privacy-restricted)';
-    }
-    elsif ( $type eq 'chat' ) {
-        my $c = $origin->{sender_chat} // {};
-        return $c->{title} // $c->{username} // 'a chat';
-    }
-    elsif ( $type eq 'channel' ) {
-        my $c = $origin->{chat} // {};
-        return $c->{title} // $c->{username} // 'a channel';
-    }
-
-    return undef;
-}
-
-# TGT-170: extracted after TGT-142 introduced this same four-line
-# formatting logic at two call sites (the main message branch and
-# _reply_context_suffix's replied-to-message handling; only the
-# variable name differed) - matches the established shift_flag_value
-# (TGT-072) / _classify_store_error (TGT-167) precedent for this shape
-# of duplication.
-sub _format_forwarded_sender {
-    my ( $sender, $forward_origin ) = @_;
-
-    my $origin_name = _forward_origin_name($forward_origin);
-    return $sender unless defined $origin_name;
-
-    return _sanitize_for_stdout($origin_name) . " (forwarded by $sender)";
-}
-
-sub _media_kind {
-    my ($message) = @_;
-
-    return 'photo'    if $message->{photo};
-    return 'document' if $message->{document};
-    return 'voice'    if $message->{voice};
-
-    # TGT-161 (found via a scheduled hourly bug hunt): a video message
-    # had neither $message->{text} nor a recognized media kind, so it
-    # failed run_once's own "next unless text or media_kind" guard and
-    # was silently dropped - not printed, not queued pending, not
-    # recorded, no stderr line. video_note/audio/animation/sticker are
-    # the same failure class but are deliberately out of scope here -
-    # see this ticket's own key_details for why.
-    return 'video' if $message->{video};
-
-    return undef;
-}
+# TGT-259: this 13-sub stdout-formatting cluster moved into
+# D2TG::Poller::Format (built as plain functions there, sharing no
+# poller state). 11 of the 13 keep a thin forwarder here so every
+# remaining caller (internal Poller.pm call sites, plus the one
+# confirmed external caller - t/226-bot-flag-helper-extracted.t calls
+# _bot_flag directly) keeps working unchanged. _stored_summary and
+# _forward_origin_name got none: their only caller was
+# _reply_context_suffix/_format_forwarded_sender respectively, both
+# themselves part of this cluster and now calling Format's own bare
+# functions directly - matching Tira's own 5.133 precedent ("the other
+# three helpers have no caller outside police_world itself and get
+# none"). See D2TG::Poller::Format's own POD for the full behavior
+# each one documents.
+sub _display_name             { return D2TG::Poller::Format::display_name(@_) }
+sub _reply_context_suffix     { return D2TG::Poller::Format::reply_context_suffix(@_) }
+sub _timestamp_prefix         { return D2TG::Poller::Format::timestamp_prefix(@_) }
+sub _sanitize_for_stdout      { return D2TG::Poller::Format::sanitize_for_stdout(@_) }
+sub _bot_flag                 { return D2TG::Poller::Format::bot_flag(@_) }
+sub _print_reply_template     { return D2TG::Poller::Format::print_reply_template(@_) }
+sub _print_attachment_template { return D2TG::Poller::Format::print_attachment_template(@_) }
+sub _reaction_key              { return D2TG::Poller::Format::reaction_key(@_) }
+sub _reaction_label            { return D2TG::Poller::Format::reaction_label(@_) }
+sub _format_forwarded_sender   { return D2TG::Poller::Format::format_forwarded_sender(@_) }
+sub _media_kind                { return D2TG::Poller::Format::media_kind(@_) }
 
 sub _run_non_fatal {
     my ( $coderef, $telegram, $file_id, $chat_id, $sender, $error_prefix ) = @_;
