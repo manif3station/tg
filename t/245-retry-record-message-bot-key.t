@@ -10,6 +10,7 @@ use lib "$Bin/../lib", "$Bin/lib";
 require D2TG::Store;
 require D2TG::Download;
 require D2TG::Transcribe;
+require D2TG::Transcribe::Retry;
 
 # TGT-245 (found via a scheduled JOB-003 hourly bug hunt): TGT-232
 # migrated the messages table to a (chat_id, message_id, bot_key)
@@ -101,7 +102,7 @@ package main;
     no warnings 'redefine', 'once';
     local *D2TG::Transcribe::transcribe = sub { return 'a recovered transcript' };
 
-    my ($ok) = D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+    my ($ok) = D2TG::Transcribe::Retry::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
     ok( $ok, 'retry_failed_transcription reports success' );
 
     my $under_bot_b   = $store->get_message( 999, 56, bot_key => 'bot-B-token' );

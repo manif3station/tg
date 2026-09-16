@@ -12,6 +12,7 @@ use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Download;
 use D2TG::Transcribe;
+use D2TG::Transcribe::Retry;
 use D2TG::Lock;
 
 # Autoflush STDOUT. Without this, STDOUT is fully block-buffered once
@@ -475,7 +476,7 @@ until ($shutting_down) {
         # call exactly, same per-pair/per-cycle scoping and non-fatal
         # eval-wrap.
         eval {
-            D2TG::Transcribe::auto_retry_failed_transcriptions(
+            D2TG::Transcribe::Retry::auto_retry_failed_transcriptions(
                 $pair->{telegram}, $store,
                 bot_key => $pair->{bot_key},
             );

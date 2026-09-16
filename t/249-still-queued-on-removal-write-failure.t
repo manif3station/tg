@@ -10,6 +10,7 @@ use lib "$Bin/../lib", "$Bin/lib";
 require D2TG::Store;
 require D2TG::Download;
 require D2TG::Transcribe;
+require D2TG::Transcribe::Retry;
 
 # TGT-249 (found via a scheduled JOB-003 hourly bug hunt): retry_failed_download
 # and retry_failed_transcription's own $still_queued 3rd return value
@@ -127,7 +128,7 @@ package main;
         open my $fh, '>', \$err or die $!;
         local *STDERR = $fh;
         ( $ok, $result, $still_queued ) =
-          D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
+          D2TG::Transcribe::Retry::retry_failed_transcription( $telegram, $store, $row, ua => $ua );
         close $fh;
     }
 

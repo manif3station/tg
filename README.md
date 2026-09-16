@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.08).** REFACTOR (TGT-263, found via
+TGT-261's own qa gate line-count check): `D2TG::Transcribe.pm` grew past
+this board's 500-line cap after TGT-261 moved the retry-orchestration
+pair into it. Extracted `retry_failed_transcription`/
+`auto_retry_failed_transcriptions` into new module
+`D2TG::Transcribe::Retry`, mirroring `D2TG::Store::RetryQueue`'s own
+precedent. Zero behavior change - full suite still passes, 100%
+coverage on both modules. Transcribe.pm: 716 -> 301 lines,
+Transcribe/Retry.pm: 78 lines. POD moved to separate `.pod` files for
+both (new board convention).
+
 **Status: early implementation (v2.07).** REFACTOR (TGT-261, found via
 TGT-258's own decomposition survey): moved retry_failed_transcription/
 auto_retry_failed_transcriptions from `D2TG::Download.pm` (an

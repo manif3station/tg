@@ -11,6 +11,7 @@ require D2TG::Store;
 require D2TG::Poller;
 require D2TG::Download;
 require D2TG::Transcribe;
+require D2TG::Transcribe::Retry;
 require Fake::Telegram;
 require Fake::Store;
 
@@ -20,7 +21,7 @@ require Fake::Store;
 # printed to STDERR (TRANSCRIBE ERROR) only and permanently lost, with
 # no retry path, unlike D2TG::Store::failed_downloads/
 # d2 tg.retry-download (TGT-104). New failed_transcriptions
-# table/methods and D2TG::Transcribe::retry_failed_transcription mirror
+# table/methods and D2TG::Transcribe::Retry::retry_failed_transcription mirror
 # that established pattern.
 
 sub capture_std {
@@ -162,7 +163,7 @@ sub capture_std {
     like( $err, qr/failed to queue for retry too: database is locked/, 'the queue-write failure is reported on stderr, not thrown' );
 }
 
-# D2TG::Transcribe::retry_failed_transcription: a successful retry
+# D2TG::Transcribe::Retry::retry_failed_transcription: a successful retry
 # restores the message into history AND removes the queue row.
 {
     my $dir = tempdir( CLEANUP => 1 );
@@ -179,7 +180,7 @@ sub capture_std {
     local *D2TG::Download::download_file = sub { return '/tmp/does-not-matter-tgt237.oga' };
     local *D2TG::Transcribe::transcribe  = sub { return 'recovered transcript' };
 
-    my ( $ok, $transcript ) = D2TG::Transcribe::retry_failed_transcription( 'fake-telegram', $store, $row );
+    my ( $ok, $transcript ) = D2TG::Transcribe::Retry::retry_failed_transcription( 'fake-telegram', $store, $row );
 
     ok( $ok, 'retry_failed_transcription reports success' );
     is( $transcript, 'recovered transcript', 'returns the newly transcribed text' );
@@ -204,7 +205,7 @@ sub capture_std {
 
     local *D2TG::Download::download_file = sub { die "still unreachable\n" };
 
-    my ( $ok, $error ) = D2TG::Transcribe::retry_failed_transcription( 'fake-telegram', $store, $row );
+    my ( $ok, $error ) = D2TG::Transcribe::Retry::retry_failed_transcription( 'fake-telegram', $store, $row );
 
     ok( !$ok, 'retry_failed_transcription reports failure' );
     like( $error, qr/still unreachable/, 'returns the underlying error' );
@@ -229,7 +230,7 @@ sub capture_std {
     local *D2TG::Download::download_file = sub { return '/tmp/does-not-matter-tgt237-b.oga' };
     local *D2TG::Transcribe::transcribe  = sub { die "whisper still crashed\n" };
 
-    my ( $ok, $error ) = D2TG::Transcribe::retry_failed_transcription( 'fake-telegram', $store, $row );
+    my ( $ok, $error ) = D2TG::Transcribe::Retry::retry_failed_transcription( 'fake-telegram', $store, $row );
 
     ok( !$ok, 'retry_failed_transcription reports failure when transcription itself fails after a successful download' );
     like( $error, qr/whisper still crashed/, 'returns the underlying transcription error' );
@@ -260,7 +261,7 @@ sub capture_std {
     my ( $out, $err ) = ( '', '' );
     open my $err_fh, '>', \$err or die $!;
     local *STDERR = $err_fh;
-    my ( $ok, $transcript ) = D2TG::Transcribe::retry_failed_transcription( 'fake-telegram', $store, $row );
+    my ( $ok, $transcript ) = D2TG::Transcribe::Retry::retry_failed_transcription( 'fake-telegram', $store, $row );
     close $err_fh;
 
     ok( $ok, 'retry_failed_transcription still reports success - the transcription itself succeeded' );

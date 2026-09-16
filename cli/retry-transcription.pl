@@ -12,6 +12,7 @@ use D2TG::Store;
 use D2TG::Telegram;
 use D2TG::Download;
 use D2TG::Transcribe;
+use D2TG::Transcribe::Retry;
 use D2TG::Reply;
 
 my ( $db_alias, @rest );
@@ -76,7 +77,7 @@ else {
 my $exit_code = 0;
 for my $row (@to_retry) {
     my ( $ok, $result_or_error, $still_queued ) =
-      D2TG::Transcribe::retry_failed_transcription( $telegram, $store, $row );
+      D2TG::Transcribe::Retry::retry_failed_transcription( $telegram, $store, $row );
 
     if ( !$ok ) {
         if ( D2TG::Config::is_expired_file_error($result_or_error) ) {

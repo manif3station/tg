@@ -1,0 +1,205 @@
+=head1 NAME
+
+D2TG::Transcribe - transcribe an audio file via a local Whisper install
+
+=head1 SYNOPSIS
+
+    my $text = D2TG::Transcribe::transcribe($audio_path);
+
+=head1 DESCRIPTION
+
+Shells out to a local C<whisper> CLI (no Perl binding exists) to
+transcribe C<$audio_path>, per Q-002's choice of local Whisper over a
+cloud transcription service. Per the blueprint, refuses any C<*.en>
+(English-only) model checkpoint - only multilingual models are used.
+
+=head1 FUNCTIONS
+
+=head2 select_model($duration_seconds)
+
+Returns a Whisper model name tiered by audio duration (TGT-100, a live
+user request): C<base> for a genuinely short, parsed duration in
+C<(0, 60]> (TGT-251, a live user request - Michael reported a 30-second
+clip taking "like forever"; C<medium> at the ~5.6x real-time throughput
+measured below means a clip that short still cost roughly 168 seconds of
+wall time under the old C<<=300s>> boundary), C<medium> up to 300 seconds
+otherwise, C<small> up to 900 seconds, C<base> beyond that - a
+I<starting-point guess> only. An unparsed or failed duration (C<undef>,
+non-numeric, or a failed probe - see L</transcribe>) is deliberately
+I<not> swept into the new short-clip tier merely because it coerces to
+0: an unknown duration keeps falling back to C<medium> exactly as
+before TGT-251, since an unknown duration is not the same claim as a
+confirmed-short one. Per-host Whisper throughput varies far more than
+audio duration alone predicts (measured on one host: C<medium> ran at
+~5.6x real time with no GPU, so a 102-second clip took 9m31s, well
+inside this function's own 300-second "stays on medium" boundary) - see
+L</transcribe>'s automatic retry-on-timeout for what actually guarantees
+a long/slow clip doesn't get lost.
+
+=head2 _scaled_timeout($duration_seconds)
+
+TGT-140 (external review finding, confirmed live by Michael): C<$TIMEOUT>
+alone stayed a flat 300 seconds even after L</select_model> started tiering
+the model by duration - a clip picked as the fastest/default tier could
+still legitimately run past 300s wall-clock at real per-host throughput
+(measured: C<medium> ran at ~5.6x real time, so a 102.48-second clip took
+571s). Returns a per-attempt timeout budget scaled from the same duration
+signal L</select_model> already computes: C<$duration * $TIMEOUT_MULTIPLIER>
+(package variable, default 8 - a safety margin above the worst measured
+throughput), floored at C<$TIMEOUT> itself (whatever it is currently set
+to - never a separate hard-coded constant, so a caller-configured
+C<$TIMEOUT> is always respected as the minimum, not silently
+overridden) and capped at C<$TIMEOUT_CEILING> (default 3600, so a
+bad/huge duration probe can never produce an effectively unbounded
+wait) - the effective ceiling actually used is
+C<max($TIMEOUT_CEILING, $TIMEOUT)>, so a caller-configured C<$TIMEOUT>
+larger than the default ceiling is never undercut by the cap either (a
+Codex QA-stage review finding: flooring at C<$TIMEOUT> then capping at a
+fixed ceiling could otherwise return less than C<$TIMEOUT> itself).
+
+=head2 _next_tier($model)
+
+Returns the next entry in C<@MODEL_TIERS> (C<medium>, C<small>,
+C<base>, in that order) after C<$model>, or C<undef> if C<$model> is
+already C<base> or not one of the three known tiers (e.g. an
+explicitly-passed custom model name) - the latter case deliberately
+gives L</transcribe> no fallback to step down to, since retry-on-timeout
+only ever applies to an automatically-selected model.
+
+=head2 _probe_duration($audio_path)
+
+Returns C<$audio_path>'s duration in seconds via C<ffprobe>, invoked
+through L<D2TG::Subprocess/fork_in_own_process_group> (never a shell
+string, so the path can never reach a shell) with its own C<stdout>
+capture support (TGT-179), the same process-group-killable subprocess
+launch C<_run> below uses for whisper. Waits under a
+C<waitpid(WNOHANG)> poll loop, checked every 0.2s, that kills on
+timeout once C<$PROBE_TIMEOUT> (10s default) has elapsed - the actual
+wait can run up to roughly that poll interval past the deadline
+(scheduler delay aside), not an exact cutoff, which is a fine
+trade-off for a probe this short-lived. Not a plain
+C<alarm()>-around-a-blocking-readline, which
+does NOT reliably interrupt a buffered pipe read (PerlIO retries on
+C<EINTR> without giving Perl a chance to run a deferred C<SIGALRM>
+handler mid-read), confirmed directly: an earlier attempt at exactly
+that approach still blocked for the hung command's full duration in
+testing. On timeout, kills the process group and the direct pid (same
+escalation C<_run> uses) and falls back to 0 seconds, exactly like a
+missing/corrupt-output probe already did before this fix - a hang no
+longer blocks the entire single-threaded poller indefinitely to get
+there. C<transcribe> calls this only when no explicit C<model> was
+given.
+
+=head2 transcribe($audio_path, model => $name, runner => \&coderef, duration_fn => \&coderef)
+
+Runs C<whisper> against C<$audio_path> with the given C<model> (default:
+L</select_model>'s answer for the audio's own duration, TGT-100 -
+previously always the fixed C<medium>), reads back its
+C<--output_format txt> transcript, and returns the trimmed text. Dies if
+C<model> ends in C<.en>, if C<whisper> exits non-zero, or if its expected
+output file is missing.
+
+When C<model> was I<not> explicitly passed, the same probed duration used
+to pick the model also scales the hard timeout C<_run> enforces for that
+attempt (TGT-140, via L</_scaled_timeout>, C<local>ized around the runner
+call) - a clip whose own tier's real throughput legitimately takes longer
+than the old flat 300s no longer gets killed purely for that. An
+explicitly-passed C<model> keeps the flat package C<$TIMEOUT> unchanged,
+matching the same explicit-means-explicit scope the retry-on-timeout
+fallback below already uses.
+
+If C<model> was I<not> explicitly passed and the run times out
+(C<_run>'s C<"...timed out..."> die), C<transcribe> automatically
+retries at L</_next_tier>'s next-faster model instead of dying
+immediately - TGT-100's follow-up, since a fixed duration-based guess
+alone can't account for how much per-host Whisper throughput varies
+(measured: C<medium> at ~5.6x real time on one host). Retrying continues
+until a model succeeds or C<base> itself times out, at which point the
+timeout error finally propagates. An explicitly-passed C<model> is never
+automatically retried - only the automatically-selected starting model
+gets this fallback.
+
+C<duration_fn> is an optional coderef taking the
+audio path and returning its duration in seconds; it defaults to
+L</_probe_duration> and exists so callers (tests) can inject a fake
+instead of invoking a real C<ffprobe>. The
+whisper-output temp directory is removed after every attempt (success,
+non-retryable failure, or before a retry) - it is not left for
+process-exit cleanup, since a long-running poller could otherwise
+accumulate one per transcription attempt for the life of the process.
+C<runner> is an optional coderef taking a command's argument list and
+returning its exit status; it defaults to C<_run> (TGT-031: a bounded,
+killable subprocess, no longer a plain C<system(@cmd)> call), and exists
+so callers (tests) can inject a fake runner instead of invoking a real
+subprocess.
+
+=head2 _run(@cmd)
+
+Runs C<@cmd> in a child forked via the package variable C<$FORKER>
+(defaults to a plain C<fork()> call; tests inject a fake here to
+exercise the fork-failure path, since a real C<fork()> is not something
+a test can reliably make fail on demand) - never via a shell, so no
+injection risk - polling C<waitpid> every 0.2s instead of blocking on
+it directly, so a
+pending signal in the caller (e.g. C<cli/poller.pl>'s C<SIGINT>/C<SIGTERM>
+handler) gets a chance to run promptly rather than being deferred until
+the child exits (TGT-031: this was the root cause of the poller
+appearing unresponsive to Ctrl+C while transcribing). If C<@cmd> has not
+exited by C<$TIMEOUT> seconds (package variable, default 300, settable
+per-call via C<local>), the whole process group is sent C<TERM>
+(TGT-128, same failure class as TGT-035/044/126/127: C<whisper>
+commonly shells out to C<ffmpeg>/C<ffprobe>-family tooling for audio
+decoding, and killing only the immediate pid left any such child
+running/orphaned), given one second to exit, then C<KILL>ed the same
+way if still alive - C<_run> then dies with a timeout-specific message
+rather than returning. On normal exit, returns the command's exit
+status as before.
+
+Both the child (C<setpgrp(0, 0)>) and the parent
+(C<eval { setpgrp($pid, $pid) }>) set the child's process group
+immediately after C<fork> - deliberately redundant, closing a race the
+sibling L<D2TG::TTS>C</_run> fix's own Codex review caught: without the
+parent's own call too, a timeout firing before the child's C<setpgrp>
+call would target a process group that does not exist yet, and C<kill>
+would silently do nothing. Both the group kill (C<-$pid>) and a direct
+kill on the known pid (C<$pid>) are sent on both the C<TERM> and C<KILL>
+steps - the direct kill is a fallback in case process-group targeting
+somehow misses the child. Accepted, documented limitation (matching the
+sibling fix): a grandchild that deliberately detaches into its own new
+process group/session would not be reached by this kill.
+
+Before C<exec>, the child reopens its own C<STDOUT>/C<STDERR> onto
+C<File::Spec-E<gt>devnull> (TGT-030: C<whisper>'s own console chatter -
+warnings, language-detection lines, per-segment transcript output - was
+otherwise inherited straight onto the poller's real stdout, polluting
+the watched C<NEW TG> stream). Only the child's descriptors are
+touched; the parent's own C<STDOUT>/C<STDERR> are never redirected.
+
+=head2 kill_current()
+
+Sends C<TERM> to the process currently running under C<_run>, if any
+(tracked in the package variable C<$CURRENT_PID>, correctly visible to a
+signal handler that fires during C<_run>'s poll loop since it is set via
+C<local>). A no-op when nothing is running. C<cli/poller.pl> calls this
+from its own shutdown signal handlers so an in-flight transcription is
+killed immediately instead of being waited out.
+
+TGT-131 (a consistency follow-up to TGT-128): signals the whole process
+group (C<-$CURRENT_PID>) as well as the direct pid, matching C<_run>'s
+own timeout-path process-group protection - without this, a clean
+poller shutdown could still leave a child C<whisper> itself spawned
+running, even though the same process's own timeout path already
+reached it.
+
+=head1 KNOWN LIMITATION
+
+There is a narrow window, a few instructions wide, between C<fork()>
+returning in C<_run> and C<$CURRENT_PID> actually being set - a signal
+arriving in that exact window sees the previous (unset) value and
+C<kill_current> becomes a no-op for that specific child. The child is
+still bounded by C<$TIMEOUT> regardless, so this cannot cause an
+indefinite hang; it can only delay a shutdown signal's effect on that
+one child by up to C<$TIMEOUT>, in the statistically negligible case a
+signal lands in that exact instant.
+
+=cut

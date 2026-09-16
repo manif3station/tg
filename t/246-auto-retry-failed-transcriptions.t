@@ -9,12 +9,13 @@ use lib "$Bin/../lib", "$Bin/lib";
 require D2TG::Store;
 require D2TG::Download;
 require D2TG::Transcribe;
+require D2TG::Transcribe::Retry;
 
 # TGT-246 (found via a scheduled JOB-003 hourly bug hunt): TGT-221 gave
 # failed_downloads automatic background retry (every 60s for up to 5
 # minutes, Q-015), but the structurally identical failed_transcriptions
 # queue (TGT-237) never got the same treatment - only a manual
-# d2 tg.retry-transcription existed. D2TG::Transcribe::auto_retry_failed_transcriptions
+# d2 tg.retry-transcription existed. D2TG::Transcribe::Retry::auto_retry_failed_transcriptions
 # closes that gap, reusing retry_failed_transcription exactly like
 # auto_retry_failed_downloads reuses retry_failed_download. This test
 # file mirrors t/221-auto-retry-failed-downloads.t's own shape, applied
@@ -56,7 +57,7 @@ package main;
     is( scalar @$list, 1, 'the row is still queued and visible even though auto-retry has given up on it' );
 }
 
-# D2TG::Transcribe::auto_retry_failed_transcriptions: a successful retry
+# D2TG::Transcribe::Retry::auto_retry_failed_transcriptions: a successful retry
 # removes the row, exactly like a manual retry_failed_transcription would.
 {
     my $dir = tempdir( CLEANUP => 1 );
@@ -72,7 +73,7 @@ package main;
     local *D2TG::Download::download_file = sub { return '/tmp/does-not-matter-tgt246-a.oga' };
     local *D2TG::Transcribe::transcribe  = sub { return 'recovered transcript' };
 
-    D2TG::Transcribe::auto_retry_failed_transcriptions( 'fake-telegram', $store );
+    D2TG::Transcribe::Retry::auto_retry_failed_transcriptions( 'fake-telegram', $store );
 
     is_deeply( $store->failed_transcriptions, [], 'a successfully auto-retried row is removed from the queue' );
     my $restored = $store->get_message( 999, 55 );
@@ -95,7 +96,7 @@ package main;
     no warnings 'once';
     local *D2TG::Download::download_file = sub { die "still unreachable\n" };
 
-    my $ok = eval { D2TG::Transcribe::auto_retry_failed_transcriptions( 'fake-telegram', $store ); 1 };
+    my $ok = eval { D2TG::Transcribe::Retry::auto_retry_failed_transcriptions( 'fake-telegram', $store ); 1 };
     ok( $ok, 'auto_retry_failed_transcriptions never dies, even when the underlying retry fails' );
 
     my ($row) = @{ $store->failed_transcriptions };

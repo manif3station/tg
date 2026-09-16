@@ -1197,7 +1197,7 @@ lists and acts on this.
 
 Removes one row from the C<failed_transcriptions> queue by its own
 C<id> (TGT-237) - a harmless no-op if that id doesn't exist. Called by
-C<D2TG::Transcribe::retry_failed_transcription> only after a retry
+C<D2TG::Transcribe::Retry::retry_failed_transcription> only after a retry
 actually succeeds; a failed retry leaves the row untouched.
 
 =head2 failed_transcriptions_due_for_retry(bot_key => $b)
