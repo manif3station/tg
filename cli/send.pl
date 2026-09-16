@@ -9,6 +9,7 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Telegram;
 use D2TG::Reply;
+use D2TG::Reply::Args;
 
 # TGT-103 (user-supplied feature-gap analysis, /tmp/missing.md item 1):
 # the old ~/skills/tg blueprint had two dedicated senders for pushing a
@@ -60,8 +61,8 @@ while (@ARGV) {
             # cli/approve.pl/cli/retry-download.pl's own existing
             # eval-wrap of this identical call. TGT-236 centralized the
             # eval-wrap idiom itself into
-            # D2TG::Reply::extract_bot_flag_or_die.
-            ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
+            # D2TG::Reply::Args::extract_bot_flag_or_die.
+            ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
         }
         else {
             shift @ARGV;

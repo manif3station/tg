@@ -29,19 +29,20 @@ require File::Spec->catfile( $Bin, 'lib', 'Test', 'CaptureStdio.pm' );
 Test::CaptureStdio->import(qw(run_capturing_stderr));
 
 require D2TG::Reply;
+require D2TG::Reply::Args;
 
 # TGT-236 (found via a scheduled JOB-004 improvement hunt): 7 cli/*.pl
 # scripts each repeated the identical eval-wrapped
-# D2TG::Reply::extract_bot_flag(@ARGV) block (eval-call, check $@,
+# D2TG::Reply::Args::extract_bot_flag(@ARGV) block (eval-call, check $@,
 # print STDERR + exit 1) instead of calling one shared helper - the
 # exact duplication class that already caused TGT-068/074/231.
-# D2TG::Reply::extract_bot_flag_or_die centralizes the eval+die part;
+# D2TG::Reply::Args::extract_bot_flag_or_die centralizes the eval+die part;
 # extract_bot_flag itself is unchanged.
 
 {
     # Happy path: a well-formed --bot <token> is parsed through exactly
     # like calling extract_bot_flag directly.
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag_or_die( '--bot', 'tok123', 'x', 'y' );
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag_or_die( '--bot', 'tok123', 'x', 'y' );
     is( $bot_token, 'tok123', 'extract_bot_flag_or_die returns the token when --bot is well-formed' );
     is_deeply( \@rest, [ 'x', 'y' ], 'extract_bot_flag_or_die returns the remaining args' );
 }
@@ -49,7 +50,7 @@ require D2TG::Reply;
 {
     # No --bot present at all: undef token, args untouched - matches
     # extract_bot_flag's own bare pass-through behavior exactly.
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag_or_die( 'x', 'y' );
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag_or_die( 'x', 'y' );
     ok( !defined $bot_token, 'extract_bot_flag_or_die returns undef when --bot is absent' );
     is_deeply( \@rest, [ 'x', 'y' ], 'extract_bot_flag_or_die leaves other args untouched when --bot is absent' );
 }
@@ -68,9 +69,9 @@ require D2TG::Reply;
     local *STDERR = $stderr_fh;
 
     my $direct_error;
-    { eval { D2TG::Reply::extract_bot_flag( '--bot', '-x' ) }; $direct_error = $@; }
+    { eval { D2TG::Reply::Args::extract_bot_flag( '--bot', '-x' ) }; $direct_error = $@; }
 
-    my $survived = eval { D2TG::Reply::extract_bot_flag_or_die( '--bot', '-x' ); 1 };
+    my $survived = eval { D2TG::Reply::Args::extract_bot_flag_or_die( '--bot', '-x' ); 1 };
     my $catch_error = $@;
     close $stderr_fh;
 

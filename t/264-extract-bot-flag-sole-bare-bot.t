@@ -5,6 +5,7 @@ use FindBin qw($Bin);
 use lib "$Bin/../lib";
 
 require D2TG::Reply;
+require D2TG::Reply::Args;
 
 # TGT-264 (found via a scheduled JOB-003 hourly bug hunt): TGT-074 made
 # extract_bot_flag die "--bot requires a value" for a trailing bare
@@ -17,13 +18,13 @@ require D2TG::Reply;
 # returned (undef, '--bot') rather than dying.
 
 {
-    eval { D2TG::Reply::extract_bot_flag('--bot') };
+    eval { D2TG::Reply::Args::extract_bot_flag('--bot') };
     like( $@, qr/--bot requires a value/, 'a sole bare --bot argument dies instead of silently returning it as a leftover positional arg' );
 }
 
 {
     # Existing behavior unaffected: well-formed --bot <token>, still the only two args.
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag( '--bot', 'xyz999' );
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag( '--bot', 'xyz999' );
     is( $bot_token, 'xyz999', 'a well-formed --bot <token> as the only two args is unaffected' );
     is_deeply( \@rest, [], 'no leftover args' );
 }

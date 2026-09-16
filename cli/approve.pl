@@ -10,14 +10,15 @@ use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Reply;
+use D2TG::Reply::Args;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
 # TGT-236 centralized the eval-wrap idiom itself into
-# D2TG::Reply::extract_bot_flag_or_die.
-my ( $bot_key, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
+# D2TG::Reply::Args::extract_bot_flag_or_die.
+my ( $bot_key, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 $bot_key = '' unless defined $bot_key;
 

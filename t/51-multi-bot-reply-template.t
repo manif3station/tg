@@ -6,6 +6,7 @@ use lib "$Bin/../lib", "$Bin/lib";
 
 require D2TG::Poller;
 require D2TG::Reply;
+require D2TG::Reply::Args;
 require D2TG::Telegram;
 require Fake::Telegram;
 require Fake::Store;
@@ -86,14 +87,14 @@ sub capture_stdout {
 # --- cli/reply's leading --bot flag is extracted ---
 {
     my @argv = ( '--bot', 'xyz999', '4567', 'hello there' );
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag(@argv);
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag(@argv);
     is( $bot_token, 'xyz999', '--bot value extracted' );
     is_deeply( \@rest, [ '4567', 'hello there' ], 'remaining args unchanged' );
 }
 
 {
     my @argv = ( '4567', 'hello there' );
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag(@argv);
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag(@argv);
     is( $bot_token, undef, 'no --bot given - undef, falls back to D2TG_TOKEN' );
     is_deeply( \@rest, [ '4567', 'hello there' ], 'args unchanged when --bot absent' );
 }

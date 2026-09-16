@@ -6,11 +6,12 @@ use lib "$Bin/../lib", "$Bin/lib";
 
 require D2TG::Poller;
 require D2TG::Reply;
+require D2TG::Reply::Args;
 
 # TGT-227 (found via a scheduled JOB-003 hourly bug hunt): the poller's
 # own REPLY WITH template printed --bot AFTER chat_id/text - a position
 # neither cli/reply.pl's own flag-parsing loop (leading-only) nor
-# D2TG::Reply::parse_cli_args (which only recognizes a trailing
+# D2TG::Reply::Args::parse_cli_args (which only recognizes a trailing
 # --reply-to-message-id, never --bot) ever consumes. A --bot flag in
 # that position fell straight into the joined reply text and was sent
 # to Telegram verbatim, while the actual send silently fell back to
@@ -57,10 +58,10 @@ sub capture_stdout {
     # functions this ticket's fix touches.
     my @argv = _split_like_shell($substituted);
 
-    my ( $bot_token, @rest ) = D2TG::Reply::extract_bot_flag(@argv);
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag(@argv);
     is( $bot_token, $real_token, 'the real bot token is correctly extracted as a flag, not swallowed into text' );
 
-    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@rest);
+    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args(@rest);
     is( $chat_id, 4567, 'chat_id parses correctly' );
     is( $reply_to_message_id, 42, 'reply_to_message_id parses correctly' );
     unlike( $text, qr/--bot/, 'no --bot flag material leaks into the reply text' );

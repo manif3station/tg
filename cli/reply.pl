@@ -10,6 +10,7 @@ use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Telegram;
 use D2TG::Reply;
+use D2TG::Reply::Args;
 use D2TG::Store;
 
 my $db_alias;
@@ -36,8 +37,8 @@ while (@ARGV) {
             # cli/approve.pl/cli/retry-download.pl's own existing
             # eval-wrap of this identical call. TGT-236 centralized the
             # eval-wrap idiom itself into
-            # D2TG::Reply::extract_bot_flag_or_die.
-            ( $bot_token, @ARGV ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
+            # D2TG::Reply::Args::extract_bot_flag_or_die.
+            ( $bot_token, @ARGV ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
         }
         else {
             # A bare trailing --bot with no value can't be consumed by
@@ -69,7 +70,7 @@ my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 D2TG::Config::require_existing_base_dir_or_die($base_dir);
 
-my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args(@ARGV);
+my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args(@ARGV);
 
 if ( !defined $chat_id
     || $chat_id !~ /^-?\d+$/

@@ -1,0 +1,108 @@
+=head1 NAME
+
+D2TG::Reply::Args - CLI argv-parsing helpers shared by cli/reply.pl and other cli/*.pl scripts
+
+=head1 SYNOPSIS
+
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag(@ARGV);
+    my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
+    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args(@ARGV);
+
+=head1 DESCRIPTION
+
+TGT-265: extracted out of L<D2TG::Reply> (which owned these three
+functions since TGT-057/TGT-042/TGT-236) into their own module - CLI
+argv-parsing is a distinct concern from L<D2TG::Reply>'s own
+send/voice/store-write concern, and L</extract_bot_flag_or_die> is
+already called by 8 C<cli/*.pl> scripts beyond C<reply.pl>, so it
+isn't really reply-specific logic either. Mirrors
+L<D2TG::Store::RetryQueue>/L<D2TG::Config::Paths>'s own precedent.
+
+=head1 FUNCTIONS
+
+=head2 extract_bot_flag(@args)
+
+Parses a leading C<--bot <token>> pair off the front of C<@args> (TGT-057),
+returning C<($bot_token, @remaining_args)>. C<$bot_token> is C<undef> when
+C<--bot> isn't the first argument - C<cli/reply.pl> falls back to C<D2TG::Config::token>
+(C<D2TG_TOKEN>) in that case, unchanged from before this ticket. Leading,
+not whole-list, for the same collision-avoidance reason as
+C<D2TG::Config::extract_db_flag> and C<--reply-to-message-id>'s
+trailing-only recognition (TGT-042): free reply text passed as multiple
+unquoted shell words could otherwise contain the literal token C<--bot>
+and be misread as the flag.
+
+When C<--bot> is the first argument, its value is validated via
+L<D2TG::Config/shift_flag_value> (TGT-074, same bug class as TGT-071's
+C<--db> fix): dies with C<--bot requires a value> if it's missing,
+empty, or itself flag-like, instead of silently returning another
+flag's own name as the bot token (e.g.
+C<extract_bot_flag('--bot','--db','myalias',...)> previously returned
+C<'--db'> as the token). This includes a sole bare C<--bot> with I<no>
+other argument at all (TGT-264, found via a scheduled JOB-003 hourly
+bug hunt) - the guard used to require at least 2 args before even
+checking, so C<extract_bot_flag('--bot')> silently fell through to
+returning C<(undef, '--bot')> instead of dying like every other
+malformed shape above; now C<--bot> alone is the same
+C<--bot requires a value> die as any other empty-value case, since
+L</shift_flag_value>'s own underlying call already dies correctly when
+shifted off an empty list.
+
+=head2 extract_bot_flag_or_die(@args)
+
+TGT-236: centralizes the eval-wrap-print-STDERR-exit-1 idiom that 8
+C<cli/*.pl> scripts (C<history>, C<attachment>, C<unread>,
+C<retry-download>, C<retry-transcription>, C<approve>, C<send>,
+C<reply>) each duplicated around L</extract_bot_flag> - the exact
+duplication class that already
+caused TGT-068/074/231. Calls L</extract_bot_flag> in an C<eval>; on
+failure, prints the error to STDERR and calls C<exit(1)> instead of
+propagating a raw exception. On success, returns exactly what
+C<extract_bot_flag> returns (C<$bot_token> may still be C<undef>) -
+this helper does not apply any default-to-C<''> or positional
+handling itself, since that differs legitimately between callers: a
+leading-position single call site (C<history.pl> and siblings) versus
+a caller embedded in a multi-flag dispatch loop (C<send.pl>/C<reply.pl>,
+which also pre-check C<@ARGV E<gt>= 2> and handle a bare trailing
+C<--bot> specially themselves). L</extract_bot_flag> itself is
+unchanged.
+
+=head2 parse_cli_args(@ARGV)
+
+Parses C<cli/reply.pl>'s raw argument list into C<($chat_id, $text,
+$reply_to_message_id)> (TGT-042). C<--reply-to-message-id <id>> is
+recognized I<only> in the trailing position - the last two elements of
+the argument list, matching exactly how the poller's own C<REPLY WITH>
+template (TGT-040) always appends it. This is deliberately narrower than
+scanning the whole argument list for that token: reply text passed as
+multiple unquoted shell words could otherwise legitimately contain the
+literal string C<--reply-to-message-id> (e.g. discussing the flag
+itself), which a whole-list scan would misinterpret as the flag and
+silently corrupt the text. C<$reply_to_message_id> is C<undef> when the
+flag isn't given (or isn't trailing) - unchanged from before this
+ticket. Does not validate that C<$chat_id> or C<$reply_to_message_id>
+are numeric; C<cli/reply.pl> does that itself before using the parsed
+result.
+
+Decodes every argument as UTF-8 before doing anything else (TGT-073, a
+real bug found by a scheduled hourly bug-hunt): C<@ARGV> is always raw
+bytes - Perl never decodes it as UTF-8 on its own - so non-ASCII reply
+text (accents, CJK, Cyrillic, emoji) previously reached
+L<D2TG::Telegram>'s C<encode_json> call as un-decoded bytes, which
+C<JSON::PP::encode_json> treats as Latin-1 codepoints and re-encodes as
+UTF-8, double-encoding every multi-byte character into mojibake (e.g.
+C<h\x{e9}llo> arrived on Telegram as C<hÃ©llo>). Decoding here, once,
+before C<$chat_id>/C<$reply_to_message_id> are even split off, fixes it
+at the single chokepoint every C<cli/reply.pl> invocation passes through -
+C<$chat_id>/C<$reply_to_message_id> are always plain ASCII digits, so
+decoding them as UTF-8 is a harmless no-op. Only C<cli/reply.pl> reaches
+this function via raw C<@ARGV>; no other C<cli/*> command's own
+argv (C<--since>/C<--until> ISO timestamps, chat/message ids) carries
+free-form user text through a similar chokepoint, so this is the only
+place that needed the fix. A caller that ever passed an
+I<already-decoded> wide-character Perl string here (rather than raw
+bytes, which is what real C<@ARGV> always is) could in principle see
+C<decode> mis-handle it - not a concern for the actual C<cli/reply.pl>
+invocation path today, since C<@ARGV> is never pre-decoded.
+
+=cut

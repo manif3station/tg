@@ -13,7 +13,7 @@ require D2TG::Config;
 # TGT-210 (found via a scheduled JOB-003 hourly bug hunt): cli/approve.pl's
 # own POD SYNOPSIS and printed Usage message documented --bot <token> in
 # a TRAILING position (after <chat_id>) - "d2 tg.approve <chat_id> [--db
-# <alias> | -d <alias>] [--bot <token>]" - but D2TG::Reply::extract_bot_flag
+# <alias> | -d <alias>] [--bot <token>]" - but D2TG::Reply::Args::extract_bot_flag
 # only ever recognizes --bot when it is the FIRST argument, the same
 # leading-position shape cli/reply.pl's own --bot uses (TGT-057). The
 # same file's own POD DESCRIPTION already correctly said so - only the

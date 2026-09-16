@@ -1,5 +1,30 @@
 Revision history for the tg skill
 
+2.10  2026-09-16
+      - REFACTOR (TGT-265, found via TGT-264's own qa gate finding):
+        D2TG::Reply.pm was 534 lines (already 526 before TGT-264's own
+        small fix), over this board's 500-line-per-module cap without
+        a prior decomposition ticket ever being filed. Surveyed the
+        module and found the CLI argv-parsing cluster
+        (extract_bot_flag, extract_bot_flag_or_die, parse_cli_args)
+        was a distinct concern from send_reply/resend_voice's own
+        network/store-write logic - extract_bot_flag_or_die is
+        already called by 8 cli/*.pl scripts beyond reply.pl, so it
+        wasn't really reply-specific logic either. Extracted into new
+        module D2TG::Reply::Args, mirroring D2TG::Store::RetryQueue/
+        D2TG::Config::Paths/D2TG::Transcribe::Retry's own precedent.
+        No forwarder kept - every real caller (8 cli/*.pl scripts, ~10
+        test files) updated to the new fully-qualified name directly.
+        Zero behavior change - full test suite (197 files, 1992
+        tests) passes unchanged, 100% coverage on both modules.
+        Reply.pm: 534 -> 260 lines, Reply/Args.pm: 57 lines - both
+        well under the cap. POD moved to separate .pod files for both,
+        per this board's new convention. The TGT-158-flagged
+        send_reply/resend_voice duplication was deliberately left
+        untouched, per a prior session's own risk judgement.
+        New t/265-reply-args-module.t proves the functions moved,
+        confirmed genuinely red before the move.
+
 2.09  2026-09-16
       - BUGFIX (TGT-264, found via a scheduled JOB-003 hourly bug
         hunt): D2TG::Reply::extract_bot_flag's guard required at

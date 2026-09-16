@@ -10,6 +10,7 @@ use D2TG::Config;
 use D2TG::Poller;
 use D2TG::Store;
 use D2TG::Reply;
+use D2TG::Reply::Args;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
@@ -19,8 +20,8 @@ my ( $db_alias, @rest );
 # D2TG::Store's messages table bot_key-aware, but this script had no
 # --bot flag at all - matching cli/retry-download.pl's own established
 # leading-position convention. TGT-236 centralized the eval-wrap idiom
-# itself into D2TG::Reply::extract_bot_flag_or_die.
-my ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
+# itself into D2TG::Reply::Args::extract_bot_flag_or_die.
+my ( $bot_token, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 

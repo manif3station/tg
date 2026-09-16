@@ -14,6 +14,7 @@ use D2TG::Download;
 use D2TG::Transcribe;
 use D2TG::Transcribe::Retry;
 use D2TG::Reply;
+use D2TG::Reply::Args;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::extract_db_flag_or_die(@ARGV);
@@ -22,7 +23,7 @@ my ( $db_alias, @rest );
 # TGT-237: matching cli/retry-download.pl's own established --bot flag
 # (Telegram's file_id values are bot-token-scoped, so a queued failure
 # recorded under a non-default bot must be retried as that same bot).
-my ( $bot_token, @after_bot ) = D2TG::Reply::extract_bot_flag_or_die(@ARGV);
+my ( $bot_token, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 

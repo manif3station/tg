@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.10).** REFACTOR (TGT-265, found via
+TGT-264's own qa gate finding): `D2TG::Reply.pm` was 534 lines, over
+this board's 500-line cap. Extracted the CLI argv-parsing cluster
+(`extract_bot_flag`, `extract_bot_flag_or_die`, `parse_cli_args`) into
+new module `D2TG::Reply::Args`, mirroring `D2TG::Transcribe::Retry`'s
+own precedent. Zero behavior change - full suite still passes, 100%
+coverage on both modules. Reply.pm: 534 -> 260 lines, Reply/Args.pm:
+57 lines.
+
 **Status: early implementation (v2.09).** BUGFIX (TGT-264, found via a
 scheduled JOB-003 hourly bug hunt): `D2TG::Reply::extract_bot_flag`'s
 guard required at least 2 args before checking for `--bot`, so a sole

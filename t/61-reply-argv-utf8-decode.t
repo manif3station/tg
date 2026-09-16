@@ -6,10 +6,11 @@ use lib "$Bin/../lib";
 use JSON::PP qw(encode_json);
 
 require D2TG::Reply;
+require D2TG::Reply::Args;
 require D2TG::Telegram;
 
 # TGT-073: cli/reply mojibakes non-ASCII reply text. @ARGV is always raw
-# bytes - Perl never decodes it as UTF-8 on its own. D2TG::Reply::parse_cli_args
+# bytes - Perl never decodes it as UTF-8 on its own. D2TG::Reply::Args::parse_cli_args
 # must decode its arguments as UTF-8 before composing $text, otherwise the
 # raw bytes reach JSON::PP::encode_json and get double-encoded (the
 # classic Perl Unicode footgun: an un-decoded byte string is treated as
@@ -21,7 +22,7 @@ require D2TG::Telegram;
     # NOT a Perl \x{...} literal, which would already carry the utf8 flag.
     my $raw_bytes = "h\xc3\xa9llo";
 
-    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args( '123456', $raw_bytes );
+    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args( '123456', $raw_bytes );
 
     is( $chat_id, '123456', 'chat_id is unaffected by the UTF-8 decoding' );
     is( ord( substr( $text, 1, 1 ) ), 0xe9, 'the byte-pair 0xc3 0xa9 decodes to a single U+00E9 codepoint, not two separate bytes' );
@@ -32,7 +33,7 @@ require D2TG::Telegram;
 
 {
     # Regression: plain ASCII text is completely unaffected.
-    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::parse_cli_args( '123456', 'hello', 'there' );
+    my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args( '123456', 'hello', 'there' );
     is( $text, 'hello there', 'plain ASCII text is unchanged by the UTF-8 decoding' );
 }
 

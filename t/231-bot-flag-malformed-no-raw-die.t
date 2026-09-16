@@ -8,7 +8,7 @@ require File::Spec->catfile( $Bin, 'lib', 'Test', 'CaptureStdio.pm' );
 Test::CaptureStdio->import(qw(run_capturing_stderr));
 
 # TGT-231 (found via a scheduled JOB-003 hourly bug hunt): cli/reply.pl
-# and cli/send.pl call D2TG::Reply::extract_bot_flag(@ARGV) directly
+# and cli/send.pl call D2TG::Reply::Args::extract_bot_flag(@ARGV) directly
 # inside their own --bot branch with no eval wrapper, unlike
 # cli/approve.pl/cli/retry-download.pl, which already eval-wrap the
 # identical call. extract_bot_flag delegates to

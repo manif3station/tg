@@ -5,7 +5,7 @@ use FindBin qw($Bin);
 use File::Spec;
 
 # TGT-240 (found via a scheduled JOB-005 doc-accuracy hunt): the POD
-# for D2TG::Reply::extract_bot_flag_or_die (and docs/commands.md's own
+# for D2TG::Reply::Args::extract_bot_flag_or_die (and docs/commands.md's own
 # copy of the same sentence) named "7 cli/*.pl scripts" and listed 7
 # names - stale since TGT-237 added cli/retry-transcription.pl as an
 # 8th real caller. Matching t/98-skills-md-cli-list-current.t's own
@@ -15,7 +15,11 @@ use File::Spec;
 
 my $lib_dir  = File::Spec->catdir( $Bin, '..', 'lib' );
 my $cli_dir  = File::Spec->catdir( $Bin, '..', 'cli' );
-my $pod_file = File::Spec->catfile( $lib_dir, 'D2TG', 'Reply.pm' );
+
+# TGT-265: this POD moved from D2TG/Reply.pm into D2TG/Reply/Args.pod
+# (extract_bot_flag_or_die's own new home) when the CLI argv-parsing
+# cluster was extracted out of D2TG::Reply.
+my $pod_file = File::Spec->catfile( $lib_dir, 'D2TG', 'Reply', 'Args.pod' );
 
 # The real, current set of cli/*.pl scripts that actually call
 # extract_bot_flag_or_die - the ground truth this POD must match.
