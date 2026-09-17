@@ -1,3 +1,5 @@
+=encoding UTF-8
+
 =head1 NAME
 
 D2TG::Reply::Args - CLI argv-parsing helpers shared by cli/reply.pl and other cli/*.pl scripts
@@ -13,7 +15,7 @@ D2TG::Reply::Args - CLI argv-parsing helpers shared by cli/reply.pl and other cl
 TGT-265: extracted out of L<D2TG::Reply> (which owned these three
 functions since TGT-057/TGT-042/TGT-236) into their own module - CLI
 argv-parsing is a distinct concern from L<D2TG::Reply>'s own
-send/voice/store-write concern, and L</extract_bot_flag_or_die> is
+send/voice/store-write concern, and L<extract_bot_flag_or_die()|/extract_bot_flag_or_die(@args)> is
 already called by 8 C<cli/*.pl> scripts beyond C<reply.pl>, so it
 isn't really reply-specific logic either. Mirrors
 L<D2TG::Store::RetryQueue>/L<D2TG::Config::Paths>'s own precedent.
@@ -45,7 +47,7 @@ checking, so C<extract_bot_flag('--bot')> silently fell through to
 returning C<(undef, '--bot')> instead of dying like every other
 malformed shape above; now C<--bot> alone is the same
 C<--bot requires a value> die as any other empty-value case, since
-L</shift_flag_value>'s own underlying call already dies correctly when
+L<D2TG::Config::Flags/shift_flag_value>'s own underlying call already dies correctly when
 shifted off an empty list.
 
 =head2 extract_bot_flag_or_die(@args)
@@ -53,13 +55,13 @@ shifted off an empty list.
 TGT-236: centralizes the idiom that 8
 C<cli/*.pl> scripts (C<history>, C<attachment>, C<unread>,
 C<retry-download>, C<retry-transcription>, C<approve>, C<send>,
-C<reply>) each duplicated around L</extract_bot_flag> - the exact
+C<reply>) each duplicated around L<extract_bot_flag()|/extract_bot_flag(@args)> - the exact
 duplication class that already
 caused TGT-068/074/231. A one-line forwarder onto the shared
 L<D2TG::OrDie/or_die> helper (TGT-269, found via a scheduled JOB-004
 improvement hunt: this same eval/print-STDERR/exit(1) wrapper shape
 was found duplicated a further 3 times across other modules) -
-C<or_die> calls L</extract_bot_flag> in an C<eval>; on failure, prints
+C<or_die> calls L<extract_bot_flag()|/extract_bot_flag(@args)> in an C<eval>; on failure, prints
 the error to STDERR and calls C<exit(1)> instead of propagating a raw
 exception. On success, returns exactly what C<extract_bot_flag>
 returns (C<$bot_token> may still be C<undef>) - this helper does not
@@ -71,8 +73,8 @@ call this function unconditionally whenever C<$ARGV[0] eq '--bot'>,
 matching every other caller - TGT-268, found via a scheduled JOB-003
 hourly bug hunt, removed a stale C<@ARGV E<gt>= 2> special-case both
 scripts used to pre-check, which had silently reintroduced the exact
-bare-C<--bot> bug TGT-264 already fixed inside L</extract_bot_flag>
-itself). L</extract_bot_flag> itself is unchanged.
+bare-C<--bot> bug TGT-264 already fixed inside L<extract_bot_flag()|/extract_bot_flag(@args)>
+itself). L<extract_bot_flag()|/extract_bot_flag(@args)> itself is unchanged.
 
 =head2 parse_cli_args(@ARGV)
 

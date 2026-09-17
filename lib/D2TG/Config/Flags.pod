@@ -34,7 +34,7 @@ those chat types) passed to C<--chat_id>, which would have been a real
 regression despite passing every then-existing test (none exercised a
 negative chat id). C<-100...> and similar numeric-negative values pass
 through fine; only a dash immediately followed by a letter is rejected.
-Used by L</extract_db_flag>, L</bot_groups>'s C<--chat_id> handling,
+Used by L<extract_db_flag()|/extract_db_flag(@ARGV)>, L<bot_groups()|/bot_groups(argv =E<gt> \@argv, env_chat_id =E<gt> $id, env_token =E<gt> $token)>'s C<--chat_id> handling,
 C<cli/reply.pl>'s own C<--db> extraction, and C<cli/history.pl>'s
 C<--since>/C<--until> handling - one implementation instead of four,
 so a fifth call site (or a fifth future flag) gets this guard for free
@@ -45,7 +45,7 @@ instead of needing its own copy.
 Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
 (TGT-051), recognized anywhere in the list. Since TGT-177, every
 C<cli/*.pl> script that uses this whole-list scan (10 total) goes
-through L</extract_db_flag_or_die> rather than calling this function
+through L<extract_db_flag_or_die()|/extract_db_flag_or_die(@ARGV)> rather than calling this function
 directly - see that function's own POD below for the full list. Most
 of those take no free-form text arguments that could collide with this
 flag's own name, so a whole-list scan is unambiguously safe for them;
@@ -71,7 +71,7 @@ another real flag (e.g. C<cli/history.pl --db --since 2026-01-01>, C<cli/reply.p
 silently swallow that flag's own name as the alias and fail later with a
 misleading C<Unknown --db/-d alias '--since'>-style message instead of
 naming the real problem. Since TGT-177, every CLI caller except C<cli/reply.pl> goes through
-L</extract_db_flag_or_die> instead of wrapping this call in its own
+L<extract_db_flag_or_die()|/extract_db_flag_or_die(@ARGV)> instead of wrapping this call in its own
 C<eval { ... }> - see that function's own POD below. C<cli/reply.pl>'s
 separate leading-position-only C<--db> extraction (see above) has the
 identical validation added directly in its own loop, since it doesn't
@@ -79,13 +79,13 @@ call this function. A consequence (flagged in TGT-071's Codex review):
 a Developer Dashboard path alias can no longer itself begin with C<->
 - not a real-world constraint, since C<d2 paths> aliases are plain
 names, not flag-like strings. The validation itself is now delegated to
-L</shift_flag_value> (TGT-072), which also backs L</bot_groups>'s
+L<shift_flag_value()|/shift_flag_value($args_arrayref, $flag_label)> (TGT-072), which also backs L<bot_groups()|/bot_groups(argv =E<gt> \@argv, env_chat_id =E<gt> $id, env_token =E<gt> $token)>'s
 C<--chat_id> handling and C<cli/history.pl>'s C<--since>/C<--until>
 handling - one implementation instead of four.
 
 =head2 extract_db_flag_or_die(@ARGV)
 
-TGT-177 (found via a scheduled improvement hunt): wraps L</extract_db_flag>
+TGT-177 (found via a scheduled improvement hunt): wraps L<extract_db_flag()|/extract_db_flag(@ARGV)>
 - the same idiom 10 C<cli/*.pl> scripts (C<approve>/C<attachment>/C<history>/
 C<poller>/C<retry-download>/C<send>/C<status>/C<text-only-replies>/
 C<unread>/C<whoami>) had each independently duplicated - matching
@@ -99,7 +99,7 @@ other modules). Pure refactor: same exit code, same STDERR text
 C<($alias, @remaining_args)> - no caller's own observable behavior
 changes. C<cli/reply.pl> is not among the
 callers, since it uses its own separate leading-position-only C<--db>
-extraction (see L</extract_db_flag>'s own POD above) rather than this
+extraction (see L<extract_db_flag()|/extract_db_flag(@ARGV)>'s own POD above) rather than this
 function.
 
 =head2 bot_groups(argv => \@argv, env_chat_id => $id, env_token => $token)
@@ -142,7 +142,7 @@ fixes) if C<--bot>'s own shifted value is missing or itself flag-like -
 a bare trailing C<--bot>, or C<--bot> immediately followed by another
 flag, would otherwise silently push C<undef> (or that flag's own name)
 into the group's C<bots> list instead of erroring. Delegated to
-L</shift_flag_value>, same as C<--chat_id>'s own validation above.
+L<shift_flag_value()|/shift_flag_value($args_arrayref, $flag_label)>, same as C<--chat_id>'s own validation above.
 
 Dies (TGT-069, a real live-reproduced incident: a bare trailing
 C<--chat_id> reached D2TG::Store's SQL bind as an opaque
@@ -155,7 +155,7 @@ C<--bot $token> pair to C<argv> I<before> parsing, so a bare trailing
 C<--chat_id> in the caller's own args is never actually the last element
 of the combined stream - a naive "is anything left" check would let
 C<--bot> itself be consumed as the chat_id value instead of failing.
-This validation is now delegated to L</shift_flag_value> (TGT-072),
+This validation is now delegated to L<shift_flag_value()|/shift_flag_value($args_arrayref, $flag_label)> (TGT-072),
 which checks generically for any flag-like value (starts with C<->)
 rather than only the two specific sibling flag names.
 

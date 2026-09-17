@@ -167,19 +167,20 @@ in this exact case - or when an alias I<is> given but isn't a
 recognized path (unchanged since TGT-051). There is no longer any input
 that returns C<undef> - each affected command turns either die into a
 clean refusal (STDERR message, exit 1) before any state is ever
-touched, via the shared L</resolve_alias_dir_or_die> wrapper (TGT-172,
+touched, via the shared L<resolve_alias_dir_or_die()|/resolve_alias_dir_or_die(alias =E<gt> $alias, paths =E<gt> \%paths)> wrapper (TGT-172,
 11 of the 13 C<cli/*.pl> scripts) rather than each repeating that
 C<eval { ... }> pattern inline.
 
 Note that C<resolve_alias_dir> itself never checks whether the
-directory it returns actually exists - see L</require_existing_base_dir>
+directory it returns actually exists - see
+L<require_existing_base_dir()|/require_existing_base_dir($base_dir)>
 below, which every C<cli/*> script calls immediately afterward to close
 that gap (TGT-090).
 
 =head2 resolve_alias_dir_or_die(alias => $alias, paths => \%paths)
 
 TGT-172 (found via a scheduled improvement hunt): a thin wrapper around
-L</resolve_alias_dir> that catches its die, prints the message to
+L<resolve_alias_dir()|/resolve_alias_dir(alias =E<gt> $alias, paths =E<gt> \%paths)> that catches its die, prints the message to
 STDERR, and exits 1 - the exact eval/print-STDERR/exit(1) pattern 11 of
 the 13 C<cli/*.pl> scripts had each independently duplicated after
 calling C<resolve_alias_dir> directly. Returns the resolved base_dir on
@@ -191,7 +192,8 @@ extraction - no behavior change at any of the 11 call sites.
 Dies with a clear message naming C<$base_dir> if it is not already a
 real, existing directory; otherwise returns C<$base_dir> unchanged
 (TGT-090, a live user request + live reproduction). Every C<cli/*>
-script calls this immediately after L</resolve_alias_dir> returns, so a
+script calls this immediately after
+L<resolve_alias_dir()|/resolve_alias_dir(alias =E<gt> $alias, paths =E<gt> \%paths)> returns, so a
 resolved base directory - whether a C<--db>/C<-d>/C<D2TG_DB> alias's
 real path or a C<TIRA_HOME> fallback - is always confirmed to already
 exist before anything is written under it. Before this existed,
@@ -209,11 +211,11 @@ pre-exist.
 =head2 require_existing_base_dir_or_die($base_dir)
 
 TGT-230 (found via a scheduled JOB-004 improvement hunt): a thin
-wrapper around L</require_existing_base_dir> that catches its die,
+wrapper around L<require_existing_base_dir()|/require_existing_base_dir($base_dir)> that catches its die,
 prints the message to STDERR, and exits 1 - the exact eval/print-
 STDERR/exit(1) pattern all 11 C<cli/*.pl> scripts that call
 C<require_existing_base_dir> had each independently duplicated,
-matching L</resolve_alias_dir_or_die>'s own established shape for the
+matching L<resolve_alias_dir_or_die()|/resolve_alias_dir_or_die(alias =E<gt> $alias, paths =E<gt> \%paths)>'s own established shape for the
 same problem. Returns C<$base_dir> on success, same as
 C<require_existing_base_dir>; never returns on failure. A pure
 extraction - no behavior change at any of the 11 call sites.
@@ -231,7 +233,7 @@ running, so it can restart itself.
 
 Returns the first bullet line of the given C<$version>'s own entry in
 this skill's installed C<Changes> file (resolving the skill root the
-same way L</skill_version> does), or C<undef> if C<Changes> can't be
+same way L<skill_version()|/skill_version(default_root =E<gt> $path)> does), or C<undef> if C<Changes> can't be
 read at all or has no entry for that version (TGT-112, user-supplied
 live-experienced feedback: the version-bump restart notice named the
 old/new version numbers but not what actually changed). A multi-line
@@ -262,7 +264,7 @@ this only covers a readable file with no matching entry.
 Returns C<catfile($bin_dir, $basename)> if that file exists on disk,
 otherwise returns C<$fallback> unchanged (TGT-094, a live production
 incident). C<cli/poller.pl>'s version-change restart (see
-L</skill_version>) uses this instead of blindly C<exec()>ing the literal
+L<skill_version()|/skill_version(default_root =E<gt> $path)>) uses this instead of blindly C<exec()>ing the literal
 C<$0> path captured at process launch: C<$0> is fixed once at startup, so
 if an install renames the running poller's own entrypoint file while it
 is still up (as TGT-093 did for real, killing a live poller with C<Can't
@@ -275,12 +277,12 @@ falling back to C<$0> only if that lookup itself fails.
 
 =head2 heartbeat_path(default_root => $path, base_dir => $path)
 
-Mirrors L</lock_path>'s own resolution exactly (TGT-116): given a
+Mirrors L<lock_path()|/lock_path(default_root =E<gt> $path, base_dir =E<gt> $path)>'s own resolution exactly (TGT-116): given a
 resolved C<base_dir>, returns C<base_dir/.tira/telegram.heartbeat>;
 given no C<base_dir> at all, falls back to
 C<default_root/state/poller.heartbeat> (or C<$ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}>
 in place of C<default_root> when set), the same two-branch shape
-L</lock_path> itself uses for C<telegram.pid>/C<poller.pid>.
+L<lock_path()|/lock_path(default_root =E<gt> $path, base_dir =E<gt> $path)> itself uses for C<telegram.pid>/C<poller.pid>.
 
 =head2 write_heartbeat($path, renamer => \&coderef)
 
@@ -288,7 +290,7 @@ Writes the current epoch time to C<$path>, atomically: writes to a temp
 file (C<$path.tmp.$$>) in the same directory, then C<rename>s it over
 C<$path>. A Codex review caught that the original implementation opened
 C<$path> directly with C<< '>' >>, truncating it before the new
-timestamp was written - a concurrent L</heartbeat_age> read (from C<d2
+timestamp was written - a concurrent L<heartbeat_age()|/heartbeat_age($path)> read (from C<d2
 tg.status>) or a crash between truncate and write could see an empty
 file (misread as C<never>) or permanently lose the last valid
 timestamp. C<rename> on the same filesystem is atomic, so a reader never
@@ -314,7 +316,7 @@ unwritable filesystem.
 =head2 heartbeat_age($path)
 
 Returns the number of seconds since C<$path> was last written via
-L</write_heartbeat>, or C<undef> if the file doesn't exist or doesn't
+L<write_heartbeat()|/write_heartbeat($path, renamer =E<gt> \&coderef)>, or C<undef> if the file doesn't exist or doesn't
 contain a bare integer timestamp. C<cli/status.pl> flags this stale
 past a threshold derived from L<D2TG::Transcribe>'s own
 C<$TIMEOUT_CEILING> and C<@MODEL_TIERS> constants (multiplied together,

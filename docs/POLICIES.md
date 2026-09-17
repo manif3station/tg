@@ -5213,6 +5213,54 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-277: podchecker cleanup across 6 .pod files
+
+Filed via TGT-276's own podchecker sweep (which itself surfaced while
+fixing a documentation bug in `Poller.pod`/`Safe.pod`): a full `find
+lib -name *.pod | xargs podchecker` run found 48 unresolved
+internal-link errors across `Config.pod` (12), `Config/Flags.pod`
+(10), `Reply/Args.pod` (7), `Transcribe.pod` (9), `Transcribe/Retry.pod`
+(5), and `Poller/Safe.pod` (5, introduced by TGT-275 and not yet
+committed at ticket-filing time) - plus a UTF-8 encoding warning in
+`Reply/Args.pod` (a literal "héllo" mojibake example used to illustrate
+a real bug, with no `=encoding UTF-8` directive declared).
+
+Root cause, identical in every case: an `L</name>` link targets a bare
+function name, but the matching `=head2` anchor includes the function's
+full signature (e.g. `=head2 extract_bot_flag(@args)` vs
+`L</extract_bot_flag>`) - `Pod::Checker` requires an exact string match
+between a link and its anchor, so every one of these links has been
+silently broken since the day each `=head2` signature was written.
+None of this is visible to a normal `perldoc` read (the prose still
+reads fine) - it only breaks the actual hyperlink/cross-reference
+behavior a POD viewer would otherwise offer.
+
+Fixed by widening each link to `L<name()|/full anchor text>` (the
+`|` alternate-text form lets the visible link text stay short while
+the target matches the anchor exactly) - the same pattern already
+established fixing this bug class in `Poller.pod`/`Safe.pod`/
+`Dispatch.pod` during TGT-273/275/276. A few anchors contain literal
+`=>` in their signature (e.g. `bot_groups(argv => \@argv, ...)`) -
+POD's `L<>` markup cannot contain an unescaped `>` character, so those
+required `E<gt>` escaping (`argv =E<gt> \@argv`) rather than a literal
+`=>`.
+
+New `t/277-podchecker-clean.t` runs `Pod::Checker`'s own Perl API
+(not the `podchecker` binary, so it behaves identically in and out of
+Docker) against every `lib/**/*.pod` file found via `File::Find`,
+asserting zero errors on each - confirmed genuinely red pre-fix (5
+files failing, matching the sweep exactly). This is a permanent
+regression guard: any future module extraction that moves POD without
+updating its own internal cross-references will now fail the suite
+instead of silently shipping a broken link. Full Docker suite (207
+files, 2288 tests) passes unchanged - a pure documentation fix, zero
+code touched.
+
+perlsec.pl-style vulnerability-scan audit: a pure documentation-content
+fix (POD cross-reference syntax) plus one new test file reading
+already-trusted repo source files via `File::Find`/`Pod::Checker` - no
+external input, no new shell/file/SQL surface.
+
 ## TGT-276: D2TG::Poller::run_once decomposition, and a documentation bug found along the way
 
 Filed via TGT-275's own REQ-029 audit: `lib/D2TG/Poller.pm` was still

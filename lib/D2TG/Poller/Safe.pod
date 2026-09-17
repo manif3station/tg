@@ -46,7 +46,7 @@ that each independently constructed C<D2TG::Store-E<gt>new> unwrapped,
 sharing the identical raw-crash/db-path-leak risk. Takes C<skill_root>,
 C<base_dir>, C<admin_chat_id> (whatever shape the caller passes
 through); on a storage-open failure, classifies the error via
-L</classify_store_error> and prints the same scrubbed C<Failed to open
+L<classify_store_error()|/classify_store_error($error)> and prints the same scrubbed C<Failed to open
 local storage (REASON) - refusing to start.> refusal, then exits 1 -
 never returns in that case. Returns the open store on success.
 C<cli/poller.pl>'s own inline version is deliberately left untouched -
@@ -71,7 +71,8 @@ from the same place.
 TGT-132: wraps C<$store-E<gt>record_message(@args)> in C<eval>, matching
 L<D2TG::Store/record_failed_download>'s own established pattern - a
 store write failure is logged non-fatally to STDERR rather than
-propagating out of C<run_once> (which would make L</run_once_safe>
+propagating out of C<run_once> (which would make
+L<run_once_safe()|/run_once_safe($telegram, $offset, $store, sleep =E<gt> \&coderef, %run_once_opts)>
 return the offset unchanged, redelivering and reprinting the entire
 batch next cycle). TGT-178: returns a true/false success flag so
 C<run_once> can cap its returned offset at the first update whose
@@ -81,7 +82,7 @@ history.
 =head2 record_message_and_track_offset($store, $offset_cap_ref, $update_id, @record_message_safe_args)
 
 TGT-181 (found via a scheduled improvement hunt): the 2-line "call
-L</record_message_safe>, cap C<$offset_cap> on failure" pattern
+L<record_message_safe()|/record_message_safe($store, @args)>, cap C<$offset_cap> on failure" pattern
 appeared identically at all 5 call sites inside C<run_once> - extracted
 here. C<$offset_cap_ref> is a scalar ref (not a plain return value)
 because C<run_once>'s own C<$offset_cap> must persist and combine
@@ -93,7 +94,7 @@ failure across up to 5 separate call sites wins.
 TGT-198 (found via a scheduled JOB-004 improvement hunt): the promoted,
 public version of L<D2TG::Reply>'s own private C<_store_write_safe>
 (TGT-192) - runs C<$coderef-E<gt>()> in C<eval>, classifies any failure
-via L</classify_store_error>, and prints C<STORE ERROR [chat_id]: DESC
+via L<classify_store_error()|/classify_store_error($error)>, and prints C<STORE ERROR [chat_id]: DESC
 failed - REASON> non-fatally. Returns a C<($ok, $value)> two-element
 list: C<$ok> is false only when C<$coderef> died; C<$value> is
 C<$coderef>'s own return value on success, or C<undef> on failure -
@@ -108,7 +109,9 @@ writes).
 TGT-166 (found via a scheduled hourly bug-hunt): C<cli/poller.pl>'s
 persistent main loop calls this instead of
 C<$store-E<gt>set_offset(...)> directly - unlike C<run_once>'s own
-calls (inside L</run_once_safe>'s protection), this one sits at the top
+calls (inside
+L<run_once_safe()|/run_once_safe($telegram, $offset, $store, sleep =E<gt> \&coderef, %run_once_opts)>'s
+protection), this one sits at the top
 level of the persistent script's main loop, so an unwrapped locked/busy
 database used to crash the ENTIRE poller process, not just one poll
 cycle's batch. Returns a true/false success flag (TGT-191, a live

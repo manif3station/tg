@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.20).** DOC FIX (TGT-277, found via
+a podchecker sweep during TGT-276's own documentation work): 6
+`lib/**/*.pod` files had 48 unresolved internal `L<name>` links (a
+link targeted a bare function name while its `=head2` anchor included
+the full signature) plus a UTF-8 encoding warning in `Reply/Args.pod`.
+Fixed all of them; new `t/277-podchecker-clean.t` runs `Pod::Checker`
+against every `.pod` file so this drift class is caught automatically
+going forward. No code changed.
+
 **Status: early implementation (v2.19).** MAINTENANCE (TGT-276, found
 via TGT-275's own REQ-029 audit): `lib/D2TG/Poller.pm` was still 598
 lines, entirely due to `run_once` itself (~520 lines dispatching 3

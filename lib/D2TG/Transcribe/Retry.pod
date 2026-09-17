@@ -66,18 +66,18 @@ L<D2TG::Download/auto_retry_failed_downloads> exactly, applied to
 C<failed_transcriptions> instead - closes the same class of gap TGT-221
 already closed for C<failed_downloads> (Q-015 answered by Michael:
 retry every 60s for up to 5 minutes total, independent of poll cadence),
-which L</retry_failed_transcription> (TGT-237) never got despite being
+which L<retry_failed_transcription()|/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)> (TGT-237) never got despite being
 explicitly built as C<failed_downloads>' own structural sibling - before
 this, a transient transcription failure sat queued until a human/agent
 ran C<d2 tg.retry-transcription> by hand, with no automatic recovery at
 all. Selects rows via L<D2TG::Store/failed_transcriptions_due_for_retry>
-and reuses L</retry_failed_transcription> itself for the actual retry
+and reuses L<retry_failed_transcription()|/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)> itself for the actual retry
 attempt (no duplicated retry logic).
 
-Deliberately does NOT branch on L</retry_failed_transcription>'s own
+Deliberately does NOT branch on L<retry_failed_transcription()|/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)>'s own
 C<($ok, $result)> return value to decide whether to stamp
 C<last_retry_at> - unlike L<D2TG::Download/retry_failed_download>,
-L</retry_failed_transcription> always returns C<(1, $transcript)> once
+L<retry_failed_transcription()|/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)> always returns C<(1, $transcript)> once
 download and transcription both succeed, I<even when> the bookkeeping
 C<record_message> write that follows then fails and the row is
 deliberately left queued (its own C<STORE ERROR ... queue row not
@@ -90,7 +90,7 @@ C<AUTO_RETRY_INTERVAL_SECONDS>. Instead, this checks
 L<D2TG::Store/failed_transcriptions> directly after the attempt for
 whether the row still exists - unambiguous regardless of which step
 failed (download, transcription, or C<record_message>), and requires no
-change to L</retry_failed_transcription>'s own existing return contract.
+change to L<retry_failed_transcription()|/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)>'s own existing return contract.
 
 Intended to be called once per C<(chat_id group, bot)> pair per poll
 cycle from C<cli/poller.pl>'s main loop, scoped to that pair's own

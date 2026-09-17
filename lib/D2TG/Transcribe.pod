@@ -25,7 +25,7 @@ measured below means a clip that short still cost roughly 168 seconds of
 wall time under the old C<<=300s>> boundary), C<medium> up to 300 seconds
 otherwise, C<small> up to 900 seconds, C<base> beyond that - a
 I<starting-point guess> only. An unparsed or failed duration (C<undef>,
-non-numeric, or a failed probe - see L</transcribe>) is deliberately
+non-numeric, or a failed probe - see L<transcribe()|/transcribe($audio_path, model =E<gt> $name, runner =E<gt> \&coderef, duration_fn =E<gt> \&coderef)>) is deliberately
 I<not> swept into the new short-clip tier merely because it coerces to
 0: an unknown duration keeps falling back to C<medium> exactly as
 before TGT-251, since an unknown duration is not the same claim as a
@@ -33,18 +33,18 @@ confirmed-short one. Per-host Whisper throughput varies far more than
 audio duration alone predicts (measured on one host: C<medium> ran at
 ~5.6x real time with no GPU, so a 102-second clip took 9m31s, well
 inside this function's own 300-second "stays on medium" boundary) - see
-L</transcribe>'s automatic retry-on-timeout for what actually guarantees
+L<transcribe()|/transcribe($audio_path, model =E<gt> $name, runner =E<gt> \&coderef, duration_fn =E<gt> \&coderef)>'s automatic retry-on-timeout for what actually guarantees
 a long/slow clip doesn't get lost.
 
 =head2 _scaled_timeout($duration_seconds)
 
 TGT-140 (external review finding, confirmed live by Michael): C<$TIMEOUT>
-alone stayed a flat 300 seconds even after L</select_model> started tiering
+alone stayed a flat 300 seconds even after L<select_model()|/select_model($duration_seconds)> started tiering
 the model by duration - a clip picked as the fastest/default tier could
 still legitimately run past 300s wall-clock at real per-host throughput
 (measured: C<medium> ran at ~5.6x real time, so a 102.48-second clip took
 571s). Returns a per-attempt timeout budget scaled from the same duration
-signal L</select_model> already computes: C<$duration * $TIMEOUT_MULTIPLIER>
+signal L<select_model()|/select_model($duration_seconds)> already computes: C<$duration * $TIMEOUT_MULTIPLIER>
 (package variable, default 8 - a safety margin above the worst measured
 throughput), floored at C<$TIMEOUT> itself (whatever it is currently set
 to - never a separate hard-coded constant, so a caller-configured
@@ -63,7 +63,7 @@ Returns the next entry in C<@MODEL_TIERS> (C<medium>, C<small>,
 C<base>, in that order) after C<$model>, or C<undef> if C<$model> is
 already C<base> or not one of the three known tiers (e.g. an
 explicitly-passed custom model name) - the latter case deliberately
-gives L</transcribe> no fallback to step down to, since retry-on-timeout
+gives L<transcribe()|/transcribe($audio_path, model =E<gt> $name, runner =E<gt> \&coderef, duration_fn =E<gt> \&coderef)> no fallback to step down to, since retry-on-timeout
 only ever applies to an automatically-selected model.
 
 =head2 _probe_duration($audio_path)
@@ -93,7 +93,7 @@ given.
 =head2 transcribe($audio_path, model => $name, runner => \&coderef, duration_fn => \&coderef)
 
 Runs C<whisper> against C<$audio_path> with the given C<model> (default:
-L</select_model>'s answer for the audio's own duration, TGT-100 -
+L<select_model()|/select_model($duration_seconds)>'s answer for the audio's own duration, TGT-100 -
 previously always the fixed C<medium>), reads back its
 C<--output_format txt> transcript, and returns the trimmed text. Dies if
 C<model> ends in C<.en>, if C<whisper> exits non-zero, or if its expected
@@ -101,7 +101,7 @@ output file is missing.
 
 When C<model> was I<not> explicitly passed, the same probed duration used
 to pick the model also scales the hard timeout C<_run> enforces for that
-attempt (TGT-140, via L</_scaled_timeout>, C<local>ized around the runner
+attempt (TGT-140, via L<_scaled_timeout()|/_scaled_timeout($duration_seconds)>, C<local>ized around the runner
 call) - a clip whose own tier's real throughput legitimately takes longer
 than the old flat 300s no longer gets killed purely for that. An
 explicitly-passed C<model> keeps the flat package C<$TIMEOUT> unchanged,
@@ -110,7 +110,7 @@ fallback below already uses.
 
 If C<model> was I<not> explicitly passed and the run times out
 (C<_run>'s C<"...timed out..."> die), C<transcribe> automatically
-retries at L</_next_tier>'s next-faster model instead of dying
+retries at L<_next_tier()|/_next_tier($model)>'s next-faster model instead of dying
 immediately - TGT-100's follow-up, since a fixed duration-based guess
 alone can't account for how much per-host Whisper throughput varies
 (measured: C<medium> at ~5.6x real time on one host). Retrying continues
@@ -121,7 +121,7 @@ gets this fallback.
 
 C<duration_fn> is an optional coderef taking the
 audio path and returning its duration in seconds; it defaults to
-L</_probe_duration> and exists so callers (tests) can inject a fake
+L<_probe_duration()|/_probe_duration($audio_path)> and exists so callers (tests) can inject a fake
 instead of invoking a real C<ffprobe>. The
 whisper-output temp directory is removed after every attempt (success,
 non-retryable failure, or before a retry) - it is not left for

@@ -1,5 +1,23 @@
 Revision history for the tg skill
 
+2.20  2026-09-17
+      - DOC FIX (TGT-277, found via a podchecker sweep during TGT-276's
+        own documentation work): 6 lib/**/*.pod files (Config.pod,
+        Config/Flags.pod, Reply/Args.pod, Transcribe.pod,
+        Transcribe/Retry.pod, Poller/Safe.pod) had 48 unresolved
+        internal L<name> links, plus a UTF-8 encoding warning in
+        Reply/Args.pod. Root cause in every case: a link targeted a
+        bare function name while the matching =head2 anchor included
+        the full signature (e.g. "=head2 extract_bot_flag(@args)" vs
+        "L</extract_bot_flag>") - podchecker requires an exact match.
+        Fixed by widening each link to L<name()|/exact anchor text>;
+        added a leading "=encoding UTF-8" directive to Reply/Args.pod
+        for its own literal non-ASCII mojibake example. New
+        t/277-podchecker-clean.t runs Pod::Checker's own Perl API
+        against every lib/**/*.pod file, asserting zero errors, so
+        this drift class is now caught automatically. No code changed
+        - full Docker suite passes unchanged.
+
 2.19  2026-09-17
       - MAINTENANCE (TGT-276, found via TGT-275's own REQ-029 audit):
         D2TG::Poller.pm was still 598 lines after TGT-275's own helper
