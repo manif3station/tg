@@ -1,0 +1,152 @@
+=head1 NAME
+
+D2TG::Poller::Dispatch - run_once's per-update-type branch handlers
+
+=head1 SYNOPSIS
+
+    D2TG::Poller::Dispatch::handle_message_reaction( $reaction, $store, $bot_token );
+    D2TG::Poller::Dispatch::handle_edited_message( $edited, $update_id, \$offset_cap, $store, $bot_token );
+    D2TG::Poller::Dispatch::handle_plain_update( $update, $update_id, \$offset_cap, $telegram, $store, $bot_token, $transcribe_voice, $download_media );
+
+=head1 DESCRIPTION
+
+TGT-276 (filed via TGT-275's own REQ-029 audit): C<D2TG::Poller::run_once>
+was still ~520 lines dispatching 3 top-level branches (a C<message_reaction>
+update, an C<edited_message> update, and the plain-text/voice/media/
+fallback update shape) sharing local state (C<$offset_cap>, C<$telegram>,
+C<$store>, C<$bot_token>, C<$transcribe_voice>, C<$download_media>).
+Splitting the branch bodies into private functions I<within the same
+file> would not have reduced C<D2TG::Poller.pm>'s own line count at
+all - nothing would be removed, only reorganized - so, matching the
+C<D2TG::Poller::Safe>/C<D2TG::Poller::Format> precedent, the 3 branch
+handlers (plus their own extensive historical comment blocks, moved
+here) were relocated into this new module. C<run_once> itself is now a
+short dispatch loop that calls these 3 functions and interprets a
+C<next> unconditionally after each one, since none of the 3 branches
+ever falls through into another - a return from any handler function
+has the exact same effect its own inline C<next>/C<next unless>/
+C<next if> statements had before this refactor (every guard clause
+inside a handler was converted from C<next> to C<return>, since
+C<next> outside of a loop is a fatal runtime error - a handler function
+has no loop of its own).
+
+=head1 FUNCTIONS
+
+=head2 handle_message_reaction($reaction, $store, $bot_token)
+
+TGT-143 (live Telegram question, msg #176, Michael: "the user can give
+a like or mark a message with emoji, is that something can be
+implement to pick this up"): detection/printing only - no reply action
+taken on a reaction, matching the existing pattern for every other
+inbound event this poller only ever reports. Gated by the same
+C<is_allowed> access-control check every other branch uses (TGT-151,
+found via a scheduled bug hunt: this branch originally ran entirely
+before that gate, so an unapproved, non-pending chat_id's reaction was
+printed unconditionally, leaking its chat_id/username onto the
+monitored stream) - no C<add_pending> since a reaction isn't a
+first-contact event the way a message is. The sender name prefers
+C<actor_chat.title>/C<.username> when C<actor_chat> is present (TGT-154,
+found via a scheduled bug hunt: Telegram's own C<user> field is
+optional - an anonymous chat/channel reaction omits it entirely and
+supplies C<actor_chat> instead), falling back to the ordinary
+C<user>-based C<display_name> resolution otherwise.
+C<MessageReactionUpdated> reports the I<full> current and previous
+reaction sets, not a single before/after pair, since a user can have
+multiple reactions on one message and a single update can add one
+reaction while removing another - the two sets are diffed via
+C<reaction_key> (a Codex review finding: C<ReactionType> is a tagged
+union - a standard C<emoji> reaction carries an emoji glyph, but
+C<custom_emoji> carries a distinct C<custom_emoji_id> with no glyph at
+all, and C<paid> carries neither; keying on the emoji field alone
+collapsed every custom/paid reaction into one shared bucket, silently
+hiding a real swap between two different custom emojis). Every key
+present in C<new_reaction> but not C<old_reaction> prints
+C<NEW TG REACTION [chat_id] sender: <label> on message <id>>, every key
+present in C<old_reaction> but not C<new_reaction> prints
+C<REACTION REMOVED [chat_id] sender: <label> on message <id>>.
+Anonymous aggregate reaction counts (C<message_reaction_count>) are out
+of scope.
+
+=head2 handle_edited_message($edited, $update_id, $offset_cap_ref, $store, $bot_token)
+
+TGT-169 (live Telegram question, msg #246, Michael: "is the
+implementable if the user on telegram edit the previous message and
+that will notify the agent about the updated message"): Telegram sends
+a distinct C<edited_message> update (same shape as an ordinary message,
+reflecting the post-edit content) generally when a message known to the
+bot in an allow-listed chat is edited - genuinely detectable, unlike
+deletion of an ordinary chat message (no such update exists for that in
+the Bot API at all). Gated by the same C<is_allowed> check every other
+branch uses; no C<add_pending> - an edit isn't a first-contact event.
+A text edit's new content is recorded via C<record_message> so
+C<d2 tg.history> reflects it; a caption/media-only edit (no text) is
+still announced but deliberately not recorded, to avoid overwriting an
+already-correct history summary with nothing useful.
+
+TGT-273 (found via a scheduled JOB-004 improvement hunt): when the edit
+carries text, the incoming sanitized text is compared against
+C<$store>'s already-stored C<summary> for that C<(chat_id, message_id)>
+B<before> printing C<NEW TG EDIT> - identical means this exact edit was
+already announced on a prior cycle (a redelivery, skip entirely);
+different or no stored row at all means a genuinely new edit, or the
+first one ever seen. Reusing C<get_message> presence alone (the way
+C<handle_plain_update> below does) does NOT work here: C<record_message>
+upserts on C<(chat_id, bot_key, message_id)>, so C<get_message> is
+already non-null for ANY message ever recorded, including the ORIGINAL
+pre-edit send - a presence-only check would wrongly suppress a
+genuinely new edit the very first time it arrived. A transient lookup
+error degrades the same way every other dedup check in this module
+already does (treated as not-previously-seen, proceed as normal).
+
+=head2 handle_plain_update($update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, $transcribe_voice, $download_media)
+
+The fallback branch for every update that is neither a
+C<message_reaction> nor an C<edited_message> - a plain text message, a
+voice note, a photo/document, or a video (recognized by
+L<D2TG::Poller::Format/media_kind> but always falling through to the
+generic media-announcement path, since there is no video-specific
+handling or download path at all).
+
+Access control: when C<$store> is given, a sender not in its
+allow-list (scoped by C<bot_token>) is recorded via C<add_pending>,
+printing a one-time C<NEW TG PENDING> notification; text is never
+printed for an unapproved sender.
+
+Redelivery dedup (TGT-178/TGT-270): before acting on an already-known
+C<message_id>, checks C<$store-E<gt>get_message> (a prior successful
+recording) and C<has_failed_download>/C<has_failed_transcription> (a
+prior queued failure, TGT-270 - a media/voice message whose download or
+transcription already failed and was queued never calls
+C<record_message> at all, so a Telegram redelivery of that update_id
+was previously invisible to a presence-only check against C<messages>).
+A lookup failure degrades to "not previously seen" (proceed as normal).
+
+Text messages print C<NEW TG [...]> immediately. Voice messages (when
+C<transcribe_voice> is given) print a "transcribing..." notice before
+the blocking transcription call (TGT-100), then either the transcript
+or a C<NEW TG VOICE FAILED> line naming the retry command once the
+failure is queued (TGT-237). Photo/document messages (when
+C<download_media> is given) are size-checked against
+C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, Telegram's Bot API C<getFile>
+limit, TGT-037) before attempting download, then either announce
+success with a C<GET ATTACHMENT WITH> template or queue the failure and
+announce a C<NEW TG MEDIA FAILED> retry line (TGT-104/TGT-204). Every
+successful branch, and the no-callback fallback (TGT-120), records the
+message via L<D2TG::Poller::Safe/record_message_and_track_offset> so a
+later reply/history lookup and the offset-capping redelivery guard
+(TGT-178) both see it.
+
+=head1 KNOWN GAP
+
+The C<edited_message> branch does NOT get the plain-message dedup
+check C<handle_plain_update> uses - if a batch-level offset cap (from
+an EARLIER sibling update failing to record) causes an edit to be
+redelivered after it already succeeded, TGT-273's own summary-
+comparison check still catches it (since the summary would already
+match), but a genuinely different SECOND edit to the same message
+arriving in the same redelivered batch is not separately trackable at
+the update_id level by this module - a narrower, deliberately
+out-of-scope follow-up if a real duplicate-edit incident is ever
+reported (inherited unchanged from TGT-178's own original note).
+
+=cut

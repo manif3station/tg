@@ -322,7 +322,7 @@ my $skill_root = File::Spec->catdir( $Bin, '..' );
 # filesystem) instead died raw. The raw exception is never echoed
 # (matches TGT-133's own established scrubbing precedent for a DBI/
 # SQLite error, via the identical classification
-# D2TG::Poller::_record_message_safe already uses) - only a short,
+# D2TG::Poller::Safe::record_message_safe already uses) - only a short,
 # fixed reason, since it can embed the real db_path. (lock_path and
 # heartbeat_path above shared the identical unwrapped-make_path risk -
 # fixed separately, see TGT-184's own comments above.)

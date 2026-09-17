@@ -251,8 +251,8 @@ malformed earlier one - not necessarily "the" file's own literal top
 header), or says explicitly that none was found, if it doesn't -
 before returning C<undef>, matching this project's established
 non-fatal-degradation pattern (e.g.
-L<D2TG::Poller/skill_version_check_safe>/
-L<D2TG::Poller/persist_offset_safe>).
+L<D2TG::Poller::Safe/skill_version_check_safe>/
+L<D2TG::Poller::Safe/persist_offset_safe>).
 The return value is unchanged; a genuinely missing/unreadable
 C<Changes> file still returns C<undef> silently, with no diagnostic -
 this only covers a readable file with no matching entry.

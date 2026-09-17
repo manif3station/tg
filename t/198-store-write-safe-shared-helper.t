@@ -20,10 +20,12 @@ use File::Spec;
 
 my $poller_path   = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller.pm' );
 my $safe_path     = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller', 'Safe.pm' );
+my $dispatch_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller', 'Dispatch.pm' );
 my $download_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Download.pm' );
 
 my $poller_src   = _code_only( _slurp($poller_path) );
 my $safe_src     = _code_only( _slurp($safe_path) );
+my $dispatch_src = _code_only( _slurp($dispatch_path) );
 my $download_src = _code_only( _slurp($download_path) );
 
 # TGT-275: store_write_safe (and its own _classify_store_error/
@@ -79,13 +81,22 @@ unlike(
     'D2TG::Download.pm has zero remaining inline eval/classify/"STORE ERROR" blocks'
 );
 
+unlike(
+    $dispatch_src,
+    $inline_block_re,
+    'D2TG::Poller::Dispatch.pm has zero remaining inline eval/classify/"STORE ERROR" blocks'
+);
+
+# TGT-276: is_allowed/add_pending's own store_write_safe call sites
+# moved out of D2TG::Poller::run_once into D2TG::Poller::Dispatch's 3
+# handler functions, along with the branch bodies that used them.
 # Both modules must actually call the shared helper for their own
-# store writes - a green result on the two checks above for the wrong
+# store writes - a green result on the checks above for the wrong
 # reason (e.g. the whole pattern deleted instead of migrated) is
 # caught here.
-my $poller_calls = () = $poller_src =~ /\bD2TG::Poller::Safe::store_write_safe\(/g;
-ok( $poller_calls >= 4,
-    "D2TG::Poller.pm calls D2TG::Poller::Safe::store_write_safe at least 4 times (is_allowed x3, add_pending) - found $poller_calls"
+my $dispatch_calls = () = $dispatch_src =~ /\bD2TG::Poller::Safe::store_write_safe\(/g;
+ok( $dispatch_calls >= 4,
+    "D2TG::Poller::Dispatch.pm calls D2TG::Poller::Safe::store_write_safe at least 4 times (is_allowed x3, add_pending) - found $dispatch_calls"
 );
 
 my $download_calls = () = $download_src =~ /\bD2TG::Poller::Safe::store_write_safe\(/g;

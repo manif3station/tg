@@ -5213,6 +5213,84 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-276: D2TG::Poller::run_once decomposition, and a documentation bug found along the way
+
+Filed via TGT-275's own REQ-029 audit: `lib/D2TG/Poller.pm` was still
+598 lines after TGT-275's own helper relocation, entirely due to
+`run_once` itself (~520 lines dispatching 3 branches:
+`message_reaction`, `edited_message`, and the plain-text/voice/media
+fallback, sharing local state - `$offset_cap`, `$telegram`, `$store`,
+`$bot_token`, `$transcribe_voice`, `$download_media`).
+
+**Design correction caught mid-implementation**: the ticket's own
+original plan (extract each branch into a private function I<within
+the same file>) was drafted before actually re-reading the function -
+once implementation started, it became clear that splitting code into
+more functions in the same file does not remove any lines at all,
+only reorganizes them. Only an actual new module (matching the
+`D2TG::Poller::Safe`/`D2TG::Poller::Format` precedent) reduces the
+line count. Corrected the plan and proceeded with a real module split:
+a new `D2TG::Poller::Dispatch` holding the 3 handler functions (each
+losing its leading underscore, becoming public) plus their own
+extensive historical comment blocks, moved to `Dispatch.pod`.
+
+**Mechanical transformation, not a rewrite**: every inline `next`/
+`next unless`/`next if` guard clause inside each branch body was
+converted to `return`/`return unless`/`return if`, since Perl's `next`
+outside of a loop is a fatal runtime error and a handler function has
+no loop of its own. `run_once`'s own dispatch loop calls `next`
+unconditionally right after each handler call, which has the exact
+same effect the branch's own trailing `next` had before - none of the
+3 branches ever falls through into another, so a `next` right after
+the call is always correct. The bodies themselves (including their
+own inline logic, print statements, and error handling) were moved
+verbatim otherwise.
+
+**A real documentation-accuracy bug found and fixed along the way**:
+`lib/D2TG/Poller.pod` still had 5 full `=head2` sections (for
+`open_store_or_die`, `store_write_safe`, `persist_offset_safe`,
+`skill_version_check_safe`, `run_once_safe`) describing those
+functions as if they still lived in `D2TG::Poller` - TGT-275 had
+already relocated all 5 to `D2TG::Poller::Safe` (writing fresh,
+accurate docs in the new `Safe.pod`) but never removed the now-stale
+duplicate sections from `Poller.pod` itself. Also found 2 stale
+`L<D2TG::Poller/...>` cross-references (in `Config.pod` and this
+module's own `KNOWN LIMITATION`/`DESCRIPTION` sections) and 4 more
+stray mentions in `docs/commands.md` and a `cli/poller.pl` comment.
+All fixed as part of this ticket's own documentation work, since it
+was already touching `Poller.pod` for the `run_once` rewrite.
+
+**Dead-code cleanup**: TGT-259 originally kept 11 of
+`D2TG::Poller::Format`'s 13 relocated functions forwarded in
+`D2TG::Poller` for every internal call site. This ticket's own move of
+`run_once`'s branch bodies into `D2TG::Poller::Dispatch` (which calls
+`D2TG::Poller::Format`'s bare functions directly) left 10 of those 11
+forwarders with no caller left at all - confirmed via a coverage run
+that surfaced them as 0-count subroutines - removed as permanently-
+uncallable dead code, matching TGT-259's own precedent for
+`_stored_summary`/`_forward_origin_name`. Only `_bot_flag` survives,
+for its one remaining external caller
+(`t/226-bot-flag-helper-extracted.t`).
+
+New `t/276-poller-dispatch-module.t` proves ownership via `can()`
+(matching `t/263`/`t/275`'s own pattern) - confirmed genuinely red
+pre-fix. Two existing structural-regression tests (`t/181`, `t/198`)
+needed updating to point at the new module and the new (unprefixed)
+argument-passing shape (`$offset_cap_ref` passed straight through
+rather than re-taking a ref with `\$offset_cap`, since the caller in
+`run_once` now takes the ref once at the dispatch call site). Full
+Docker suite (206 files, 2272 tests) passes unchanged; 100% statement +
+subroutine coverage confirmed on both `D2TG::Poller` and
+`D2TG::Poller::Dispatch`. `D2TG::Poller.pm` is now 74 lines;
+`D2TG::Poller::Dispatch.pm` is 275 lines - both comfortably under the
+board's 500-line-per-module cap, with no further follow-up ticket
+needed.
+
+perlsec.pl-style vulnerability-scan audit: a pure code-relocation
+refactor (branch bodies moved verbatim, `next` mechanically converted
+to `return`) plus a documentation-only correction - no new external-
+input handling, no new shell/file/SQL surface introduced.
+
 ## TGT-275: D2TG::Poller.pm decomposition - the 8 non-run_once helper functions
 
 Filed via TGT-273's own REQ-029 audit: `lib/D2TG/Poller.pm` was 854

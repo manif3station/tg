@@ -1,5 +1,40 @@
 Revision history for the tg skill
 
+2.19  2026-09-17
+      - MAINTENANCE (TGT-276, found via TGT-275's own REQ-029 audit):
+        D2TG::Poller.pm was still 598 lines after TGT-275's own helper
+        relocation, entirely due to run_once itself (~520 lines
+        dispatching 3 branches: message_reaction, edited_message, and
+        the plain-text/voice/media fallback). Splitting the branches
+        into same-file functions would not have reduced the module's
+        line count at all (nothing removed, only reorganized) - so,
+        matching the D2TG::Poller::Safe/Format precedent, the 3
+        branch handlers (plus their own extensive historical comments)
+        were relocated into a new D2TG::Poller::Dispatch module.
+        run_once itself is now a short dispatch loop. Every guard
+        clause that used a bare "next" inside run_once's own loop
+        became a "return" inside the extracted handler functions -
+        next outside of a loop is a fatal runtime error, and a handler
+        function has no loop of its own; run_once's own dispatch loop
+        calls next unconditionally right after each handler returns.
+        Also found and fixed a real documentation-accuracy bug left
+        over from TGT-275: 5 function sections in Poller.pod (and 4
+        stray commands.md/cli/poller.pl/Config.pod mentions) still
+        described open_store_or_die/run_once_safe/store_write_safe/
+        persist_offset_safe/skill_version_check_safe as if they still
+        lived in D2TG::Poller, when TGT-275 had already moved them to
+        D2TG::Poller::Safe - corrected all of them. Also removed 10 of
+        D2TG::Poller's own 11 D2TG::Poller::Format forwarders as
+        permanently-uncallable dead code (their only caller, run_once,
+        moved to D2TG::Poller::Dispatch, which calls Format's bare
+        functions directly) - only _bot_flag survives, for its one
+        remaining external caller. New t/276-poller-dispatch-module.t
+        proves the new module's ownership. Zero behavior change - full
+        Docker suite and 100% coverage on both D2TG::Poller and
+        D2TG::Poller::Dispatch confirmed unchanged. D2TG::Poller.pm is
+        now 74 lines; D2TG::Poller::Dispatch.pm is 275 lines - both
+        comfortably under the 500-line-per-module cap.
+
 2.18  2026-09-17
       - MAINTENANCE (TGT-275, found via TGT-273's own REQ-029 audit):
         D2TG::Poller.pm was 854 lines after TGT-273's POD extraction -

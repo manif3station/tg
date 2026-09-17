@@ -1,5 +1,21 @@
 # tg
 
+**Status: early implementation (v2.19).** MAINTENANCE (TGT-276, found
+via TGT-275's own REQ-029 audit): `lib/D2TG/Poller.pm` was still 598
+lines, entirely due to `run_once` itself (~520 lines dispatching 3
+branches). Splitting the branches into same-file functions would not
+have reduced the module's line count at all - so the 3 branch handlers
+(plus their own historical comments) were relocated into a new
+`D2TG::Poller::Dispatch` module, matching the `D2TG::Poller::Safe`
+precedent; `run_once` is now a short dispatch loop. Also fixed a real
+documentation-accuracy bug left over from TGT-275 (5 `Poller.pod`
+sections and 4 stray mentions elsewhere still described functions that
+had already moved to `D2TG::Poller::Safe`), and removed 10 of
+`D2TG::Poller`'s own dead `D2TG::Poller::Format` forwarders whose only
+caller had moved away. Zero behavior change - full Docker suite and
+100% coverage confirmed unchanged. `D2TG::Poller.pm` is now 74 lines;
+`D2TG::Poller::Dispatch.pm` is 275 lines.
+
 **Status: early implementation (v2.18).** MAINTENANCE (TGT-275, found
 via TGT-273's own REQ-029 audit): `lib/D2TG/Poller.pm` was 854 lines,
 over the board's 500-line-per-module cap. The 8 non-`run_once` helper
