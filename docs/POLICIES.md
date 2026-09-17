@@ -5935,3 +5935,45 @@ Changes entry from 5.145 through 5.150:
 
 Conclusion: nothing between 5.144 and 5.150 requires a new
 declaration, decline, or update to an existing one on this board.
+
+## TGT-290: multipart upload boundary had only ~30 bits of entropy
+
+Found via a user-requested comprehensive bug/improvement sweep
+(2026-09-17): 6 parallel adversarial code-review passes across the
+whole codebase, dispatched after repeated scheduled bug-hunt/
+improvement-hunt passes this session had come back clean. The shared
+multipart boundary generator used by `send_voice`, `send_photo`, and
+`send_document` (via `_send_file`) in `lib/D2TG/Telegram.pm` was
+`'D2TGBoundary' . int(rand(1e9)) . time` - about 30 bits of entropy.
+`_send_file`'s own caption path already strips accidental boundary
+occurrences (TGT-162), and its own comment explicitly flagged that the
+uploaded file's raw bytes were NOT given the same protection - a file
+whose raw bytes happened to contain the generated boundary string
+would corrupt the multipart request. `send_voice` had no such
+protection at all for its own audio payload. This was a
+self-documented, acknowledged-but-still-open gap, not a resolved
+design decision.
+
+**Fix**: added a shared `_generate_boundary` helper using 8 rounds of
+`rand(65536)` (128 bits of real entropy, 32 hex characters) instead of
+a single `rand(1e9)` call, making an accidental collision with real
+file content cryptographically improbable instead of merely
+improbable. Both call sites (`send_voice`, `_send_file`) now call this
+one helper instead of duplicating the formula inline - a small
+duplication-removal side benefit of the fix, not a separate ticket.
+
+`t/290-telegram-boundary-high-entropy.t` (new): asserts the generated
+boundary matches a 32-hex-char high-entropy pattern and that two real
+generations never collide; confirmed genuinely red beforehand
+(`_generate_boundary` didn't exist). `t/116-send-file-caption-boundary-
+collision.t` (pre-existing, TGT-162's own regression test) had its own
+boundary-computation formula updated to match the new implementation -
+it independently recomputes the expected boundary using the mocked
+`rand`/`time` overrides already in place, so this was a one-line
+formula update, not a rewrite of the test's own logic.
+
+perlsec.pl-style vulnerability-scan audit: this is exactly a security
+hardening fix - replacing a weak-entropy random-value generator with a
+cryptographically stronger one. No new shell invocation, no new file
+I/O, no new external-input handling, no system/exec/backtick/piped-
+open/eval-STRING patterns introduced.

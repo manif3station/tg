@@ -170,6 +170,22 @@ sub _validate_reply_to_message_id {
     return;
 }
 
+# TGT-290 (found via a user-requested comprehensive bug/improvement
+# sweep): the previous formula ('D2TGBoundary' . int(rand(1e9)) . time)
+# carried only ~30 bits of entropy. _send_file's own caption path already
+# strips accidental boundary occurrences (TGT-162), but the uploaded
+# file's raw bytes were never given the same protection, and send_voice's
+# audio payload had no protection at all - a file whose raw bytes happen
+# to contain the generated boundary string would corrupt the multipart
+# request. 8 rounds of rand(65536) give 128 bits of real entropy (32 hex
+# chars), making an accidental collision with real file content
+# cryptographically improbable instead of merely improbable. Shared by
+# send_voice and _send_file (send_photo/send_document) so the fix covers
+# all 3 upload paths in one place.
+sub _generate_boundary {
+    return 'D2TGBoundary' . join( '', map { sprintf( '%04x', int( rand(65536) ) ) } 1 .. 8 ) . time;
+}
+
 sub _append_reply_to_message_id_field {
     my ( $body_ref, $boundary, $method, $reply_to_message_id ) = @_;
 
@@ -216,7 +232,7 @@ sub send_voice {
     close $fh;
 
     my ( undef, undef, $filename ) = File::Spec->splitpath($file_path);
-    my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
+    my $boundary = _generate_boundary();
 
     my $body = "--$boundary\r\n"
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}
@@ -287,7 +303,7 @@ sub _send_file {
     ( my $safe_filename = $filename ) =~ s/[\x00-\x1F\x7F]//g;
     ( my $escaped_filename = $safe_filename ) =~ s/([\\"])/\\$1/g;
 
-    my $boundary = 'D2TGBoundary' . int( rand(1e9) ) . time;
+    my $boundary = _generate_boundary();
 
     my $body = "--$boundary\r\n"
       . qq{Content-Disposition: form-data; name="chat_id"\r\n\r\n}

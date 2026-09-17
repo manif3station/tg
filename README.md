@@ -1,12 +1,12 @@
 # tg
 
-**Status: early implementation (v2.27).** MAINTENANCE (TGT-288, found
-via a scheduled JOB-004 improvement hunt): 7 test files deliberately
-read another package's variable/sub by full qualification exactly once
-(to keep a doc-accuracy assertion derived from the real constant), and
-Perl's strict-vars warnings flagged each as "used only once: possible
-typo" - real but benign noise on every full-suite run. Scoped `no
-warnings 'once'` silences it; no assertion logic changed.
+**Status: early implementation (v2.28).** BUGFIX (TGT-290, found via a
+user-requested comprehensive bug/improvement sweep): the shared
+multipart boundary generator used by `send_voice`/`send_photo`/
+`send_document` had only ~30 bits of entropy - a file whose raw bytes
+happened to contain the generated boundary string would corrupt the
+upload. Replaced with a `_generate_boundary` helper carrying 128 bits
+of real entropy, fixing all 3 upload paths in one place.
 
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s

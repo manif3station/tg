@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.28  2026-09-18
+      - BUGFIX (TGT-290, found via a user-requested comprehensive
+        bug/improvement sweep): the shared multipart boundary generator
+        used by send_voice/send_photo/send_document had only ~30 bits
+        of entropy ('D2TGBoundary' . int(rand(1e9)) . time). A file
+        whose raw bytes happened to contain the generated boundary
+        string would corrupt the upload request. Replaced with
+        _generate_boundary, using 8 rounds of rand(65536) for 128 bits
+        of real entropy - fixes all 3 upload paths in one place. No
+        behavior change beyond the boundary string's own composition.
+
 2.27  2026-09-17
       - MAINTENANCE (TGT-288, found via a scheduled JOB-004 improvement
         hunt following up on TGT-287): 7 test files deliberately read
