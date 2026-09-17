@@ -1,5 +1,33 @@
 Revision history for the tg skill
 
+2.21  2026-09-17
+      - MAINTENANCE (TGT-278, found via a wc -l sweep run as TGT-277's
+        own pipeline-continuity backlog check): D2TG::Store.pm was 1378
+        lines - by far the largest module in the codebase, over 2.7x
+        the board's 500-line-per-module cap, and never previously
+        audited despite this session's extensive module-decomposition
+        history covering every other large module. Surveyed its own
+        function clusters and extracted the largest cohesive one -
+        message history (record_message/get_message/
+        get_attachment_path/mark_read/is_read/unread_messages/
+        recent_messages/messages_in_range, 8 functions) - into a new
+        D2TG::Store::History module, mirroring D2TG::Store::RetryQueue's
+        own established precedent: built once in D2TG::Store::new,
+        thin forwarders kept for every existing caller, zero behavior
+        change. Also extracted Store.pm's own embedded POD (never
+        previously in a separate file) into Store.pod, and fixed 22
+        podchecker unresolved-link errors found while doing so (2 in
+        the newly-written History.pod, 20 pre-existing in the newly-
+        extracted Store.pod - the same bare-name-vs-signature bug class
+        TGT-277 just fixed elsewhere, never checked here since this
+        module had no separate .pod file before). D2TG::Store.pm is
+        now 720 lines - still over the cap but down from 1378; filed
+        follow-up TGT-279 for the remaining 2 clusters (access control,
+        sent-reply audit) plus D2TG::Telegram.pm's own smaller 547-line
+        overage. New t/278-store-history-module.t proves the new
+        module's ownership. Full Docker suite and 100% coverage on
+        both D2TG::Store and D2TG::Store::History confirmed unchanged.
+
 2.20  2026-09-17
       - DOC FIX (TGT-277, found via a podchecker sweep during TGT-276's
         own documentation work): 6 lib/**/*.pod files (Config.pod,

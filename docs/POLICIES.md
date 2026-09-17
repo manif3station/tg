@@ -5213,6 +5213,89 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-278: D2TG::Store.pm decomposition (1378 -> 720 lines) and its own podchecker cleanup
+
+Filed via TGT-277's own pipeline-continuity backlog check: with the
+backlog empty and all 5 EPICs done, ran `wc -l` across every
+`lib/D2TG/*.pm` and `lib/D2TG/*/*.pm` module for the first time this
+session. `D2TG::Store.pm` was 1378 lines - nearly 3x the board's
+500-line-per-module cap, and by far the largest module in the
+codebase, yet never flagged or decomposed despite this session's own
+extensive module-decomposition history (TGT-258/259/260/261/263/265/
+267/275/276 all covered other modules). `D2TG::Telegram.pm` (547
+lines) was also found over the cap, more marginally.
+
+Surveyed `D2TG::Store.pm`'s own function clusters (matching TGT-258's
+own precedent for a module this large and central): access control
+(`is_allowed`/`add_pending`/`approve`/`pending_chat_ids`), offset
+tracking, message history (`record_message`/`get_message`/
+`get_attachment_path`/`mark_read`/`is_read`/`unread_messages`/
+`recent_messages`/`messages_in_range` - 8 functions, ~148 lines, the
+largest single cohesive cluster), retry-queue forwarders (already
+thin, extracted by TGT-257), sent-reply audit (`record_sent_text`/
+`record_sent_voice`/`text_only_replies`/`is_recent_duplicate_reply`),
+`prune_history`, and the connection/schema core (`new`/`_ensure_schema`/
+`_seed_admin`, which must stay). The message-history cluster was
+picked first - it's the largest, and its own functions only need the
+shared `$dbh`, not any of the access-control/offset/retry-queue state.
+
+Extracted verbatim into a new `D2TG::Store::History` module, mirroring
+`D2TG::Store::RetryQueue`'s own established precedent exactly: built
+once in `D2TG::Store::new` (`$self->{history} = D2TG::Store::History->new(
+dbh => $dbh )`), thin forwarders kept in `D2TG::Store` for all 8
+methods so every existing caller keeps working unchanged. New
+`t/278-store-history-module.t` proves ownership via `can()` - confirmed
+genuinely red pre-fix (`Can't locate D2TG/Store/History.pm`). Zero
+behavior change - the full pre-existing test suite passed unchanged
+with no test edits needed, unlike TGT-275/276's own extractions which
+needed a few structural-regression test updates.
+
+Also extracted `D2TG::Store.pm`'s own embedded POD (never previously
+in a separate file - unlike every other large module this session
+touched) into `Store.pod`. Running podchecker against the freshly-
+created `Store.pod` and `History.pod` surfaced 22 more unresolved-
+link errors: 20 pre-existing in `Store.pod` (the exact same bare-
+name-vs-signature bug class TGT-277 just fixed across 6 other files,
+never checked here since this module had no separate `.pod` file to
+check before now) and 2 newly introduced in `History.pod` while
+writing it. Fixed all 22 immediately rather than shipping a freshly-
+touched file with known errors, using the same `L<name()|/full anchor
+text>` widening pattern TGT-277 established. `t/277-podchecker-clean.t`
+(TGT-277's own regression test, which auto-discovers every
+`lib/**/*.pod` file) now also covers both new files and confirms zero
+errors.
+
+`D2TG::Store.pm` is now 720 lines - still over the 500-line cap but
+down from 1378 - filed follow-up `TGT-279` for the remaining 2
+clusters (access control, sent-reply audit) plus `D2TG::Telegram.pm`'s
+own smaller 547-line overage, matching the TGT-275->276 precedent of
+not forcing an oversized single-ticket refactor. Full Docker suite
+(208 files, 2313 tests) passes unchanged; 100% statement + subroutine
+coverage confirmed on both `D2TG::Store` and `D2TG::Store::History`.
+
+**Process note**: two required-action `tira.ticket.move` calls in this
+same session window (for TGT-274 through TGT-277, discovered while
+working this ticket's own pipeline-continuity check) had appeared to
+succeed based on the printed `column: pending-push` text in their own
+required-item proof records, but the tickets had actually stalled at
+`vulnerability-scan` - that printed text describes which column the
+required-action item itself belongs to, not the ticket's own current
+column. Caught and fixed by directly querying `tira.ticket.list
+--column pending-push` / `tira.ticket.show`'s own top-level `column`
+field rather than trusting the required-action response text. Lesson
+applied for the remainder of this ticket's own gate chain: every
+column-move claim in this write-up was verified by an explicit
+`tira.ticket.show --ref TGT-278 | grep column:` check, not inferred
+from a required-action proof.
+
+perlsec.pl-style vulnerability-scan audit: a pure code-relocation
+refactor (message-history functions moved verbatim into a new module
+following the DBI-handle-wrapper pattern already established by
+`D2TG::Store::RetryQueue`) plus a documentation-content fix (POD
+cross-reference syntax) - no new external-input handling, no new
+shell/file/SQL surface; the extracted methods still use the same
+parameterized DBI calls they always did.
+
 ## TGT-277: podchecker cleanup across 6 .pod files
 
 Filed via TGT-276's own podchecker sweep (which itself surfaced while

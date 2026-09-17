@@ -1,5 +1,18 @@
 # tg
 
+**Status: early implementation (v2.21).** MAINTENANCE (TGT-278, found
+via a `wc -l` sweep run as TGT-277's own pipeline-continuity backlog
+check): `D2TG::Store.pm` was 1378 lines - by far the largest module in
+the codebase, never previously audited. Extracted its largest cohesive
+cluster - message history (8 functions) - into a new
+`D2TG::Store::History` module, mirroring `D2TG::Store::RetryQueue`'s
+own precedent; also extracted its own embedded POD (never in a
+separate file before) into `Store.pod`, fixing 22 podchecker errors
+found along the way. `D2TG::Store.pm` is now 720 lines - still over
+the cap but down from 1378; filed follow-up TGT-279 for the rest. Zero
+behavior change - full Docker suite and 100% coverage confirmed
+unchanged.
+
 **Status: early implementation (v2.20).** DOC FIX (TGT-277, found via
 a podchecker sweep during TGT-276's own documentation work): 6
 `lib/**/*.pod` files had 48 unresolved internal `L<name>` links (a
