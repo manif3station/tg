@@ -33,9 +33,7 @@ if ( @ARGV > 1 || ( @ARGV == 1 && $ARGV[0] ne '--all' && $ARGV[0] !~ /^\d+$/ ) )
     exit 2;
 }
 
-my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
-
-D2TG::Config::require_existing_base_dir_or_die($base_dir);
+my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 my $store = D2TG::Poller::Safe::open_store_or_die(
     skill_root    => File::Spec->catdir( $Bin, '..' ),

@@ -5815,3 +5815,59 @@ string substitution/print - no new shell invocation, no new file I/O,
 no new system/exec/backtick/piped-open/eval-STRING patterns, and no
 secret is newly exposed (confirmed above - the underlying die messages
 never embedded a bot token to begin with).
+
+## TGT-287: the resolve_alias_dir_or_die + require_existing_base_dir_or_die pairing was duplicated across 12 cli/*.pl scripts
+
+Found via a follow-up JOB-003/004 sweep after TGT-286: with
+`D2TG::OrDie::or_die` (TGT-269) already de-duplicating the individual
+eval/print-STDERR/exit(1) wrapper idiom for `resolve_alias_dir_or_die`
+and `require_existing_base_dir_or_die` separately, the *calling
+pattern* - call the first, then call the second on its result - was
+still hand-copied, byte-for-byte, across 12 of the 14 `cli/*.pl`
+scripts (`help.pl`/`tts.pl` don't open storage, correctly excluded).
+Confirmed via `grep`: every single one of the 12 had the exact 2-line
+sequence
+
+```perl
+my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
+
+D2TG::Config::require_existing_base_dir_or_die($base_dir);
+```
+
+adjacent, in that order, with no intervening logic - unlike the
+earlier `extract_db_flag_or_die` call, which had real per-script
+variation before it (some scripts parse additional CLI flags between
+extracting the `--db` flag and resolving the alias), so bundling all 3
+steps into one function (as originally scoped) would have broken that
+variation; only the 2-step pairing was safe and universal.
+
+**Fix**: added `D2TG::Config::Paths::resolve_and_require_base_dir_or_die`
+(forwarded via `D2TG::Config`, matching the established forwarder
+pattern) composing both calls. All 12 call sites replaced with a single
+line. Zero behavior change - same refusal messages, same exit codes,
+confirmed by re-running every affected script's own existing test file
+plus the full suite.
+
+`t/287-resolve-and-require-base-dir-helper.t` (new): an ownership-proof
+test confirming both `D2TG::Config` and `D2TG::Config::Paths` own the
+new function, plus one success-path regression check. The failure path
+is deliberately NOT re-tested here (it delegates straight to
+`D2TG::OrDie::or_die`, whose own `exit(1)`-on-failure behavior is
+already covered by `require_existing_base_dir_or_die`'s own tests and
+every `cli/*.pl` script's own startup-refusal test) - duplicating it
+would be exactly the class of redundancy this ticket exists to remove.
+
+While implementing, `D2TG::Config::Paths.pm`'s own embedded POD
+(previously kept inline after `__END__`, never extracted) was moved to
+a new `Paths.pod`, matching this session's established
+POD-in-a-separate-file convention, since this ticket substantively
+touched the module. `t/272-or-die-wrapper-pod-mentions-delegation.t`
+(a structural regression test predating this ticket) hardcoded
+`lib/D2TG/Config/Paths.pm` as the location of 2 of its 5 checked
+sections - updated to `Paths.pod` to match, confirmed still green.
+
+perlsec.pl-style vulnerability-scan audit: the new function is a pure
+2-line composition of two already-reviewed, already-audited existing
+calls - no new shell invocation, no new file I/O, no new system/exec/
+backtick/piped-open/eval-STRING patterns, no new external-input
+handling.

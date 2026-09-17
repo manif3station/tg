@@ -168,6 +168,7 @@ sub resolve_alias_dir                { return D2TG::Config::Paths::resolve_alias
 sub resolve_alias_dir_or_die         { return D2TG::Config::Paths::resolve_alias_dir_or_die(@_) }
 sub require_existing_base_dir        { return D2TG::Config::Paths::require_existing_base_dir(@_) }
 sub require_existing_base_dir_or_die { return D2TG::Config::Paths::require_existing_base_dir_or_die(@_) }
+sub resolve_and_require_base_dir_or_die { return D2TG::Config::Paths::resolve_and_require_base_dir_or_die(@_) }
 sub resolve_self_exec_path           { return D2TG::Config::Paths::resolve_self_exec_path(@_) }
 
 sub is_transient_error {

@@ -200,6 +200,18 @@ sub require_existing_base_dir_or_die {
     return D2TG::OrDie::or_die( \&require_existing_base_dir, $base_dir );
 }
 
+# TGT-287 (found via a scheduled JOB-003/004 sweep): resolve_alias_dir_or_die
+# immediately followed by require_existing_base_dir_or_die on its result was
+# hand-copied, byte-for-byte, across 12 cli/*.pl scripts - the same
+# duplication class TGT-203/230/269 already removed at the single-function
+# level. This composes both calls in the one place every caller already
+# needs them together.
+sub resolve_and_require_base_dir_or_die {
+    my (%args) = @_;
+    my $base_dir = resolve_alias_dir_or_die(%args);
+    return require_existing_base_dir_or_die($base_dir);
+}
+
 sub resolve_self_exec_path {
     my (%args) = @_;
 
@@ -215,79 +227,3 @@ sub _developer_dashboard_paths {
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-D2TG::Config::Paths - state/attachment/lock/heartbeat path resolution
-
-=head1 SYNOPSIS
-
-    my $db_path = D2TG::Config::Paths::state_db_path( base_dir => $dir );
-
-=head1 DESCRIPTION
-
-TGT-260: extracted out of D2TG::Config.pm (which had grown to 1131
-lines) - this is the largest cohesive cluster in that file: everywhere
-this skill's own state (message store, attachments, lock file,
-heartbeat) or a caller-supplied Developer Dashboard alias/TIRA_HOME
-gets resolved to a real directory on disk. D2TG::Config keeps thin
-forwarding subs with the same names for every existing caller, so no
-behavior changes.
-
-=head1 FUNCTIONS
-
-=head2 state_db_path(base_dir => $dir | default_root => $root)
-
-Resolves the SQLite message-store path, creating its parent directory
-if needed.
-
-=head2 attachments_dir(base_dir => $dir | default_root => $root)
-
-Resolves the attachments directory, creating it if needed.
-
-=head2 lock_path(base_dir => $dir | default_root => $root)
-
-Resolves the single-instance poller lock file path.
-
-=head2 heartbeat_path(base_dir => $dir | default_root => $root)
-
-Resolves the poller heartbeat file path.
-
-=head2 write_heartbeat($path, renamer => $optional_coderef)
-
-Atomically writes the current epoch time to C<$path> (temp file +
-C<rename>, never a partial write).
-
-=head2 heartbeat_age($path)
-
-Returns seconds since the heartbeat was last written, or C<undef> if
-the file is missing/unreadable/malformed.
-
-=head2 resolve_alias_dir(alias => $a, tira_home => $t, paths => $p)
-
-Resolves a C<--db>/C<-d>/C<D2TG_DB> alias (or a C<TIRA_HOME> fallback)
-to a real directory. Dies if neither is set, or the alias is unknown.
-
-=head2 resolve_alias_dir_or_die(%args)
-
-L</resolve_alias_dir>, printing to STDERR and exiting 1 on failure
-instead of propagating the die - a one-line forwarder onto the shared
-L<D2TG::OrDie/or_die> helper (TGT-269).
-
-=head2 require_existing_base_dir($base_dir)
-
-Dies unless C<$base_dir> already exists - never creates one.
-
-=head2 require_existing_base_dir_or_die($base_dir)
-
-L</require_existing_base_dir>, printing to STDERR and exiting 1 on
-failure instead of propagating the die - a one-line forwarder onto the
-shared L<D2TG::OrDie/or_die> helper (TGT-269).
-
-=head2 resolve_self_exec_path(bin_dir => $d, basename => $b, fallback => $f)
-
-Returns C<$bin_dir/$basename> if it exists, otherwise C<$fallback>.
-
-=cut

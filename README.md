@@ -1,15 +1,12 @@
 # tg
 
-**Status: early implementation (v2.25).** BUGFIX (TGT-286, found via a
-scheduled JOB-003 hourly bug hunt): `cli/poller.pl`'s two
-`D2TG::Config::Flags::bot_groups` calls were the only startup failure
-paths in this script never brought into the established clean-refusal
-convention (`... - refusing to start.` on STDERR, exit 1) - a malformed
-`--chat_id` shape or a duplicate/reused bot-token pair used to surface
-as a raw, uncaught Perl exception instead. Both calls now go through a
-new `bot_groups_or_die` wrapper matching every other failure path. No
-behavior change to exit codes or accepted inputs - only the STDERR
-message shape.
+**Status: early implementation (v2.26).** MAINTENANCE (TGT-287, found
+via a scheduled JOB-003/004 sweep): the `resolve_alias_dir_or_die` +
+`require_existing_base_dir_or_die` pairing was hand-copied across 12
+`cli/*.pl` scripts - now composed into one
+`D2TG::Config::resolve_and_require_base_dir_or_die` call. Zero behavior
+change. `D2TG::Config::Paths.pm`'s own embedded POD was also extracted
+to `Paths.pod`, matching established convention.
 
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s

@@ -19,8 +19,8 @@ use File::Spec;
 my @files = (
     [ 'lib/D2TG/Reply/Args.pod',   qr/=head2 extract_bot_flag_or_die/ ],
     [ 'lib/D2TG/Config/Flags.pod', qr/=head2 extract_db_flag_or_die/ ],
-    [ 'lib/D2TG/Config/Paths.pm',  qr/=head2 resolve_alias_dir_or_die/ ],
-    [ 'lib/D2TG/Config/Paths.pm',  qr/=head2 require_existing_base_dir_or_die/ ],
+    [ 'lib/D2TG/Config/Paths.pod', qr/=head2 resolve_alias_dir_or_die/ ],
+    [ 'lib/D2TG/Config/Paths.pod', qr/=head2 require_existing_base_dir_or_die/ ],
     [ 'docs/commands.md',          qr/`extract_db_flag_or_die` \(TGT-177\)/ ],
 );
 

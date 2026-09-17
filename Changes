@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+2.26  2026-09-17
+      - MAINTENANCE (TGT-287, found via a scheduled JOB-003/004 sweep
+        following up on TGT-286): the 2-line resolve_alias_dir_or_die
+        + require_existing_base_dir_or_die pairing was hand-copied,
+        byte-for-byte, across 12 cli/*.pl scripts (approve, attachment,
+        history, poller, reply, retry-download, retry-transcription,
+        send, status, text-only-replies, unread, whoami) - the same
+        duplication class TGT-203/230/269 already removed at the
+        single-function level. Added D2TG::Config::resolve_and_require_
+        base_dir_or_die composing both calls; all 12 sites now use it.
+        Zero behavior change. Also extracted D2TG::Config::Paths.pm's
+        own embedded POD (previously inline after __END__) to a new
+        Paths.pod, matching established convention, since this ticket
+        substantively touched that module.
+
 2.25  2026-09-17
       - BUGFIX (TGT-286, found via a scheduled JOB-003 hourly bug hunt):
         cli/poller.pl's two D2TG::Config::Flags::bot_groups calls (the

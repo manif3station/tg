@@ -26,9 +26,7 @@ my ( $bot_token, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 
-my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
-
-D2TG::Config::require_existing_base_dir_or_die($base_dir);
+my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 my ( $since, $until );
 {

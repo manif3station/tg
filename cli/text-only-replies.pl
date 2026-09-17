@@ -20,9 +20,7 @@ if (@ARGV) {
     exit 2;
 }
 
-my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
-
-D2TG::Config::require_existing_base_dir_or_die($base_dir);
+my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
 # this call was unwrapped, the same raw-crash/db-path-leak risk TGT-183
