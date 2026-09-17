@@ -5213,6 +5213,20 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-274: Tira upgrade-gate review (5.143 -> 5.144) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.143 to 5.144 mid-session. Ran `d2 tira.policy.undeclared`
+(empty result - no undeclared rules for this board to answer) and read
+the single Changes entry for 5.144 (TKT-1106: extends
+`tira.police.explain` to `card-duration`, `agent-still`, and
+`board-still`, which it previously refused by name - a pure internal
+explain-command improvement, extracting each rule's own real inputs
+the same way an earlier ticket extracted `discard-unexplained`'s own).
+Introduces no new event type, command, or board-visible concept this
+board's own 53 active + 10 declined policy set doesn't already cover.
+Conclusion: no policy change needed for this upgrade.
+
 ## TGT-273: edited_message branch had no redelivery-dedup guard at all
 
 Found via a scheduled JOB-004 improvement hunt, as a direct follow-up
