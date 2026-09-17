@@ -5693,3 +5693,75 @@ perlsec.pl-style vulnerability-scan audit: one new read-only
 new SQL, no new external-input handling) plus a plain string
 equality comparison. No new shell invocation, no new file I/O, no new
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-281: cli/poller.pl audited against the 500-line convention - no extraction, real code is already small
+
+Filed via TGT-280's own pipeline-continuity backlog check: with every
+`lib/D2TG/*.pm` module now under the board's 500-line-per-module cap,
+a `wc -l` sweep across `cli/*.pl` found `cli/poller.pl` at 766 lines -
+by far the largest script in `cli/`, never audited against the same
+convention (the board's own REQ-029 wording is scoped to "pm files",
+so this was a genuine new finding, not an existing gate violation).
+
+Read the file in full and mapped its own sections: shebang/`use`s/UTF-8
+setup, `--help`/argv parsing and validation, startup guards (lock
+acquisition, other-poller detection/classification/warning), storage
+open + admin-seed construction, bot/chat pair construction, the main
+`until ($shutting_down)` poll loop (per-pair poll, offset persistence,
+auto-retry downloads/transcriptions, heartbeat, vault/history prune,
+version-check restart), cleanup, and embedded POD.
+
+**Decision: no extraction.** Every remaining code block is either
+startup-sequencing (each step guards the next: parse -> lock -> store
+-> pairs, genuinely order-dependent) or the main loop's own inline
+sequencing (also order-dependent) - there is no cohesive cluster here
+that another caller would ever want to invoke independently, unlike
+the `D2TG::Poller::Dispatch`/`Safe` extractions (TGT-275/276), which
+had real external reuse (many `cli/*.pl` callers) driving the split.
+Every genuinely reusable behavior this script touches is already
+delegated to `lib/D2TG::` (`Config`, `Lock`, `Store`, `Telegram`,
+`Poller::Safe`, `Download`, `Transcribe`, `Transcribe::Retry`) and
+independently unit-tested there - confirmed via a grep sweep showing
+`find_other_pollers`/`classify_other_poller_token` (the one block that
+looked like a plausible extraction candidate, the other-poller
+detection/warning logic at lines 203-260) already live in `D2TG::Lock`
+with their own dedicated tests (`t/82-orphaned-poller-detection.t`,
+`t/105-orphaned-poller-token-crosscheck.t`); what remains in
+`poller.pl` at that block is pure STDERR-message orchestration tied to
+this one entrypoint's own output conventions, not reusable logic.
+Extracting print-statement glue into a `lib/` module purely to reduce
+a raw line count would also cut against this ticket's own explicit
+design constraint: `cli/poller.pl` must stay a thin, runnable
+entrypoint, not become a library module itself.
+
+**The raw 766-line count is also misleading**, in the same way TGT-280
+found for `D2TG::Telegram.pm`'s embedded POD - here the inflation comes
+from extensive inline incident-documentation comments instead. A line
+breakdown of the pre-POD portion (lines 1-546): 254 comment-only lines,
+43 blank lines, leaving only **249 actual code lines** - the embedded
+POD (`=head1 NAME` through `=cut`, lines 548-766) accounts for a
+further 220 lines on top of that. So of the raw 766, only ~249 are
+real, executable code - well under any reasonable per-file cap, module
+or script. This confirms the general lesson from TGT-280 generalizes
+beyond embedded POD specifically: **always check what raw line count
+actually consists of (POD, comments, blank lines vs. real code) before
+designing a functional split** - a `wc -l` sweep is the right first
+signal to find candidates, but it is not itself proof that a genuine
+decomposition problem exists.
+
+24 existing test files already exercise `cli/poller.pl`'s startup and
+runtime behavior at the integration/subprocess level (e.g.
+`t/82-orphaned-poller-detection.t`, `t/183-poller-store-startup-crash.t`,
+`t/234-multi-bot-admin-seeding.t`) - there is no testability gap that
+extraction would close either.
+
+`t/281-poller-cli-line-audit-documented.t` (new): the TDD equivalent
+for this documentation-outcome ticket - asserts the real (non-comment,
+non-blank, non-POD) code line count stays under 500 (a regression guard
+against this script quietly growing past the cap while staying under
+the raw-line radar via comment density) and asserts this exact section
+exists in `docs/POLICIES.md`, matching this session's own
+investigation-write-up convention (TGT-274, TGT-279's `D2TG::Telegram.pm`
+survey). No functional code changed; no `.pm`/`.pod` files touched, so
+REQ-028/029 (POD-split, 500-line-cap audits) are not applicable to this
+ticket's own diff.

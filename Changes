@@ -1,5 +1,21 @@
 Revision history for the tg skill
 
+2.24  2026-09-17
+      - MAINTENANCE (TGT-281, own follow-up filed by TGT-280's
+        pipeline-continuity backlog check): audited cli/poller.pl
+        (766 lines, never checked against the board's 500-line
+        convention since REQ-029 is scoped to .pm files) - decided
+        against extraction. Every remaining block is order-dependent
+        startup/shutdown sequencing with no reusable cluster; every
+        genuinely reusable behavior is already delegated to lib/D2TG::
+        and independently unit-tested there. The raw line count is
+        also misleading: 254 comment lines + 43 blank + 220 lines of
+        embedded POD leave only 249 actual code lines - well under any
+        reasonable cap. Full rationale in docs/POLICIES.md. No
+        functional change; new regression test
+        t/281-poller-cli-line-audit-documented.t locks in both the
+        real-code line count and the documented rationale.
+
 2.23  2026-09-17
       - MAINTENANCE (TGT-280, own follow-up filed by TGT-279's
         survey): D2TG::Store.pm's _ensure_schema (355 lines, its own
