@@ -1,5 +1,29 @@
 Revision history for the tg skill
 
+2.22  2026-09-17
+      - MAINTENANCE (TGT-279, own follow-up filed by TGT-278's survey):
+        continued D2TG::Store.pm's decomposition - extracted the
+        access-control cluster (is_allowed/add_pending/approve/
+        pending_chat_ids/seed_admin) into a new
+        D2TG::Store::AccessControl module and the sent-reply
+        audit-trail cluster (record_sent_text/record_sent_voice/
+        text_only_replies/is_recent_duplicate_reply) into a new
+        D2TG::Store::SentReplyAudit module, both mirroring
+        D2TG::Store::RetryQueue/History's own established
+        DBI-handle-wrapper precedent. D2TG::Store.pm is now 574 lines
+        (down from 720) - still marginally over the 500-line cap,
+        entirely due to _ensure_schema (355 lines) - a genuinely
+        different, riskier kind of extraction than the independent
+        DBI-handle-wrapper clusters, needing its own careful design
+        pass. Surveyed D2TG::Telegram.pm (547 lines) but did not
+        extract it - its 16 functions are all tightly coupled to the
+        HTTP transport, a different shape from Store.pm's independent
+        methods. Filed follow-up TGT-280 for both. New
+        t/279-store-access-control-module.t and
+        t/279-store-sent-reply-audit-module.t prove both new modules'
+        ownership. Zero behavior change - full Docker suite (210
+        files, 2344 tests) and 100% coverage confirmed unchanged.
+
 2.21  2026-09-17
       - MAINTENANCE (TGT-278, found via a wc -l sweep run as TGT-277's
         own pipeline-continuity backlog check): D2TG::Store.pm was 1378

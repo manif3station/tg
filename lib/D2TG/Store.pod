@@ -28,7 +28,7 @@ the arrayref is seeded allowed. As of TGT-234, an arrayref element may
 also be a hashref C<{ chat_id => $id, bot_key => $token }> - each is
 seeded under that specific C<bot_key> rather than the default sentinel,
 which is what C<cli/poller.pl>'s own real multi-bot startup now does
-(see C<_seed_admin> and L<is_allowed()|/is_allowed($chat_id, $bot_key)>) so the admin is auto-approved
+(see C<seed_admin> and L<D2TG::Store::AccessControl/is_allowed($chat_id, $bot_key)>) so the admin is auto-approved
 under every bot it's actually configured to poll with, not only under
 the single-bot default.
 
@@ -76,50 +76,15 @@ re-opening after a failed attempt migrates cleanly from scratch rather
 than working against a half-migrated table. Already-migrated databases
 are a no-op (the C<PRAGMA> check finds C<bot_key> already present).
 
-=head2 is_allowed($chat_id, $bot_key)
+=head2 Access control
 
-True if C<$chat_id> is in the allow-list under C<$bot_key> (TGT-098,
-default C<DEFAULT_BOT_KEY> - the single-bot/unscoped sentinel, so every
-existing caller that never passes C<$bot_key> is unaffected). A Telegram
-group shared by more than one of this skill's configured bots has the same
-C<$chat_id> for each - passing the actual bot's own key here is what
-stops an approval granted under one bot from silently applying to
-another.
-
-=head2 add_pending($chat_id, $bot_key)
-
-Records C<$chat_id> as pending approval under C<$bot_key> (TGT-098,
-default C<DEFAULT_BOT_KEY>). Idempotent. Returns true the first time a
-given C<($chat_id, $bot_key)> pair is recorded, false on every subsequent
-call for the same pair (already pending) - this is what lets a caller
-notify only once per new sender per bot.
-
-=head2 approve($chat_id, $bot_key)
-
-Moves C<($chat_id, $bot_key)> (TGT-098, default C<DEFAULT_BOT_KEY>) from
-C<pending> to C<allow_list>, atomically. Returns true if it was genuinely pending
-under that C<$bot_key> and is now approved; returns false (without
-error) if it was not pending under that C<$bot_key> - already approved
-under it, or never seen under it (a chat pending under a *different*
-bot_key doesn't count). If anything inside the transaction throws (a
-transient DB error), the transaction is always rolled back before the
-error is re-thrown, so the Store's connection is never left in a
-dangling open-transaction state - a subsequent C<approve> call on the
-same object still works normally.
-
-=head2 pending_chat_ids(bot_key => $bot_key)
-
-Returns the list of chat ids currently pending, ordered. C<bot_key> is
-optional (TGT-215, found via a scheduled improvement hunt, matching the
-same optional-C<bot_key>-filter pattern every sibling accessor on this
-table already uses) - when given, only that bot's pending chat ids are
-returned. Omitting it returns every pending chat id regardless of bot,
-C<DISTINCT> (a chat_id pending under more than one bot - the exact
-scenario the C<pending> table's own composite C<PRIMARY KEY (chat_id,
-bot_key)> exists to allow, TGT-098 - is listed exactly once, not once
-per bot); this keeps the return shape unchanged from before this fix,
-which only added C<DISTINCT> to close a genuine duplicate-row bug for
-that case.
+is_allowed/add_pending/approve/pending_chat_ids (TGT-279, own
+follow-up filed by TGT-278's survey) moved into
+L<D2TG::Store::AccessControl>, mirroring the C<Message history>
+section above's own precedent. Thin forwarders kept here so every
+existing caller keeps working unchanged via
+C<$store-E<gt>method_name(...)>. Full documentation lives in
+C<D2TG/Store/AccessControl.pod>.
 
 =head2 get_offset($bot_key)
 
@@ -197,7 +162,7 @@ C<media_kind>, C<caption_note>, C<error>, C<created_at>, C<local_path>
 successful download - see L<mark_failed_download_downloaded()|/mark_failed_download_downloaded($id, $local_path)>).
 C<bot_key> is optional - when given, only that bot's own queued
 entries are returned; omitting it lists every bot's, each row naming
-its own C<bot_key> (matching L<pending_chat_ids()|/pending_chat_ids(bot_key =E<gt> $bot_key)>' own established
+its own C<bot_key> (matching L<D2TG::Store::AccessControl/pending_chat_ids(bot_key =E<gt> $bot_key)>' own established
 optional-C<bot_key>-filter pattern). C<cli/retry-download.pl> lists and
 acts on this.
 
@@ -314,98 +279,15 @@ every automatic retry attempt that leaves the row still queued
 (success removes the row instead, via L<remove_failed_transcription()|/remove_failed_transcription($id)>,
 and never needs this stamped at all).
 
-=head2 record_sent_text($chat_id, $text_message_id, bot_key => $key, text => $text)
+=head2 Sent-reply audit trail
 
-Records that a text reply was sent (TGT-105) - C<D2TG::Reply::send_reply>
-calls this immediately after C<send_message> succeeds, before synthesis
-or C<send_voice> can fail. C<INSERT OR IGNORE>: a redundant re-record of
-the same C<(chat_id, bot_key, text_message_id)> never clobbers a
-C<voice_message_id> already recorded for it back to C<NULL>. C<bot_key>
-defaults to C<DEFAULT_BOT_KEY> (the single-bot sentinel) when omitted -
-a Codex review finding, mirroring TGT-098's own C<allow_list>/C<pending>
-scoping, since a Telegram group shared by more than one configured bot
-means C<chat_id> alone isn't unique across bots. C<text> (TGT-114) is
-the reply's own text, stored so L<is_recent_duplicate_reply()|/is_recent_duplicate_reply($chat_id, $text, bot_key =E<gt> $key, window_seconds =E<gt> $n)> can check
-it later.
-
-=head2 record_sent_voice($chat_id, $text_message_id, $voice_message_id, bot_key => $key)
-
-Fills in the C<voice_message_id> for an existing C<sent_replies> row
-(TGT-105) - a row whose C<voice_message_id> is still C<NULL> IS the
-text-only condition C<text_only_replies> reports, so this is what
-clears that flag once the voice half actually succeeds. Called by both
-C<D2TG::Reply::send_reply> (the normal path) and C<resend_voice>
-(TGT-109's own recovery path, clearing a flag left by an earlier failed
-attempt). Warns on STDERR (non-fatal - the voice send itself already
-succeeded and must not be treated as a failure) if no matching row
-exists for the given C<(chat_id, bot_key, text_message_id)> - a Codex
-review finding: this used to be a silent no-op, which could hide the
-narrow-window persistence gap documented on C<text_only_replies> below.
-
-=head2 text_only_replies(bot_key => $key)
-
-Returns every reply whose text was sent but whose voice was never
-confirmed sent (TGT-105) - each a hashref of C<chat_id>, C<bot_key>,
-C<text_message_id>, C<created_at>. Without C<bot_key>, lists every
-configured bot's flagged replies (each row naming its own C<bot_key>) -
-for a human operator auditing the whole board, via C<cli/text-only-replies.pl>.
-With C<bot_key>, scopes to exactly that bot - C<cli/reply.pl>'s
-C<--voice-only> uses this so it can never select and clear a
-I<different> bot's still-genuinely-text-only flag for a chat_id shared
-across bots (a Codex review finding, the same TGT-098 lesson).
-
-B<Known limitation> (accepted, not solved, per a Codex review):
-recording the text send and Telegram's own C<sendMessage> succeeding
-are two separate, non-atomic steps - a process kill or a database error
-in that narrow window leaves a genuinely-sent text message with no row
-at all, invisible here if its voice half then also fails. This mirrors
-TGT-104's own accepted best-effort tradeoff for its queue write; it is
-a substantial improvement over no record at all, not a guarantee.
-
-=head2 is_recent_duplicate_reply($chat_id, $text, bot_key => $key, window_seconds => $n)
-
-Returns true if the exact same C<$text> was already sent to C<$chat_id>
-under C<$bot_key> (default C<DEFAULT_BOT_KEY>) within the last
-C<window_seconds> (default 10, must be a non-negative number - a
-Codex review finding, a negative value would otherwise build a
-nonsensical SQLite date modifier) (TGT-114). C<D2TG::Reply::send_reply>
-checks this before calling C<send_message> at all, and refuses (dies)
-rather than delivering an identical message twice - closing a real gap
-where an agent accidentally re-running the same C<d2 tg.reply> command,
-or a caller retrying after a synthesis/C<send_voice> failure (the
-message TGT-083 already reports loudly), had no way to avoid sending
-the same text twice. Scoped by C<bot_key> for the same reason
-C<text_only_replies> is: a Telegram group shared by more than one
-configured bot must never let one bot's own recent send be mistaken for
-a duplicate of a different bot's identical text to the same C<chat_id>.
-
-Known, accepted limitations (Codex review findings):
-
-=over 4
-
-=item * This does not protect against a C<send_message> call whose own
-request errors or times out ambiguously - if Telegram actually
-delivered the text but the response never reached this process,
-C<record_sent_text> never runs, so a subsequent retry sees no recorded
-match and sends again. Only a I<confirmed> prior success is ever
-checked against; an ambiguous prior failure is a different, unprotected
-case, not something this feature claims to solve.
-
-=item * This is a best-effort, sequential check, not an atomic claim -
-two truly concurrent C<send_reply> calls for the same text could both
-pass the check before either records its own send. Acceptable for this
-skill's actual usage pattern (a human-paced CLI tool, one operator
-issuing one command at a time), not a guarantee under real concurrency.
-
-=item * C<created_at>/the window comparison are both second-granular
-(SQLite's C<CURRENT_TIMESTAMP> and C<datetime()> discard fractional
-seconds), so the true elapsed time between a check and the original
-send can exceed the stated C<window_seconds> by up to slightly under a
-second. Not corrected for, since sub-second precision isn't meaningful
-for this feature's actual purpose (catching an operator-paced retry
-seconds later, not a strict timing guarantee).
-
-=back
+record_sent_text/record_sent_voice/text_only_replies/
+is_recent_duplicate_reply (TGT-279, own follow-up filed by TGT-278's
+survey) moved into L<D2TG::Store::SentReplyAudit>, mirroring the
+C<Access control>/C<Message history> sections above's own precedent.
+Thin forwarders kept here so every existing caller keeps working
+unchanged via C<$store-E<gt>method_name(...)>. Full documentation
+lives in C<D2TG/Store/SentReplyAudit.pod>.
 
 =head2 prune_history(retention_days => $days = 90, failed_queue_retention_days => $days2 = 30)
 

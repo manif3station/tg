@@ -1,0 +1,53 @@
+=head1 NAME
+
+D2TG::Store::AccessControl - allow-list / pending-approval storage for the tg skill
+
+=head1 SYNOPSIS
+
+    my $access = D2TG::Store::AccessControl->new( dbh => $dbh );
+    $access->is_allowed($chat_id);
+    $access->add_pending($chat_id);
+
+=head1 DESCRIPTION
+
+TGT-279 (own follow-up filed by TGT-278's own survey): the access-
+control cluster - is_allowed/add_pending/approve/pending_chat_ids/
+seed_admin - moved out of D2TG::Store, mirroring
+D2TG::Store::RetryQueue/History's own established precedent: built
+once in D2TG::Store::new, thin forwarders kept there for every
+existing caller, zero behavior change.
+
+=head1 METHODS
+
+=head2 seed_admin($admin_chat_id, $bot_key)
+
+Seeds C<$admin_chat_id> into the allow-list (C<INSERT OR IGNORE>, a
+no-op if already present). Called by D2TG::Store::new for each
+C<admin_chat_id> given to it.
+
+=head2 is_allowed($chat_id, $bot_key)
+
+Returns true if C<$chat_id> (scoped by C<$bot_key>, defaulting to the
+single-bot sentinel) is in the allow-list.
+
+=head2 add_pending($chat_id, $bot_key)
+
+Records C<$chat_id> as pending approval (C<INSERT OR IGNORE>). Returns
+true only if a new row was actually inserted (false if it was already
+pending), so a caller can tell "first time seen" from "already
+queued".
+
+=head2 approve($chat_id, $bot_key)
+
+Atomically moves C<$chat_id> from pending to the allow-list - deletes
+the pending row and inserts the allow-list row inside one transaction,
+rolling back cleanly on any failure. Returns false (no-op, transaction
+rolled back) if C<$chat_id> was never pending.
+
+=head2 pending_chat_ids(bot_key => $bot_key)
+
+Returns the list of chat ids currently pending approval. C<bot_key> is
+optional (TGT-215) - omitting it lists every bot's own pending chat
+ids (deduplicated); passing one scopes to that bot only.
+
+=cut

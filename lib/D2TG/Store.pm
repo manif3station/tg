@@ -6,6 +6,8 @@ use DBI;
 use Digest::SHA qw(sha256_hex);
 use D2TG::Store::RetryQueue;
 use D2TG::Store::History;
+use D2TG::Store::AccessControl;
+use D2TG::Store::SentReplyAudit;
 
 # TGT-101: the single-bot/unscoped sentinel for allow_list/pending's
 # bot_key column (TGT-098) - named once here rather than repeated as a
@@ -58,14 +60,26 @@ sub new {
     # TGT-257's own retry_queue precedent above.
     $self->{history} = D2TG::Store::History->new( dbh => $dbh );
 
+    # TGT-279: access-control storage now lives in
+    # D2TG::Store::AccessControl - built once here and reused by every
+    # forwarding method below, same $dbh, no behavior change for any
+    # existing caller, mirroring TGT-257/278's own precedent above.
+    $self->{access} = D2TG::Store::AccessControl->new( dbh => $dbh );
+
+    # TGT-279: sent-reply audit-trail storage now lives in
+    # D2TG::Store::SentReplyAudit - built once here and reused by every
+    # forwarding method below, same $dbh, no behavior change for any
+    # existing caller, mirroring TGT-257/278's own precedent above.
+    $self->{sent_reply_audit} = D2TG::Store::SentReplyAudit->new( dbh => $dbh );
+
     if ( defined $args{admin_chat_id} ) {
         my @ids = ref $args{admin_chat_id} eq 'ARRAY' ? @{ $args{admin_chat_id} } : ( $args{admin_chat_id} );
         for my $id (@ids) {
             if ( ref $id eq 'HASH' ) {
-                $self->_seed_admin( $id->{chat_id}, $id->{bot_key} );
+                $self->{access}->seed_admin( $id->{chat_id}, $id->{bot_key} );
             }
             else {
-                $self->_seed_admin($id);
+                $self->{access}->seed_admin($id);
             }
         }
     }
@@ -423,75 +437,16 @@ sub _ensure_schema {
     return;
 }
 
-sub _seed_admin {
-    my ( $self, $admin_chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
-
-    $self->{dbh}->do(
-        'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
-        undef, $admin_chat_id, $bot_key,
-    );
-
-    return;
-}
-
-sub is_allowed {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
-
-    my ($found) = $self->{dbh}->selectrow_array(
-        'SELECT 1 FROM allow_list WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
-    );
-
-    return $found ? 1 : 0;
-}
-
-sub add_pending {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
-
-    my $inserted = $self->{dbh}->do(
-        'INSERT OR IGNORE INTO pending (chat_id, bot_key) VALUES (?, ?)',
-        undef, $chat_id, $bot_key,
-    );
-
-    return $inserted && $inserted ne '0E0' ? 1 : 0;
-}
-
-sub approve {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
-
-    my $dbh = $self->{dbh};
-
-    $dbh->begin_work;
-
-    my $result = eval {
-        my $deleted = $dbh->do(
-            'DELETE FROM pending WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
-        );
-
-        if ( $deleted == 0 ) {
-            $dbh->rollback;
-            return 0;
-        }
-
-        $dbh->do(
-            'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
-            undef, $chat_id, $bot_key,
-        );
-        $dbh->commit;
-        return 1;
-    };
-    my $error = $@;
-
-    if ($error) {
-        eval { $dbh->rollback };
-        die $error;
-    }
-
-    return $result;
-}
+# TGT-279: access-control storage moved into D2TG::Store::AccessControl
+# (built once in new() above, sharing this same $dbh) - these four
+# methods are now thin forwarders so every existing caller keeps
+# working unchanged via $store->method_name(...), mirroring TGT-257/278's
+# own retry_queue/history forwarders. See D2TG::Store::AccessControl's
+# own POD for the full behavior each one documents.
+sub is_allowed        { my $self = shift; return $self->{access}->is_allowed(@_) }
+sub add_pending       { my $self = shift; return $self->{access}->add_pending(@_) }
+sub approve           { my $self = shift; return $self->{access}->approve(@_) }
+sub pending_chat_ids  { my $self = shift; return $self->{access}->pending_chat_ids(@_) }
 
 sub _offset_meta_key {
     my ($bot_key) = @_;
@@ -519,32 +474,6 @@ sub set_offset {
     );
 
     return;
-}
-
-sub pending_chat_ids {
-    my ( $self, %args ) = @_;
-
-    # TGT-215 (found via a scheduled JOB-004 improvement hunt): the sole
-    # pending/allow_list accessor never updated for TGT-098's bot_key
-    # migration - added an optional bot_key filter matching every
-    # sibling accessor's own established pattern. The unscoped case
-    # deliberately keeps its existing flat chat_id-list return shape
-    # (t/05-access-control.t/t/06-approve.t/t/111-reaction-access-
-    # control.t all depend on it) - only adding DISTINCT so a chat_id
-    # pending under multiple bots is never listed more than once.
-    if ( defined $args{bot_key} ) {
-        my $rows = $self->{dbh}->selectcol_arrayref(
-            'SELECT chat_id FROM pending WHERE bot_key = ? ORDER BY chat_id',
-            undef, $args{bot_key},
-        );
-        return @$rows;
-    }
-
-    my $rows = $self->{dbh}->selectcol_arrayref(
-        'SELECT DISTINCT chat_id FROM pending ORDER BY chat_id'
-    );
-
-    return @$rows;
 }
 
 # TGT-278: message-history storage moved into D2TG::Store::History
@@ -583,92 +512,17 @@ sub failed_transcriptions_due_for_retry { my $self = shift; return $self->{retry
 sub mark_failed_transcription_retried   { my $self = shift; return $self->{retry_queue}->mark_failed_transcription_retried(@_) }
 sub has_failed_transcription            { my $self = shift; return $self->{retry_queue}->has_failed_transcription(@_) }
 
-sub record_sent_text {
-    my ( $self, $chat_id, $text_message_id, %args ) = @_;
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    # INSERT OR IGNORE: a redundant re-record of the same (chat_id,
-    # bot_key, text_message_id) - e.g. a retried send_reply call after a
-    # prior partial failure - must never clobber a voice_message_id
-    # already recorded for it back to NULL.
-    $self->{dbh}->do(
-        'INSERT OR IGNORE INTO sent_replies (chat_id, bot_key, text_message_id, text) VALUES (?, ?, ?, ?)',
-        undef, $chat_id, $bot_key, $text_message_id, $args{text},
-    );
-
-    return;
-}
-
-sub record_sent_voice {
-    my ( $self, $chat_id, $text_message_id, $voice_message_id, %args ) = @_;
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    my $rows = $self->{dbh}->do(
-        'UPDATE sent_replies SET voice_message_id = ? WHERE chat_id = ? AND bot_key = ? AND text_message_id = ?',
-        undef, $voice_message_id, $chat_id, $bot_key, $text_message_id,
-    );
-
-    # Codex review finding: a matching text row not existing (a
-    # bot_key mismatch, or the text row itself never got recorded -
-    # e.g. a crash between send_message succeeding and record_sent_text
-    # running) used to be a silent no-op, hiding exactly the kind of
-    # persistence gap this feature exists to surface. Not fatal - the
-    # voice send itself already succeeded and must not be undone or
-    # treated as a failure - but worth a loud note rather than silence.
-    warn "D2TG::Store::record_sent_voice: no matching sent_replies row for "
-      . "chat_id=$chat_id bot_key='$bot_key' text_message_id=$text_message_id "
-      . "- voice sent but the text-only audit trail could not be updated\n"
-      if !$rows || $rows eq '0E0';
-
-    return;
-}
-
-sub text_only_replies {
-    my ( $self, %args ) = @_;
-
-    # bot_key (Codex review finding): optional filter, so a caller that
-    # needs to act on exactly one bot's own flags (cli/reply.pl
-    # --voice-only, so it never selects and clears a DIFFERENT bot's
-    # flag for the same chat_id) can scope the query; omitting it lists
-    # every bot's flagged replies, each row naming its own bot_key, for
-    # a human operator auditing the whole board.
-    if ( defined $args{bot_key} ) {
-        return $self->{dbh}->selectall_arrayref(
-            'SELECT chat_id, bot_key, text_message_id, created_at FROM sent_replies
-             WHERE voice_message_id IS NULL AND bot_key = ? ORDER BY chat_id, text_message_id',
-            { Slice => {} }, $args{bot_key},
-        );
-    }
-
-    return $self->{dbh}->selectall_arrayref(
-        'SELECT chat_id, bot_key, text_message_id, created_at FROM sent_replies
-         WHERE voice_message_id IS NULL ORDER BY chat_id, bot_key, text_message_id',
-        { Slice => {} }
-    );
-}
-
-sub is_recent_duplicate_reply {
-    my ( $self, $chat_id, $text, %args ) = @_;
-    my $bot_key        = $args{bot_key}        // DEFAULT_BOT_KEY;
-    my $window_seconds = $args{window_seconds} // 10;
-
-    # Codex review finding: a negative window_seconds silently builds a
-    # nonsensical SQLite modifier ("--10 seconds") that would otherwise
-    # make the comparison behave unpredictably rather than obviously
-    # wrong. A non-numeric value is rejected the same way.
-    die "D2TG::Store::is_recent_duplicate_reply: window_seconds must be a non-negative number\n"
-      unless $window_seconds =~ /^\d+(?:\.\d+)?$/;
-
-    my $row = $self->{dbh}->selectrow_hashref(
-        "SELECT 1 FROM sent_replies
-         WHERE chat_id = ? AND bot_key = ? AND text = ?
-           AND created_at >= datetime('now', ?)
-         LIMIT 1",
-        undef, $chat_id, $bot_key, $text, "-$window_seconds seconds",
-    );
-
-    return $row ? 1 : 0;
-}
+# TGT-279: sent-reply audit-trail storage moved into
+# D2TG::Store::SentReplyAudit (built once in new() above, sharing this
+# same $dbh) - these four methods are now thin forwarders so every
+# existing caller keeps working unchanged via $store->method_name(...),
+# mirroring TGT-257/278's own retry_queue/history forwarders. See
+# D2TG::Store::SentReplyAudit's own POD for the full behavior each one
+# documents.
+sub record_sent_text          { my $self = shift; return $self->{sent_reply_audit}->record_sent_text(@_) }
+sub record_sent_voice         { my $self = shift; return $self->{sent_reply_audit}->record_sent_voice(@_) }
+sub text_only_replies         { my $self = shift; return $self->{sent_reply_audit}->text_only_replies(@_) }
+sub is_recent_duplicate_reply { my $self = shift; return $self->{sent_reply_audit}->is_recent_duplicate_reply(@_) }
 
 # TGT-235: unlike D2TG::Download::prune_vault, which already caps the
 # attachments vault's own disk usage by byte count, the messages and

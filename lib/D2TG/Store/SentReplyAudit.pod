@@ -1,0 +1,50 @@
+=head1 NAME
+
+D2TG::Store::SentReplyAudit - sent-reply audit-trail storage for the tg skill
+
+=head1 SYNOPSIS
+
+    my $audit = D2TG::Store::SentReplyAudit->new( dbh => $dbh );
+    $audit->record_sent_text( $chat_id, $text_message_id, text => $text );
+
+=head1 DESCRIPTION
+
+TGT-279 (own follow-up filed by TGT-278's own survey): the sent-reply
+audit-trail cluster - record_sent_text/record_sent_voice/
+text_only_replies/is_recent_duplicate_reply - moved out of
+D2TG::Store, mirroring D2TG::Store::RetryQueue/History/AccessControl's
+own established precedent: built once in D2TG::Store::new, thin
+forwarders kept there for every existing caller, zero behavior change.
+
+=head1 METHODS
+
+=head2 record_sent_text($chat_id, $text_message_id, bot_key => $key, text => $text)
+
+Records that a text reply was sent (TGT-105) - C<D2TG::Reply::send_reply>
+calls this immediately after C<send_message> succeeds, before
+synthesis or C<send_voice> can fail. C<INSERT OR IGNORE>: a redundant
+re-record of the same C<(chat_id, bot_key, text_message_id)> (e.g. a
+retried C<send_reply> call after a prior partial failure) must never
+clobber a C<voice_message_id> already recorded for it back to C<NULL>.
+
+=head2 record_sent_voice($chat_id, $text_message_id, $voice_message_id, bot_key => $key)
+
+Stamps the voice half of a previously-recorded text reply as sent.
+Warns (does not die) if no matching row exists - the voice send itself
+already succeeded and must not be undone or treated as a failure, but
+a missing audit row is worth surfacing loudly rather than silently.
+
+=head2 text_only_replies(bot_key => $key)
+
+Lists replies whose text half was recorded but whose voice half never
+was (C<voice_message_id IS NULL>). C<bot_key> is optional - omitting
+it lists every bot's own flagged replies.
+
+=head2 is_recent_duplicate_reply($chat_id, $text, bot_key => $key, window_seconds => $n)
+
+Returns true if the exact same C<$text> was already sent to this
+C<chat_id>/C<bot_key> within the last C<window_seconds> (default 10).
+Dies if C<window_seconds> is negative or non-numeric, rather than
+silently building a nonsensical SQLite date modifier.
+
+=cut

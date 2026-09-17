@@ -5213,6 +5213,74 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-279: continuing D2TG::Store.pm decomposition (720 -> 574 lines)
+
+Own follow-up filed by TGT-278's survey. Extracted the 2 remaining
+independent-method clusters identified by that survey: access control
+(`is_allowed`/`add_pending`/`approve`/`pending_chat_ids`, plus
+`_seed_admin` renamed to the now-public `seed_admin` since it's called
+externally from `D2TG::Store::new`) into a new
+`D2TG::Store::AccessControl` module, and sent-reply audit trail
+(`record_sent_text`/`record_sent_voice`/`text_only_replies`/
+`is_recent_duplicate_reply`) into a new `D2TG::Store::SentReplyAudit`
+module - both mirroring `D2TG::Store::RetryQueue`/`History`'s own
+established DBI-handle-wrapper precedent exactly. New
+`t/279-store-access-control-module.t` and
+`t/279-store-sent-reply-audit-module.t` prove both modules' ownership
+via `can()` - both confirmed genuinely red pre-fix. Zero behavior
+change - the full pre-existing test suite passed unchanged with no
+test edits needed, matching TGT-278's own extraction (unlike TGT-275/
+276's, which needed structural-regression test updates).
+
+**A deliberate small behavior-adjacent change, caught and verified
+safe**: `record_sent_voice`'s warning text and
+`is_recent_duplicate_reply`'s die message both had their
+`D2TG::Store::` prefix changed to `D2TG::Store::SentReplyAudit::` to
+match the function's new home. Checked both against the existing test
+suite before treating this as safe: `t/84-text-only-reply-audit.t`
+only matches the substring `no matching sent_replies row` (not the
+full module-qualified prefix), and no test anywhere matches the
+`window_seconds must be a non-negative number` die text at all - so
+this is not a masked behavior change to any real caller.
+
+Surveyed `D2TG::Telegram.pm` (547 lines) as this ticket's own third
+deliverable, but did not extract it: its 16 functions (`_call`,
+`get_me`/`get_updates`/`get_file`/`file_download_url` for inbound;
+`send_message`/`send_voice`/`send_photo`/`send_document`/`_send_file`/
+`_validate_reply_to_message_id`/`_append_reply_to_message_id_field`
+for outbound) are all tightly coupled to the shared HTTP transport
+(`$self->{ua}`/`{token}`/`_call`) - a genuinely different shape from
+`D2TG::Store`'s independent, `$dbh`-only methods. A candidate split
+(an outbound-send cluster into `D2TG::Telegram::Send`) was identified
+but deliberately deferred rather than rushed, matching this session's
+own precedent of not forcing a design decision that needs its own
+careful pass.
+
+`D2TG::Store.pm` is now 574 lines - down from 720, but still
+marginally over the 500-line cap, entirely due to `_ensure_schema`
+(355 lines) - a single large schema-migration function tightly coupled
+to `new()`, not a set of independent methods sharing only `$dbh` like
+every prior extraction this session. Its own migrations are
+sequential and order-dependent (e.g. the TGT-232 bot_key migration
+reads columns added by earlier `ALTER TABLE` calls), so any future
+extraction must preserve exact call order, not just move code - a
+genuinely different, riskier kind of change than the DBI-handle-wrapper
+pattern used for every cluster extracted so far. Filed follow-up
+`TGT-280` for both `_ensure_schema` and `D2TG::Telegram.pm`. Full
+Docker suite (210 files, 2344 tests) passes unchanged; 100% statement
++ subroutine coverage confirmed on `D2TG::Store`,
+`D2TG::Store::AccessControl`, and `D2TG::Store::SentReplyAudit`.
+Podchecker clean on both new modules' own `.pod` files and on
+`Store.pod` after updating 2 of its own cross-references that pointed
+at sections which had just moved to `AccessControl.pod`.
+
+perlsec.pl-style vulnerability-scan audit: a pure code-relocation
+refactor (both clusters moved verbatim into new modules following the
+already-established DBI-handle-wrapper pattern) - no new external-input
+handling, no new shell/file/SQL surface; the extracted methods still
+use the same parameterized DBI calls and the same transaction/rollback
+logic (`approve`) they always did.
+
 ## TGT-278: D2TG::Store.pm decomposition (1378 -> 720 lines) and its own podchecker cleanup
 
 Filed via TGT-277's own pipeline-continuity backlog check: with the

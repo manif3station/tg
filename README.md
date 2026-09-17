@@ -1,5 +1,19 @@
 # tg
 
+**Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
+follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s
+access-control cluster into a new `D2TG::Store::AccessControl` module
+and its sent-reply audit-trail cluster into a new
+`D2TG::Store::SentReplyAudit` module, both mirroring
+`D2TG::Store::RetryQueue`/`History`'s own precedent. `D2TG::Store.pm`
+is now 574 lines (down from 720) - still marginally over the cap,
+entirely due to `_ensure_schema` (355 lines), a genuinely different
+kind of extraction needing its own design pass. Surveyed but did not
+extract `D2TG::Telegram.pm` (547 lines) - its functions are all
+tightly coupled to the HTTP transport. Filed follow-up TGT-280 for
+both. Zero behavior change - full Docker suite and 100% coverage
+confirmed unchanged.
+
 **Status: early implementation (v2.21).** MAINTENANCE (TGT-278, found
 via a `wc -l` sweep run as TGT-277's own pipeline-continuity backlog
 check): `D2TG::Store.pm` was 1378 lines - by far the largest module in
