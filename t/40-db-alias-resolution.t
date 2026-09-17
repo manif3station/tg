@@ -171,6 +171,7 @@ require D2TG::Config::Flags;
 
     package main;
     no strict 'refs';
+    no warnings 'once';
     local *Developer::Dashboard::d2 = sub { return bless {}, 'Fake::Handle' };
     use strict 'refs';
 

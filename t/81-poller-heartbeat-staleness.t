@@ -16,8 +16,10 @@ require D2TG::Transcribe;
 # TIMEOUT_CEILING/MODEL_TIERS would silently desync this test from the
 # real derivation instead of catching it. Compute the expected value
 # from the same source constants cli/status.pl itself derives from.
-my $expected_stale_threshold =
-  int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
+my $expected_stale_threshold = do {
+    no warnings 'once';
+    int( $D2TG::Transcribe::TIMEOUT_CEILING * scalar(@D2TG::Transcribe::MODEL_TIERS) * 4 / 3 );
+};
 
 # TGT-116 (re-scoped during drafting: a genuinely stuck poller can't
 # restart itself, so full auto-restart needs an external actor - an

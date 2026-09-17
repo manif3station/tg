@@ -139,6 +139,7 @@ PERL
 }
 
 {
+    no warnings 'once';
     local $D2TG::Transcribe::FORKER = sub { return undef };
 
     eval { D2TG::Transcribe::_run( $^X, '-e', 'exit 0' ) };

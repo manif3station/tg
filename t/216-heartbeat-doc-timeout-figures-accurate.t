@@ -21,8 +21,12 @@ require D2TG::Transcribe;
 # literal, so it can't silently go stale the same way) and checks both
 # doc locations state them.
 
-my $per_tier_worst_case = $D2TG::Transcribe::TIMEOUT_CEILING;
-my $full_ladder_worst_case = $per_tier_worst_case * scalar(@D2TG::Transcribe::MODEL_TIERS);
+my ( $per_tier_worst_case, $full_ladder_worst_case );
+{
+    no warnings 'once';
+    $per_tier_worst_case = $D2TG::Transcribe::TIMEOUT_CEILING;
+    $full_ladder_worst_case = $per_tier_worst_case * scalar(@D2TG::Transcribe::MODEL_TIERS);
+}
 
 # TGT-267: D2TG::Config's own POD (including write_heartbeat/
 # heartbeat_age's timeout-figure text this test checks) moved out of

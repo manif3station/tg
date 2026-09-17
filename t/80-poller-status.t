@@ -81,7 +81,7 @@ require D2TG::Lock;
     print {$fh} "$$\n";
     close $fh;
 
-    no warnings 'redefine';
+    no warnings qw(redefine once);
     local *D2TG::Lock::acquire = sub { die "acquire() must never be called by is_held\n" };
 
     my $pid = eval { D2TG::Lock::is_held($lock) };

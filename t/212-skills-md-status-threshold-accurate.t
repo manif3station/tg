@@ -21,11 +21,14 @@ require D2TG::Transcribe;
 # can't silently go stale the same way) and checks SKILLS.md's own
 # wording states that value, not the superseded flat 20-minute figure.
 
-my $expected_hours = int(
-    $D2TG::Transcribe::TIMEOUT_CEILING
-      * scalar(@D2TG::Transcribe::MODEL_TIERS)
-      * 4 / 3
-) / 3600;
+my $expected_hours = do {
+    no warnings 'once';
+    int(
+        $D2TG::Transcribe::TIMEOUT_CEILING
+          * scalar(@D2TG::Transcribe::MODEL_TIERS)
+          * 4 / 3
+    ) / 3600;
+};
 
 open my $fh, '<', File::Spec->catfile( $Bin, '..', 'SKILLS.md' ) or die $!;
 my $skills_md = do { local $/; <$fh> };

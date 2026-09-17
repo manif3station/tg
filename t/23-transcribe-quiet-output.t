@@ -8,6 +8,7 @@ use Test::CaptureStdio qw(capture_stdio);
 require D2TG::Transcribe;
 
 {
+    no warnings 'once';
     local $D2TG::Transcribe::TIMEOUT = 10;
 
     my ( $result, $captured_out, $captured_err ) = capture_stdio( sub {

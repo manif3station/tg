@@ -1,12 +1,12 @@
 # tg
 
-**Status: early implementation (v2.26).** MAINTENANCE (TGT-287, found
-via a scheduled JOB-003/004 sweep): the `resolve_alias_dir_or_die` +
-`require_existing_base_dir_or_die` pairing was hand-copied across 12
-`cli/*.pl` scripts - now composed into one
-`D2TG::Config::resolve_and_require_base_dir_or_die` call. Zero behavior
-change. `D2TG::Config::Paths.pm`'s own embedded POD was also extracted
-to `Paths.pod`, matching established convention.
+**Status: early implementation (v2.27).** MAINTENANCE (TGT-288, found
+via a scheduled JOB-004 improvement hunt): 7 test files deliberately
+read another package's variable/sub by full qualification exactly once
+(to keep a doc-accuracy assertion derived from the real constant), and
+Perl's strict-vars warnings flagged each as "used only once: possible
+typo" - real but benign noise on every full-suite run. Scoped `no
+warnings 'once'` silences it; no assertion logic changed.
 
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s

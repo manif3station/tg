@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.27  2026-09-17
+      - MAINTENANCE (TGT-288, found via a scheduled JOB-004 improvement
+        hunt following up on TGT-287): 7 test files deliberately read
+        another package's variable/sub by full qualification exactly
+        once (to keep a doc-accuracy assertion derived from the real
+        constant instead of a re-typed literal) - Perl's strict-vars
+        warning system flagged each as "used only once: possible
+        typo", cluttering every full-suite run with real-but-benign
+        noise. Scoped `no warnings 'once'` added around each offending
+        reference; no assertion logic changed.
+
 2.26  2026-09-17
       - MAINTENANCE (TGT-287, found via a scheduled JOB-003/004 sweep
         following up on TGT-286): the 2-line resolve_alias_dir_or_die

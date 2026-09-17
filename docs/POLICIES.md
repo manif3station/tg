@@ -5871,3 +5871,36 @@ perlsec.pl-style vulnerability-scan audit: the new function is a pure
 calls - no new shell invocation, no new file I/O, no new system/exec/
 backtick/piped-open/eval-STRING patterns, no new external-input
 handling.
+
+## TGT-288: silenced 8 benign "used only once" warnings across 7 test files
+
+Found via a scheduled JOB-004 improvement hunt following up on
+TGT-287: `prove -lr t 2>&1 | grep "used only once"` surfaced 8 real
+occurrences across 7 test files (`t/22`, `t/23`, `t/40`, `t/80`,
+`t/81`, `t/212`, `t/216`). Each is a deliberate, legitimate pattern -
+reading another package's variable or sub by full qualification
+exactly once, specifically so a doc-accuracy or behavior assertion is
+derived from the real constant/sub instead of a re-typed literal that
+could silently drift (`t/81`'s own comment explains the reasoning for
+its two). Perl's strict-vars warning system cannot distinguish this
+from an actual typo, so it flags every one - real, but benign, noise
+that accumulates on every full-suite run and makes a genuinely new
+warning harder to spot among the expected ones.
+
+**Fix**: added `no warnings 'once';` (or `no warnings qw(redefine
+once);` in `t/80`, which already had a `redefine` suppression for an
+unrelated mock) scoped as tightly as possible around each offending
+reference - a bare block in `t/216`/`t/22`/`t/23`, a `do { }` block in
+`t/81`/`t/212`, and inline in `t/40`/`t/80` where the reference already
+sat inside its own small block. No assertion logic changed anywhere.
+
+`t/288-no-once-warnings.t` (new): runs each of the 7 affected files as
+a real subprocess and asserts its STDERR carries no "used only once"
+text - confirmed genuinely red beforehand (7/7 failed, each showing
+the exact warning). Not a `.pm`-touching ticket, so REQ-028/029 (POD
+split, 500-line cap) don't apply.
+
+perlsec.pl-style vulnerability-scan audit: pure test-file
+warnings-pragma additions - no shell invocation, no file I/O, no
+system/exec/backtick/piped-open/eval-STRING patterns, no new
+external-input handling, no assertion or behavior change.
