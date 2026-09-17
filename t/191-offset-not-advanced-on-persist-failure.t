@@ -14,7 +14,7 @@ require Fake::Store;
 # may be forgotten - it will never redeliver those again. Before this
 # fix, cli/poller.pl's main loop advanced its own in-memory offset
 # unconditionally after run_once_safe returned, regardless of whether
-# D2TG::Poller::persist_offset_safe actually durably saved it. A
+# D2TG::Poller::Safe::persist_offset_safe actually durably saved it. A
 # still-running process would then use that advanced (but not yet
 # durable) offset on its own NEXT getUpdates call - confirming the
 # batch to Telegram - so if the process crashed for ANY reason before
@@ -60,10 +60,10 @@ package main;
 # succeed - the exact pattern now used in cli/poller.pl's own main loop.
 sub simulate_one_cycle {
     my ( $telegram, $offset_ref, $store, $bot_key ) = @_;
-    my $new_offset = D2TG::Poller::run_once_safe( $telegram, $$offset_ref, $store, sleep => sub { } );
+    my $new_offset = D2TG::Poller::Safe::run_once_safe( $telegram, $$offset_ref, $store, sleep => sub { } );
     $$offset_ref = $new_offset
       if defined $new_offset
-      && D2TG::Poller::persist_offset_safe( $store, $new_offset, $bot_key );
+      && D2TG::Poller::Safe::persist_offset_safe( $store, $new_offset, $bot_key );
     return;
 }
 

@@ -8,7 +8,7 @@ use lib "$Bin/../lib";
 # TGT-263: retry_failed_transcription/auto_retry_failed_transcriptions
 # (moved into D2TG::Transcribe by TGT-261) are their own distinct
 # concern from the core probe/transcribe/timeout logic - they talk to
-# D2TG::Poller::store_write_safe and D2TG::Download::download_file, not
+# D2TG::Poller::Safe::store_write_safe and D2TG::Download::download_file, not
 # whisper itself. Extracted into D2TG::Transcribe::Retry, mirroring the
 # D2TG::Store::RetryQueue precedent (TGT-257). This proves ownership;
 # the deep behavioral coverage for both functions already exists in

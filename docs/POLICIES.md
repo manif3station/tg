@@ -5213,6 +5213,57 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-275: D2TG::Poller.pm decomposition - the 8 non-run_once helper functions
+
+Filed via TGT-273's own REQ-029 audit: `lib/D2TG/Poller.pm` was 854
+lines after TGT-273's POD extraction to `Poller.pod` - over this
+board's 500-line-per-module cap. Investigated the file's own shape: 8
+of its functions (`open_store_or_die`, `run_once_safe`,
+`_record_message_safe`, `_record_message_and_track_offset`,
+`_classify_store_error`, `store_write_safe`, `persist_offset_safe`,
+`skill_version_check_safe`) share a common eval-wrap/non-fatal-
+degradation shape and have no dependency on `run_once`'s own dispatch
+logic - a cohesive, independently-testable cluster, unlike `run_once`
+itself (a single ~530-line function with 5 major branches sharing local
+state).
+
+Relocated the 8 functions verbatim into a new `D2TG::Poller::Safe`
+module (each losing its leading underscore where private, becoming
+public alongside its siblings) + its own `Safe.pod`. No forwarder was
+left in `D2TG::Poller` - matching this session's own TGT-261/263/265/267
+zero-forwarder precedent for a small caller count. Updated every call
+site: 8 `cli/*.pl` scripts (`attachment`, `approve`, `history`,
+`reply`, `retry-download`, `retry-transcription`, `text-only-replies`,
+`unread`, plus `poller.pl` which needed both `use D2TG::Poller;` and
+`use D2TG::Poller::Safe;`), `D2TG::Download.pm`,
+`D2TG::Transcribe::Retry.pm`, `D2TG::Reply.pm`, and 6 structural-
+regression `t/` files whose own source-text assertions named the old
+module/location explicitly (`t/181`, `t/195`, `t/198`, plus 3 more
+picked up by the general sweep).
+
+**Circular-dependency note**: `D2TG::Poller::Safe::run_once_safe` calls
+`D2TG::Poller::run_once` via its fully-qualified name, but
+`D2TG::Poller::Safe.pm` itself does NOT `use D2TG::Poller;` at
+compile time - only `D2TG::Poller.pm` `use`s `D2TG::Poller::Safe;` (for
+its own internal calls to `store_write_safe`/
+`record_message_and_track_offset`). This one-directional `use` avoids a
+circular-`use` compile-time trap; `run_once_safe`'s runtime call to
+`D2TG::Poller::run_once` works because every real caller (`cli/poller.pl`)
+already loads both modules before either function is ever invoked.
+
+New `t/275-poller-safe-module.t` proves ownership via `can()` (matching
+`t/263-transcribe-retry-module.t`'s own pattern) - confirmed genuinely
+red pre-fix (`Can't locate D2TG/Poller/Safe.pm`). Full Docker suite
+(205 files, 2258 tests) passes unchanged; 100% statement + subroutine
+coverage confirmed on both `D2TG::Poller` and `D2TG::Poller::Safe`.
+`D2TG::Poller.pm` is now 598 lines - still over the cap, entirely due
+to `run_once` itself - filed as follow-up `TGT-276`.
+
+perlsec.pl-style vulnerability-scan audit: a pure code-relocation
+refactor - no new external-input handling, no new shell/file/SQL
+surface introduced by moving already-reviewed functions between two
+files in the same package hierarchy.
+
 ## TGT-274: Tira upgrade-gate review (5.143 -> 5.144) - no board policy change needed
 
 Auto-raised by Tira's own upgrade gate when the host's Tira install

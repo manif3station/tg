@@ -4,14 +4,14 @@ use strict;
 use warnings;
 use D2TG::TTS;
 use D2TG::Config;
-use D2TG::Poller;
+use D2TG::Poller::Safe;
 
 # TGT-192 (found via a scheduled JOB-003 hourly bug hunt, the same
 # class of issue TGT-191 just fixed - an external system told "done"
 # before the corresponding local write is safely handled): every
 # other D2TG::Store write call site in this codebase already wraps its
 # call in eval and classifies a failure via
-# D2TG::Poller::_classify_store_error (record_message via
+# D2TG::Poller::Safe::classify_store_error (record_message via
 # _record_message_safe TGT-132, set_offset via persist_offset_safe
 # TGT-166/191, is_allowed/add_pending TGT-165, record_failed_download's
 # own eval TGT-104) - send_reply/resend_voice's own record_sent_text/
@@ -27,7 +27,7 @@ sub _store_write_safe {
     my ( $chat_id, $description, $code ) = @_;
     eval { $code->() };
     if ($@) {
-        my $reason = D2TG::Poller::_classify_store_error($@);
+        my $reason = D2TG::Poller::Safe::classify_store_error($@);
         print STDERR "STORE ERROR [$chat_id]: $description failed - $reason\n";
     }
     return;

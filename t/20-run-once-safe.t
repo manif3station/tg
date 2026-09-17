@@ -37,7 +37,7 @@ sub capture_std {
     my ( $out, $err );
     my $new_offset;
     ( $out, $err ) = capture_std( sub {
-        $new_offset = D2TG::Poller::run_once_safe(
+        $new_offset = D2TG::Poller::Safe::run_once_safe(
             $tg, undef, $store,
             sleep => sub { push @slept, $_[0] },
         );
@@ -63,7 +63,7 @@ sub capture_std {
     my ( $out, $err );
     my $new_offset;
     ( $out, $err ) = capture_std( sub {
-        $new_offset = D2TG::Poller::run_once_safe(
+        $new_offset = D2TG::Poller::Safe::run_once_safe(
             $tg, 42, $store,
             sleep => sub { push @slept, $_[0] },
         );
@@ -88,7 +88,7 @@ sub capture_std {
         local $SIG{ALRM} = sub { die "timeout\n" };
         alarm(5);
         capture_std( sub {
-            D2TG::Poller::run_once_safe( $tg, 1, $store, sleep => sub { } );
+            D2TG::Poller::Safe::run_once_safe( $tg, 1, $store, sleep => sub { } );
         } );
         alarm(0);
     };
@@ -96,7 +96,7 @@ sub capture_std {
 }
 
 {
-    is( D2TG::Poller::_sleep(0), 0, '_sleep(0) returns immediately, exercising the real default sleep path' );
+    is( D2TG::Poller::Safe::_sleep(0), 0, '_sleep(0) returns immediately, exercising the real default sleep path' );
 }
 
 done_testing();

@@ -24,7 +24,7 @@ use File::Spec;
 # print the misleading RETRY OK/GET ATTACHMENT WITH line for that row.
 #
 # A full functional test would need to mock D2TG::Telegram's HTTP calls
-# through this script's own real D2TG::Poller::open_store_or_die/real
+# through this script's own real D2TG::Poller::Safe::open_store_or_die/real
 # SQLite D2TG::Store construction, for which this script has no
 # injectable seam (the same limitation t/104-retry-download-cli-no-raw-
 # path.t already documented and worked around) - so this is a

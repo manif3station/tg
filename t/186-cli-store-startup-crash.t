@@ -16,7 +16,7 @@ use Test::CaptureStdio qw(run_capturing_stderr);
 # in cli/poller.pl - a storage-open failure crashed each one with a raw,
 # uncaught Perl/DBI exception embedding the real db_path, instead of a
 # clean scrubbed refusal. Now all 7 go through the shared
-# D2TG::Poller::open_store_or_die helper. One test block per script,
+# D2TG::Poller::Safe::open_store_or_die helper. One test block per script,
 # each using the same root-proof directory-collision technique as
 # t/183's own test (pre-create the target db-file path as a directory -
 # SQLite cannot open a directory as a database file, regardless of

@@ -41,7 +41,7 @@ require D2TG::Store;
     local *D2TG::Store::new = sub { return $fake_store; };
 
     my $base_dir = tempdir( CLEANUP => 1 );
-    my $result = D2TG::Poller::open_store_or_die(
+    my $result = D2TG::Poller::Safe::open_store_or_die(
         skill_root    => $base_dir,
         base_dir      => $base_dir,
         admin_chat_id => '12345',
@@ -66,7 +66,7 @@ require D2TG::Store;
     local *STDERR = $stderr_fh;
 
     my $survived = eval {
-        D2TG::Poller::open_store_or_die(
+        D2TG::Poller::Safe::open_store_or_die(
             skill_root    => $base_dir,
             base_dir      => $base_dir,
             admin_chat_id => '12345',

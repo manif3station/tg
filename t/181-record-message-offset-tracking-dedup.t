@@ -16,15 +16,26 @@ local $/;
 my $source = <$fh>;
 close $fh;
 
-my $duplicate_pattern_count = () = $source =~ /\$offset_cap = \$update_id if !\$recorded && !defined \$offset_cap;/g;
+my $safe_source_path = "$Bin/../lib/D2TG/Poller/Safe.pm";
+open my $safe_fh, '<', $safe_source_path or die $!;
+local $/;
+my $safe_source = <$safe_fh>;
+close $safe_fh;
+
+my $duplicate_pattern_count = () = $safe_source =~ /\$offset_cap = \$update_id if !\$recorded && !defined \$offset_cap;/g;
 
 is( $duplicate_pattern_count, 0,
     'the duplicated 2-line offset_cap-bookkeeping pattern appears 0 times outside the new helper (TGT-181 AC)' );
 
-my $helper_defined = $source =~ /sub _record_message_and_track_offset/;
-ok( $helper_defined, 'the new _record_message_and_track_offset helper exists' );
+# TGT-275: relocated into D2TG::Poller::Safe (its own name losing the
+# leading underscore, becoming a public helper alongside the other 7
+# relocated non-run_once functions) to bring D2TG::Poller.pm under the
+# board's 500-line-per-module cap. run_once itself (still in Poller.pm)
+# now calls it via its fully-qualified name.
+my $helper_defined = $safe_source =~ /sub record_message_and_track_offset/;
+ok( $helper_defined, 'the record_message_and_track_offset helper exists in D2TG::Poller::Safe' );
 
-my $call_site_count = () = $source =~ /_record_message_and_track_offset\(/g;
+my $call_site_count = () = $source =~ /D2TG::Poller::Safe::record_message_and_track_offset\(/g;
 
 # 5 call sites + the sub definition itself is not matched by this
 # pattern (it has no trailing open-paren immediately after in the same
@@ -57,11 +68,11 @@ is( $call_site_count, 5, 'the new helper is called from exactly 5 places - one p
 # surrounding branch-identifying context are all still asserted
 # exactly as before).
 my %expected_near = (
-    'edited text branch (has_text)' => qr/\$has_text \)\s*\{\s*\n\s*_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
-    'plain text branch'             => qr/NEW TG \[\$chat_id\] \$sender: \$safe_text.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
-    'transcribed voice branch'      => qr/NEW TG VOICE \[\$chat_id\] \$sender: \$safe_transcript.*?_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_transcript,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
-    'downloaded media branch (local_path)' => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*local_path\s*=>\s*\$local_path,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
-    'fallback media branch'         => qr/_record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*bot_key\s*=>\s*\$bot_token\s*\)\s*;\s*\n\s*\}\s*\n\s*\}\s*\n\s*\}/,
+    'edited text branch (has_text)' => qr/\$has_text \)\s*\{\s*\n\s*D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
+    'plain text branch'             => qr/NEW TG \[\$chat_id\] \$sender: \$safe_text.*?D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
+    'transcribed voice branch'      => qr/NEW TG VOICE \[\$chat_id\] \$sender: \$safe_transcript.*?D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_transcript,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
+    'downloaded media branch (local_path)' => qr/D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*local_path\s*=>\s*\$local_path,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
+    'fallback media branch'         => qr/D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\\\$offset_cap,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*bot_key\s*=>\s*\$bot_token\s*\)\s*;\s*\n\s*\}\s*\n\s*\}\s*\n\s*\}/,
 );
 
 for my $label ( sort keys %expected_near ) {

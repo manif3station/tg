@@ -1,5 +1,25 @@
 Revision history for the tg skill
 
+2.18  2026-09-17
+      - MAINTENANCE (TGT-275, found via TGT-273's own REQ-029 audit):
+        D2TG::Poller.pm was 854 lines after TGT-273's POD extraction -
+        over this board's 500-line-per-module cap. The 8 non-run_once
+        helper functions (open_store_or_die, run_once_safe,
+        record_message_safe, record_message_and_track_offset,
+        classify_store_error, store_write_safe, persist_offset_safe,
+        skill_version_check_safe) were relocated verbatim into a new
+        D2TG::Poller::Safe module (+ its own Safe.pod) - no forwarder
+        left behind, matching this project's zero-forwarder precedent
+        for small caller counts. All call sites (8 cli/*.pl scripts,
+        D2TG::Download.pm, D2TG::Transcribe::Retry.pm, D2TG::Reply.pm,
+        and several t/ structural-regression tests) updated to the new
+        fully-qualified names. Zero behavior change - new
+        t/275-poller-safe-module.t proves the new module owns the 8
+        functions; full Docker suite and 100% coverage on both modules
+        confirmed unchanged. D2TG::Poller.pm is now 598 lines - still
+        over the cap, entirely due to run_once itself; filed as
+        follow-up TGT-276 for a full decomposition of that function.
+
 2.17  2026-09-17
       - BUG FIX (TGT-273, found via a scheduled JOB-004 improvement
         hunt): run_once's edited_message branch had no redelivery-dedup

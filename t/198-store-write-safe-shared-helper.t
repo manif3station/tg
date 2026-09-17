@@ -19,28 +19,34 @@ use File::Spec;
 # established precedent (t/104, t/88, t/195).
 
 my $poller_path   = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller.pm' );
+my $safe_path     = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Poller', 'Safe.pm' );
 my $download_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Download.pm' );
 
 my $poller_src   = _code_only( _slurp($poller_path) );
+my $safe_src     = _code_only( _slurp($safe_path) );
 my $download_src = _code_only( _slurp($download_path) );
 
-# The scan for remaining inline duplicates below must not flag
+# TGT-275: store_write_safe (and its own _classify_store_error/
+# classify_store_error dependency) relocated out of D2TG::Poller into
+# D2TG::Poller::Safe, along with the other 7 non-run_once helpers, to
+# bring D2TG::Poller.pm under the board's 500-line-per-module cap. The
+# scan for remaining inline duplicates below must not flag
 # store_write_safe's own canonical definition (which legitimately
 # contains exactly this eval/classify/print shape) as itself a
 # leftover duplicate - excise it before scanning, matching from its
 # own "sub store_write_safe {" line up to the next top-level "sub ".
-( my $poller_src_excluding_helper = $poller_src ) =~
+( my $safe_src_excluding_helper = $safe_src ) =~
   s/^sub store_write_safe \{.*?(?=^sub )//ms;
 
-# The shared, PUBLIC helper must exist in D2TG::Poller.pm (the module
-# every other caller already imports _classify_store_error from).
+# The shared, PUBLIC helper must exist in D2TG::Poller::Safe (the
+# module every other caller now calls classify_store_error from).
 like(
-    $poller_src,
+    $safe_src,
     qr/^sub store_write_safe \{/m,
-    'D2TG::Poller defines a public store_write_safe helper'
+    'D2TG::Poller::Safe defines a public store_write_safe helper'
 );
 
-# Every inline "eval { ... }; if ($@) { ... _classify_store_error($@) ...
+# Every inline "eval { ... }; if ($@) { ... classify_store_error($@) ...
 # print STDERR "STORE ERROR [...]: ... failed - $reason\n"; ... }"
 # block outside of store_write_safe's own definition must be gone -
 # each of the 7 identified call sites must instead call the shared
@@ -50,15 +56,21 @@ my $inline_block_re = qr/
     (?: (?! ^sub \s ) . ){0,400}?
     if \s* \( \s* \$\@ \s* \) \s* \{
     (?: (?! ^sub \s ) . ){0,400}?
-    _classify_store_error \( \$\@ \)
+    classify_store_error \( \$\@ \)
     (?: (?! ^sub \s ) . ){0,400}?
     print \s+ STDERR \s+ "STORE \s+ ERROR
 /msx;
 
 unlike(
-    $poller_src_excluding_helper,
+    $poller_src,
     $inline_block_re,
-    'D2TG::Poller.pm has zero remaining inline eval/classify/"STORE ERROR" blocks (outside store_write_safe itself)'
+    'D2TG::Poller.pm has zero remaining inline eval/classify/"STORE ERROR" blocks'
+);
+
+unlike(
+    $safe_src_excluding_helper,
+    $inline_block_re,
+    'D2TG::Poller::Safe.pm has zero remaining inline eval/classify/"STORE ERROR" blocks (outside store_write_safe itself)'
 );
 
 unlike(
@@ -71,14 +83,14 @@ unlike(
 # store writes - a green result on the two checks above for the wrong
 # reason (e.g. the whole pattern deleted instead of migrated) is
 # caught here.
-my $poller_calls = () = $poller_src =~ /\bstore_write_safe\(/g;
+my $poller_calls = () = $poller_src =~ /\bD2TG::Poller::Safe::store_write_safe\(/g;
 ok( $poller_calls >= 4,
-    "D2TG::Poller.pm calls store_write_safe at least 4 times (is_allowed x3, add_pending) - found $poller_calls"
+    "D2TG::Poller.pm calls D2TG::Poller::Safe::store_write_safe at least 4 times (is_allowed x3, add_pending) - found $poller_calls"
 );
 
-my $download_calls = () = $download_src =~ /\bD2TG::Poller::store_write_safe\(/g;
+my $download_calls = () = $download_src =~ /\bD2TG::Poller::Safe::store_write_safe\(/g;
 ok( $download_calls >= 3,
-    "D2TG::Download.pm calls D2TG::Poller::store_write_safe at least 3 times (record_message, remove_failed_download, mark_failed_download_downloaded) - found $download_calls"
+    "D2TG::Download.pm calls D2TG::Poller::Safe::store_write_safe at least 3 times (record_message, remove_failed_download, mark_failed_download_downloaded) - found $download_calls"
 );
 
 done_testing();

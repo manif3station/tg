@@ -41,7 +41,7 @@ sub capture_std {
     my ( $out, $err );
     my $new_offset;
     ( $out, $err ) = capture_std( sub {
-        $new_offset = D2TG::Poller::run_once_safe(
+        $new_offset = D2TG::Poller::Safe::run_once_safe(
             $tg, 42, $store,
             sleep => sub { push @slept, $_[0] },
         );
@@ -64,7 +64,7 @@ sub capture_std {
     my $store = Fake::Store->new( allowed => [999] );
 
     my ( $out, $err ) = capture_std( sub {
-        D2TG::Poller::run_once_safe( $tg, 42, $store, sleep => sub { } );
+        D2TG::Poller::Safe::run_once_safe( $tg, 42, $store, sleep => sub { } );
     } );
 
     is( $err, '', 'nothing printed to stderr for a transient 502 either' );
@@ -89,7 +89,7 @@ sub capture_std {
     my $store = Fake::Store->new( allowed => [999] );
 
     my ( $out, $err ) = capture_std( sub {
-        D2TG::Poller::run_once_safe( $tg, 42, $store, sleep => sub { } );
+        D2TG::Poller::Safe::run_once_safe( $tg, 42, $store, sleep => sub { } );
     } );
 
     is( $err, '', 'nothing printed to stderr for a transient 429 (rate-limit) either' );
@@ -106,7 +106,7 @@ sub capture_std {
     my $store = Fake::Store->new( allowed => [999] );
 
     my ( $out, $err ) = capture_std( sub {
-        D2TG::Poller::run_once_safe( $tg, 42, $store, sleep => sub { } );
+        D2TG::Poller::Safe::run_once_safe( $tg, 42, $store, sleep => sub { } );
     } );
 
     like( $err, qr/POLL ERROR: D2TG::Telegram getUpdates: response was not valid JSON/,

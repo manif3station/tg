@@ -17,7 +17,7 @@ require D2TG::Transcribe::Retry;
 # (TGT-244/TGT-248) is computed by unconditionally assuming the queue-row
 # removal write (remove_failed_download / remove_failed_transcription)
 # succeeded, once record_message has succeeded - it never inspects
-# D2TG::Poller::store_write_safe's own (ok, value) result for that call.
+# D2TG::Poller::Safe::store_write_safe's own (ok, value) result for that call.
 # If record_message succeeds but the removal write itself then hits a
 # transient failure (a locked/busy database - the exact scenario
 # store_write_safe exists to guard against), the row is NOT actually

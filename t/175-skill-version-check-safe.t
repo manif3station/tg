@@ -38,7 +38,7 @@ sub capture_stderr {
     print {$fh} "VERSION=1.99\n";
     close $fh;
 
-    my $version = D2TG::Poller::skill_version_check_safe( default_root => $skill_root );
+    my $version = D2TG::Poller::Safe::skill_version_check_safe( default_root => $skill_root );
     is( $version, '1.99', 'skill_version_check_safe returns the version on success, same as skill_version' );
 }
 
@@ -49,7 +49,7 @@ sub capture_stderr {
     # transient window during the skill directory's own self-update).
     my $stderr;
     my $version;
-    $stderr = capture_stderr( sub { $version = D2TG::Poller::skill_version_check_safe( default_root => $skill_root ) } );
+    $stderr = capture_stderr( sub { $version = D2TG::Poller::Safe::skill_version_check_safe( default_root => $skill_root ) } );
 
     is( $version, undef, 'skill_version_check_safe returns undef, not dying, when .env is transiently missing' );
     like( $stderr, qr/skill_version_check_safe:.*\.env.*skipping this cycle.*will retry next cycle/is,

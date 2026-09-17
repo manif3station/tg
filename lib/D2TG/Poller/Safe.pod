@@ -1,0 +1,135 @@
+=head1 NAME
+
+D2TG::Poller::Safe - eval-wrapped, non-fatal-degradation helpers used by D2TG::Poller
+
+=head1 SYNOPSIS
+
+    my $store = D2TG::Poller::Safe::open_store_or_die( skill_root => $root, base_dir => $base_dir );
+    my $new_offset = D2TG::Poller::Safe::run_once_safe( $telegram, $offset, $store );
+
+=head1 DESCRIPTION
+
+TGT-275 (filed via TGT-273's own REQ-029 audit): C<D2TG::Poller> was over
+the board's 500-line-per-module cap. The 8 functions below share a
+common shape - each wraps a call that can die (a locked/busy SQLite
+database, a transient network error, a missing C<.env>) in C<eval> and
+degrades non-fatally (classify the error, print a scrubbed message,
+return a sentinel) rather than letting the exception propagate and
+crash the whole poll cycle or the entire persistent poller process.
+They have no dependency on C<run_once>'s own dispatch logic (aside from
+C<run_once_safe> calling C<run_once> itself), so they were relocated
+here as a cohesive, independently-testable cluster, leaving
+C<D2TG::Poller> holding only C<run_once> and its own private
+branch-formatting delegation. No forwarder was left in C<D2TG::Poller>
+for any of the 8 - matching this project's own established
+zero-forwarder precedent for a small caller count (TGT-261/263/265/267).
+
+=head1 FUNCTIONS
+
+=head2 classify_store_error($error)
+
+TGT-167 (found via a scheduled improvement hunt): classifies a raw
+DBI/SQLite exception into a short, fixed reason (C<database is
+locked>/C<database is busy>/C<database is readonly>/C<an unexpected
+error>) rather than ever echoing C<$error> itself - a raw DBI/SQLite
+error can embed the database file's own real path (TGT-133 precedent).
+Every other function below that wraps a store write shares this same
+classification via this one helper.
+
+=head2 open_store_or_die(%args)
+
+TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live
+against C<cli/history.pl>): a shared helper for the 8 C<cli/*.pl>
+scripts (C<attachment>, C<text-only-replies>, C<approve>,
+C<retry-download>, C<history>, C<reply>, C<unread>, C<retry-transcription>)
+that each independently constructed C<D2TG::Store-E<gt>new> unwrapped,
+sharing the identical raw-crash/db-path-leak risk. Takes C<skill_root>,
+C<base_dir>, C<admin_chat_id> (whatever shape the caller passes
+through); on a storage-open failure, classifies the error via
+L</classify_store_error> and prints the same scrubbed C<Failed to open
+local storage (REASON) - refusing to start.> refusal, then exits 1 -
+never returns in that case. Returns the open store on success.
+C<cli/poller.pl>'s own inline version is deliberately left untouched -
+its own lock-release logic (TGT-185) is intertwined with that specific
+call site.
+
+=head2 run_once_safe($telegram, $offset, $store, sleep => \&coderef, %run_once_opts)
+
+Wraps C<D2TG::Poller::run_once> so a transient failure (e.g. a network
+blip inside C<get_updates>) never kills the caller's loop (TGT-028, a
+real production incident). On success, behaves exactly like calling
+C<run_once> and taking its offset. On failure: a transient error
+(per L<D2TG::Config/is_transient_error>) is silent (TGT-097 - a live
+user request to stop surfacing every transient blip as a separate
+C<tira.policy.bridge> event); otherwise prints C<POLL ERROR: <message>>
+to STDERR. Either way, sleeps 2 seconds (via C<sleep>, injectable for
+tests) and returns the I<unchanged> C<$offset> so the next call retries
+from the same place.
+
+=head2 record_message_safe($store, @args)
+
+TGT-132: wraps C<$store-E<gt>record_message(@args)> in C<eval>, matching
+L<D2TG::Store/record_failed_download>'s own established pattern - a
+store write failure is logged non-fatally to STDERR rather than
+propagating out of C<run_once> (which would make L</run_once_safe>
+return the offset unchanged, redelivering and reprinting the entire
+batch next cycle). TGT-178: returns a true/false success flag so
+C<run_once> can cap its returned offset at the first update whose
+record failed, rather than silently losing that message's local
+history.
+
+=head2 record_message_and_track_offset($store, $offset_cap_ref, $update_id, @record_message_safe_args)
+
+TGT-181 (found via a scheduled improvement hunt): the 2-line "call
+L</record_message_safe>, cap C<$offset_cap> on failure" pattern
+appeared identically at all 5 call sites inside C<run_once> - extracted
+here. C<$offset_cap_ref> is a scalar ref (not a plain return value)
+because C<run_once>'s own C<$offset_cap> must persist and combine
+across multiple calls within one C<run_once> invocation - the first
+failure across up to 5 separate call sites wins.
+
+=head2 store_write_safe($chat_id, $description, $coderef)
+
+TGT-198 (found via a scheduled JOB-004 improvement hunt): the promoted,
+public version of L<D2TG::Reply>'s own private C<_store_write_safe>
+(TGT-192) - runs C<$coderef-E<gt>()> in C<eval>, classifies any failure
+via L</classify_store_error>, and prints C<STORE ERROR [chat_id]: DESC
+failed - REASON> non-fatally. Returns a C<($ok, $value)> two-element
+list: C<$ok> is false only when C<$coderef> died; C<$value> is
+C<$coderef>'s own return value on success, or C<undef> on failure -
+this distinguishes "the write failed" from "the write succeeded and
+legitimately returned a false value" (e.g. C<is_allowed> returning 0).
+Used by C<D2TG::Poller::run_once> (C<is_allowed>/C<add_pending>) and
+C<D2TG::Download>/C<D2TG::Transcribe::Retry> (their own retry-queue
+writes).
+
+=head2 persist_offset_safe($store, $offset, $bot_key)
+
+TGT-166 (found via a scheduled hourly bug-hunt): C<cli/poller.pl>'s
+persistent main loop calls this instead of
+C<$store-E<gt>set_offset(...)> directly - unlike C<run_once>'s own
+calls (inside L</run_once_safe>'s protection), this one sits at the top
+level of the persistent script's main loop, so an unwrapped locked/busy
+database used to crash the ENTIRE poller process, not just one poll
+cycle's batch. Returns a true/false success flag (TGT-191, a live
+production incident: 2 real messages permanently lost) - the caller
+only advances its in-memory offset on a true return, since Telegram
+never redelivers an update once a later offset has been sent to it.
+Undefined C<$offset> (nothing to persist) is not a failure - returns
+true.
+
+=head2 skill_version_check_safe(%args)
+
+TGT-175 (live production incident, reported via the budget project):
+C<cli/poller.pl>'s main loop calls this instead of
+C<D2TG::Config::skill_version(%args)> directly for its per-cycle
+version-change check. A transient window where C<.env> is briefly
+missing/unreadable during the skill's own self-update used to be fatal
+to the ENTIRE poller process. Logs the error to STDERR (trailing
+newline stripped) and returns C<undef> instead of dying, so the
+version-change check is simply skipped for that cycle and re-checked on
+the next one. Deliberately does NOT wrap the poller's own I<startup>
+call to C<skill_version> - a fresh process launch with a genuinely
+missing/misconfigured C<.env> should still refuse to start loudly.
+
+=cut

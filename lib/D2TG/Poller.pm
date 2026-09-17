@@ -3,74 +3,10 @@ package D2TG::Poller;
 use strict;
 use warnings;
 use POSIX qw(strftime);
-use D2TG::Config;
-use D2TG::Store;
 use D2TG::Poller::Format;
+use D2TG::Poller::Safe;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
-
-# TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live
-# against cli/history.pl): 7 cli/*.pl scripts (attachment, text-only-
-# replies, approve, retry-download, history, reply, unread) each
-# construct D2TG::Store->new unwrapped, sharing the identical raw-crash/
-# db-path-leak risk TGT-183 already fixed for cli/poller.pl's own call.
-# All 7 (plus poller.pl's own pre-TGT-183 shape) built the same
-# db_path shape and eval/classify/refuse pattern - poller.pl passes
-# admin_chat_id as an arrayref of every configured group's chat_id,
-# these 7 pass a plain scalar, not byte-identical args - so this is a
-# shared helper (this sub takes admin_chat_id opaquely, whatever shape
-# the caller passes through) rather than 7 separate eval-wraps,
-# matching this project's own TGT-167/170/171/172/177 precedent for
-# exactly this class of duplication. Returns the open store on
-# success; on failure, prints the identical scrubbed refusal TGT-183
-# established and exits 1 - never returns in that case.
-sub open_store_or_die {
-    my (%args) = @_;
-
-    my $store = eval {
-        D2TG::Store->new(
-            db_path => D2TG::Config::state_db_path(
-                default_root => $args{skill_root},
-                base_dir     => $args{base_dir},
-            ),
-            admin_chat_id => $args{admin_chat_id},
-        );
-    };
-    if ($@) {
-        my $reason = _classify_store_error($@);
-        print STDERR "Failed to open local storage ($reason) - refusing to start.\n";
-        exit 1;
-    }
-    return $store;
-}
-
-sub run_once_safe {
-    my ( $telegram, $offset, $store, %opts ) = @_;
-
-    my $sleep_fn = delete $opts{sleep} || \&_sleep;
-
-    my $new_offset = eval {
-        my ( undef, $off ) = run_once( $telegram, $offset, $store, %opts );
-        $off;
-    };
-
-    if ($@) {
-        my $error = $@;
-        unless ( D2TG::Config::is_transient_error($error) ) {
-            $error =~ s/\n\z//;
-            print STDERR "POLL ERROR: $error\n";
-        }
-        $sleep_fn->(2);
-        return $offset;
-    }
-
-    return $new_offset;
-}
-
-sub _sleep {
-    my ($seconds) = @_;
-    return sleep $seconds;
-}
 
 sub run_once {
     my ( $telegram, $offset, $store, %opts ) = @_;
@@ -131,7 +67,7 @@ sub run_once {
                 # helper - see its own comment for why is_allowed/
                 # add_pending need the (\$ok, \$value) return shape.
                 my ( $ok, $allowed ) =
-                  store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+                  D2TG::Poller::Safe::store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
                 next unless $ok;
                 next unless $allowed;
             }
@@ -214,7 +150,7 @@ sub run_once {
                 # helper - see its own comment for why is_allowed/
                 # add_pending need the (\$ok, \$value) return shape.
                 my ( $ok, $allowed ) =
-                  store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+                  D2TG::Poller::Safe::store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
                 next unless $ok;
                 next unless $allowed;
             }
@@ -276,7 +212,7 @@ sub run_once {
             # way, just not (yet) reflected in d2 tg.history when it's
             # a caption/media change.
             if ( $store && defined $message_id && $has_text ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
+                D2TG::Poller::Safe::record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
             }
 
             # TGT-178 KNOWN GAP (Codex review finding): this branch
@@ -334,12 +270,12 @@ sub run_once {
             # see its own comment for why is_allowed/add_pending need
             # the (\$ok, \$value) return shape.
             my ( $ok, $allowed ) =
-              store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
+              D2TG::Poller::Safe::store_write_safe( $chat_id, 'is_allowed', sub { $store->is_allowed( $chat_id, $bot_token ) } );
             next unless $ok;
 
             unless ($allowed) {
                 my ( $add_ok, $added ) =
-                  store_write_safe( $chat_id, 'add_pending', sub { $store->add_pending( $chat_id, $bot_token ) } );
+                  D2TG::Poller::Safe::store_write_safe( $chat_id, 'add_pending', sub { $store->add_pending( $chat_id, $bot_token ) } );
                 next unless $add_ok;
                 if ($added) {
                     print "$ts NEW TG PENDING [$chat_id] awaiting approval\n";
@@ -408,7 +344,7 @@ sub run_once {
             print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
             _print_reply_template( $chat_id, $message_id, $bot_token );
             if ( $store && defined $message_id ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
+                D2TG::Poller::Safe::record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
             }
         }
         elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -432,7 +368,7 @@ sub run_once {
                 print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
                 _print_reply_template( $chat_id, $message_id, $bot_token );
                 if ( $store && defined $message_id ) {
-                    _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
+                    D2TG::Poller::Safe::record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
                 }
             }
             elsif ( $store && defined $message_id && defined $file_id ) {
@@ -491,7 +427,7 @@ sub run_once {
                     _print_attachment_template( $chat_id, $message_id ) if defined $message_id;
                     _print_reply_template( $chat_id, $message_id, $bot_token );
                     if ( $store && defined $message_id ) {
-                        _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path, bot_key => $bot_token );
+                        D2TG::Poller::Safe::record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path, bot_key => $bot_token );
                     }
                 }
                 elsif ( $store && defined $message_id && defined $file_id ) {
@@ -587,7 +523,7 @@ sub run_once {
             # d2 tg.history/d2 tg.unread afterward even though it was
             # printed to stdout in real time.
             if ( $store && defined $message_id ) {
-                _record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", bot_key => $bot_token );
+                D2TG::Poller::Safe::record_message_and_track_offset( $store, \$offset_cap, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", bot_key => $bot_token );
             }
         }
     }
@@ -600,198 +536,6 @@ sub run_once {
     }
 
     return ( $updates, $next_offset );
-}
-
-sub _record_message_safe {
-    my ( $store, @args ) = @_;
-
-    # TGT-132: matching D2TG::Store::record_failed_download's own
-    # eval-wrap (TGT-104) and its stated reason - a locked/full SQLite
-    # database (a real possibility even after TGT-129's busy_timeout, if
-    # contention outlasts it) must not turn an already-printed/already-
-    # handled update into a die that aborts the rest of this batch:
-    # run_once_safe would catch it by returning the offset UNCHANGED,
-    # causing the WHOLE batch (including updates already announced) to
-    # be redelivered and reprinted next cycle.
-    #
-    # TGT-178: now returns a true/false success flag instead of void,
-    # so run_once can cap the offset at this update instead of letting
-    # it advance past a message whose local record was never written.
-    local $@;
-    eval { $store->record_message(@args) };
-    if ($@) {
-        # Codex review finding: the raw exception text was previously
-        # printed verbatim - a DBI/SQLite error can embed the database
-        # file's own path (e.g. "unable to open database file: ..."),
-        # which this project has just spent TGT-133 closing off as an
-        # information-disclosure surface elsewhere. Classify into a
-        # short, fixed reason instead of ever echoing $@ itself.
-        my $reason = _classify_store_error($@);
-        print STDERR "record_message failed ($reason) - message was already printed/handled, only its own store record is affected\n";
-        return 0;
-    }
-    return 1;
-}
-
-sub _record_message_and_track_offset {
-    my ( $store, $offset_cap_ref, $update_id, @record_message_safe_args ) = @_;
-
-    # TGT-181 (found via a scheduled improvement hunt): the 2-line
-    # "call _record_message_safe, cap $offset_cap on failure" pattern
-    # TGT-178 introduced appeared identically at all 5 call sites in
-    # run_once - extracted here, matching this project's own
-    # established "found it twice, extract it" convention
-    # (TGT-167/170/171/172/177). $offset_cap_ref is a scalar ref, not a
-    # plain return value, because run_once's own $offset_cap must
-    # persist and combine ACROSS multiple calls to this helper within
-    # one run_once invocation (the first failure across up to 5
-    # separate call sites wins) - a return value alone would make
-    # every call site re-implement the same "cap on first failure"
-    # comparison this helper exists to remove.
-    my $recorded = _record_message_safe( $store, @record_message_safe_args );
-    $$offset_cap_ref = $update_id if !$recorded && !defined $$offset_cap_ref;
-    return $recorded;
-}
-
-sub _classify_store_error {
-    my ($error) = @_;
-
-    # TGT-167 (found via a scheduled improvement hunt): extracted after
-    # this exact 4-line ternary was found duplicated verbatim in both
-    # _record_message_safe above and persist_offset_safe below, matching
-    # this project's own established "found it twice, extract it"
-    # convention (e.g. shift_flag_value, TGT-072). Pure duplication
-    # removal - the four classified strings and every caller's own
-    # surrounding message text are unchanged.
-    return
-        $error =~ /database is locked/i ? 'database is locked'
-      : $error =~ /database.*busy/i     ? 'database is busy'
-      : $error =~ /readonly/i           ? 'database is readonly'
-      :                                    'an unexpected error';
-}
-
-# TGT-198 (found via a scheduled JOB-004 improvement hunt): the
-# eval + _classify_store_error + print STDERR "STORE ERROR [chat_id]:
-# DESC failed - REASON" pattern was hand-duplicated across 7 call
-# sites (is_allowed x3 and add_pending here, plus record_message/
-# remove_failed_download/mark_failed_download_downloaded in
-# D2TG::Download.pm) - this is the promoted, public version of
-# D2TG::Reply's own private _store_write_safe (TGT-192), which stays
-# where it is since its own call sites never need the coderef's return
-# value (see D2TG::Reply.pm's own comment for why it wasn't migrated
-# to this instead).
-#
-# Unlike D2TG::Reply's fire-and-forget version, some callers here
-# (is_allowed, add_pending) need the coderef's own return value - and
-# that value can legitimately be false (0) on success, so a bare
-# undef-on-failure return can't distinguish "the write failed" from
-# "the write succeeded and returned a false value". Returns a
-# two-element (\$ok, \$value) list instead (matching this codebase's
-# own (1, $result)/(0, $error) convention, e.g.
-# D2TG::Download::retry_failed_download) - \$ok is true only when the
-# coderef ran without dying; \$value is its own return value (or undef
-# on failure, after the error has already been classified and
-# printed). Two record_message/set_offset call sites
-# (_record_message_safe, persist_offset_safe) were deliberately left
-# unmigrated - see this ticket's own card comment: their printed
-# message text and 0/1 return-boolean contract differ from this
-# helper's own, and forcing them through it would either change
-# observable output or complicate the contract for two outliers.
-sub store_write_safe {
-    my ( $chat_id, $description, $code ) = @_;
-    my $value = eval { $code->() };
-    if ($@) {
-        my $reason = _classify_store_error($@);
-        print STDERR "STORE ERROR [$chat_id]: $description failed - $reason\n";
-        return ( 0, undef );
-    }
-    return ( 1, $value );
-}
-
-sub persist_offset_safe {
-    my ( $store, $offset, $bot_key ) = @_;
-
-    # TGT-191 (live production incident, reported via the budget
-    # project: 2 real messages permanently lost): this now returns a
-    # true/false success flag (previously void, always) - cli/poller.pl's
-    # main loop uses it to decide whether it is safe to advance the
-    # in-memory offset that will be sent to Telegram on the NEXT
-    # getUpdates call. Telegram forgets/never redelivers an update once
-    # a LATER offset has been sent to it - so advancing the in-memory
-    # offset unconditionally (the pre-TGT-191 behavior) let the next
-    # getUpdates call confirm receipt of a batch to Telegram even when
-    # that batch was never durably persisted locally; if the process
-    # then crashed (for any reason) before persist_offset_safe next
-    # succeeded, the gap between the stale on-disk offset and the
-    # already-confirmed-to-Telegram one was permanently unrecoverable.
-    # Undefined-offset (nothing to persist) is not a failure - returns
-    # true so the caller's own no-op guard still behaves as before.
-    return 1 unless defined $offset;
-
-    # TGT-166 (found via a scheduled hourly bug-hunt, a direct follow-up
-    # sweep after TGT-165 for the same unwrapped-DBI-call pattern):
-    # cli/poller.pl's main loop used to call $store->set_offset(...)
-    # directly, with no eval wrapper. Unlike run_once's own calls
-    # (TGT-165), this one sits at the top level of the persistent
-    # poller script's main loop - not inside run_once_safe's own eval -
-    # so a locked/busy SQLite database crashed the ENTIRE poller
-    # process, not just one poll cycle's batch. The poll cycle itself
-    # already completed successfully via run_once_safe by the time this
-    # runs, so losing only this one offset persistence is the right
-    # degradation, matching _record_message_safe's own philosophy.
-    #
-    # TGT-191 update: the comment here previously said a later poll
-    # cycle would persist its own "by then newer" offset instead of
-    # retrying this exact value - that was only true because the
-    # caller used to advance its in-memory offset unconditionally.
-    # Since TGT-191 makes the caller hold the in-memory offset back on
-    # a false return here, a later cycle now retries persisting THIS
-    # SAME offset (or an even earlier one), not a newer one - and the
-    # corresponding getUpdates call is correspondingly re-issued with
-    # the same, still-unconfirmed-to-Telegram offset, so nothing in
-    # that retried batch is lost even if persistence keeps failing.
-    local $@;
-    eval { $store->set_offset( $offset, $bot_key ) };
-    if ($@) {
-
-        # Classify into a short, fixed reason rather than ever echoing
-        # $@ itself (TGT-133 precedent - a DBI/SQLite error can embed
-        # the database file's own path). Shared with _record_message_safe
-        # above via _classify_store_error (TGT-167).
-        my $reason = _classify_store_error($@);
-        print STDERR "set_offset failed ($reason) - this poll cycle's offset was not persisted; the in-memory offset is not advanced, so a later cycle retries this same offset (TGT-191)\n";
-        return 0;
-    }
-    return 1;
-}
-
-# TGT-175 (live production incident, reported via the budget project):
-# cli/poller.pl's main-loop version-change check called
-# D2TG::Config::skill_version() directly, unwrapped - a transient
-# window where .env is briefly missing/unreadable during the skill's
-# own self-update (an install rewriting the directory mid-flight) was
-# fatal to the ENTIRE poller process, not just to that one version
-# check, killing the owner's own Telegram channel until a human
-# noticed and restarted the job. Matches persist_offset_safe's own
-# non-fatal-degradation philosophy above - the poller's core
-# message-processing loop does not need to know the skill's version to
-# keep running; the check simply runs again next cycle. Deliberately
-# does NOT touch D2TG::Config::skill_version itself, nor the poller's
-# own startup call to it - a fresh process launch with no readable
-# .env at all should still refuse to start loudly, not silently
-# proceed with an unknown version; only this periodic re-check, made
-# once the process is already running, is safe to degrade.
-sub skill_version_check_safe {
-    my (%args) = @_;
-
-    my $version = eval { D2TG::Config::skill_version(%args) };
-    if ($@) {
-        my $error = $@;
-        $error =~ s/\n\z//;
-        print STDERR "skill_version_check_safe: $error - skipping this cycle's version-change check, will retry next cycle\n";
-        return undef;
-    }
-    return $version;
 }
 
 # TGT-259: this 13-sub stdout-formatting cluster moved into

@@ -10,6 +10,7 @@ use D2TG::Config;
 use D2TG::Config::Flags;
 use D2TG::Telegram;
 use D2TG::Poller;
+use D2TG::Poller::Safe;
 use D2TG::Store;
 use D2TG::Download;
 use D2TG::Transcribe;
@@ -147,7 +148,7 @@ my $lock_path = eval {
     );
 };
 if ($@) {
-    my $reason = D2TG::Poller::_classify_store_error($@);
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
     print STDERR "Failed to prepare storage location ($reason) - refusing to start.\n";
     exit 1;
 }
@@ -284,7 +285,7 @@ my $heartbeat_path = eval {
     );
 };
 if ($@) {
-    my $reason = D2TG::Poller::_classify_store_error($@);
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
     print STDERR "Failed to prepare storage location ($reason) - refusing to start.\n";
     D2TG::Lock::release($lock_path);
     exit 1;
@@ -358,7 +359,7 @@ my $store = eval {
     );
 };
 if ($@) {
-    my $reason = D2TG::Poller::_classify_store_error($@);
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
     print STDERR "Failed to open local storage ($reason) - refusing to start.\n";
     D2TG::Lock::release($lock_path);
     exit 1;
@@ -443,7 +444,7 @@ until ($shutting_down) {
         # Only advance now when persist_offset_safe itself confirms
         # the write actually landed - see its own POD for the full
         # redelivery/dedup argument.
-        my $new_offset = D2TG::Poller::run_once_safe(
+        my $new_offset = D2TG::Poller::Safe::run_once_safe(
             $pair->{telegram}, $pair->{offset}, $store,
             transcribe_voice => $transcribe_voice,
             download_media   => $download_media,
@@ -451,7 +452,7 @@ until ($shutting_down) {
         );
         $pair->{offset} = $new_offset
           if defined $new_offset
-          && D2TG::Poller::persist_offset_safe( $store, $new_offset, $pair->{bot_key} );
+          && D2TG::Poller::Safe::persist_offset_safe( $store, $new_offset, $pair->{bot_key} );
 
         # TGT-221 (Q-015 answered by Michael: retry every 60s for up
         # to 5 minutes total): scoped to this pair's own bot_key, since
@@ -512,7 +513,7 @@ until ($shutting_down) {
     }
 
     unless ($shutting_down) {
-        my $current_version = D2TG::Poller::skill_version_check_safe( default_root => $skill_root );
+        my $current_version = D2TG::Poller::Safe::skill_version_check_safe( default_root => $skill_root );
         if ( defined $current_version && $current_version ne $starting_version ) {
             my $summary = D2TG::Config::changes_summary(
                 version      => $current_version,
@@ -625,13 +626,13 @@ L<D2TG::Lock/find_other_pollers> for why.
 Storage is opened next (C<D2TG::Store-E<gt>new>, backed by
 L<D2TG::Config/state_db_path>). TGT-183 (found via a scheduled hourly
 bug hunt, reproduced live): this call is C<eval>-wrapped and its error
-classified/scrubbed via C<D2TG::Poller::_classify_store_error>, the
+classified/scrubbed via C<D2TG::Poller::Safe::classify_store_error>, the
 same clean-refusal treatment C<require_existing_base_dir>/
 C<D2TG::Lock::acquire> already give their own failures - a storage-open
 failure (a filesystem collision, a read-only mount) refuses cleanly
 with C<Failed to open local storage (REASON) - refusing to start.>
 rather than crashing with a raw, uncaught Perl exception that could
-embed the real db path (matching L<D2TG::Poller/_record_message_safe>'s
+embed the real db path (matching L<D2TG::Poller::Safe/record_message_safe>'s
 own TGT-133 scrubbing precedent). C<lock_path>/C<heartbeat_path> above
 independently shared the identical unwrapped C<make_path> risk - fixed
 separately as TGT-184 (see their own comments above), the same way.
@@ -679,7 +680,7 @@ seeding every declared chat id as allowed), resumes each pair's own
 persisted poll offset if any, and runs L<D2TG::Poller>'s long-poll loop
 for every pair in turn - gated by that shared store, saving each pair's
 own offset back after its own iteration (TGT-191: only once
-L<D2TG::Poller/persist_offset_safe> confirms the save actually
+L<D2TG::Poller::Safe/persist_offset_safe> confirms the save actually
 succeeded - never advancing the in-memory offset used for the next
 C<getUpdates> call on an unconfirmed write, since Telegram would then
 never redeliver a batch this skill failed to durably persist) - until

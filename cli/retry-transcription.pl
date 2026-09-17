@@ -8,7 +8,7 @@ use File::Spec;
 
 use D2TG::Config;
 use D2TG::Config::Flags;
-use D2TG::Poller;
+use D2TG::Poller::Safe;
 use D2TG::Store;
 use D2TG::Telegram;
 use D2TG::Download;
@@ -37,7 +37,7 @@ my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
 
 D2TG::Config::require_existing_base_dir_or_die($base_dir);
 
-my $store = D2TG::Poller::open_store_or_die(
+my $store = D2TG::Poller::Safe::open_store_or_die(
     skill_root    => File::Spec->catdir( $Bin, '..' ),
     base_dir      => $base_dir,
     admin_chat_id => D2TG::Config::chat_id(),

@@ -1,5 +1,20 @@
 # tg
 
+**Status: early implementation (v2.18).** MAINTENANCE (TGT-275, found
+via TGT-273's own REQ-029 audit): `lib/D2TG/Poller.pm` was 854 lines,
+over the board's 500-line-per-module cap. The 8 non-`run_once` helper
+functions (`open_store_or_die`, `run_once_safe`, `record_message_safe`,
+`record_message_and_track_offset`, `classify_store_error`,
+`store_write_safe`, `persist_offset_safe`, `skill_version_check_safe`)
+were relocated verbatim into a new `D2TG::Poller::Safe` module - no
+forwarder left behind. All call sites (8 `cli/*.pl` scripts,
+`D2TG::Download`, `D2TG::Transcribe::Retry`, `D2TG::Reply`, and several
+`t/` structural-regression tests) updated to the new fully-qualified
+names. Zero behavior change - full Docker suite and 100% coverage on
+both modules confirmed unchanged. `D2TG::Poller.pm` is now 598 lines -
+still over the cap, entirely due to `run_once` itself - filed as
+follow-up TGT-276.
+
 **Status: early implementation (v2.17).** BUGFIX (TGT-273, found via a
 scheduled JOB-004 improvement hunt): the poller's `edited_message`
 branch had no redelivery-dedup guard at all, unlike the plain-message/

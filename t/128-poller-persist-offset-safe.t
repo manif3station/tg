@@ -15,7 +15,7 @@ require D2TG::Poller;
 # but since this call sits at the top level of the persistent poller
 # script's main loop (not inside run_once_safe's own eval), it crashed
 # the ENTIRE poller process, not just one poll cycle's batch. Extracted
-# into D2TG::Poller::persist_offset_safe so cli/poller.pl's main loop
+# into D2TG::Poller::Safe::persist_offset_safe so cli/poller.pl's main loop
 # calls a directly unit-testable, non-fatal helper instead.
 
 sub capture_stderr {
@@ -55,7 +55,7 @@ package main;
     my $err;
     my $result;
     my $lived = eval {
-        $err = capture_stderr( sub { $result = D2TG::Poller::persist_offset_safe( $store, 42, 'sometoken' ) } );
+        $err = capture_stderr( sub { $result = D2TG::Poller::Safe::persist_offset_safe( $store, 42, 'sometoken' ) } );
         1;
     };
 
@@ -79,7 +79,7 @@ package main;
     my $store = Fake::Store::DyingSetOffset->new( dies => 0 );
 
     my $result;
-    my $err = capture_stderr( sub { $result = D2TG::Poller::persist_offset_safe( $store, 99, 'othertoken' ) } );
+    my $err = capture_stderr( sub { $result = D2TG::Poller::Safe::persist_offset_safe( $store, 99, 'othertoken' ) } );
 
     is( $err, '', 'nothing is printed to STDERR when set_offset succeeds' );
     is_deeply( $store->{calls}, [ [ 99, 'othertoken' ] ], 'set_offset is called exactly once with the correct arguments' );
@@ -91,7 +91,7 @@ package main;
     # guard: an undef offset must not call set_offset at all.
     my $store = Fake::Store::DyingSetOffset->new( dies => 0 );
 
-    my $result = D2TG::Poller::persist_offset_safe( $store, undef, 'sometoken' );
+    my $result = D2TG::Poller::Safe::persist_offset_safe( $store, undef, 'sometoken' );
 
     is_deeply( $store->{calls}, [], 'set_offset is never called when the offset is undef' );
     ok( $result, 'an undef offset (nothing to persist) is reported as success, not failure (TGT-191)' );

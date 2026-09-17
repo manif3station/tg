@@ -7,7 +7,7 @@ use File::Temp qw(tempfile);
 use File::Spec;
 use Digest::SHA qw(sha256_hex);
 use D2TG::Config;
-use D2TG::Poller;
+use D2TG::Poller::Safe;
 
 use constant DEFAULT_HARD_TIMEOUT => 50;
 
@@ -127,7 +127,7 @@ sub retry_failed_download {
     # cli/retry-download.pl's own batch loop has no eval around this
     # call either) crashing the whole script mid-loop, silently
     # abandoning every remaining queued row in that batch. Now
-    # eval-wrapped and classified via D2TG::Poller::_classify_store_error,
+    # eval-wrapped and classified via D2TG::Poller::Safe::classify_store_error,
     # matching the established pattern - a bookkeeping-write failure is
     # logged non-fatally to STDERR and does not affect the reported
     # (1, $local_path) success, since the download itself did succeed.
@@ -156,7 +156,7 @@ sub retry_failed_download {
     # column, so an empty-string media_kind is unreachable through this
     # codebase's own actual data flow, not merely untested.
     # TGT-198: all 3 of this function's own eval/classify/print
-    # blocks are promoted to the shared D2TG::Poller::store_write_safe
+    # blocks are promoted to the shared D2TG::Poller::Safe::store_write_safe
     # helper - none of these call sites need the coderef's own return
     # value, so only the \$ok half of the (\$ok, \$value) pair is used.
     my $record_ok = 1;
@@ -173,7 +173,7 @@ sub retry_failed_download {
         # record_message defaults to D2TG::Store::DEFAULT_BOT_KEY, so a
         # retried message in a multi-bot config silently lands under the
         # wrong bot's history instead of the one that actually received it.
-        ($record_ok) = D2TG::Poller::store_write_safe(
+        ($record_ok) = D2TG::Poller::Safe::store_write_safe(
             $row->{chat_id}, 'record_message',
             sub {
                 $store->record_message(
@@ -196,7 +196,7 @@ sub retry_failed_download {
         # cli/retry-download.pl prints an unqualified RETRY OK for a row
         # that is, in fact, still sitting in failed_downloads.
         my ($remove_ok) =
-          D2TG::Poller::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
+          D2TG::Poller::Safe::store_write_safe( $row->{chat_id}, 'remove_failed_download', sub { $store->remove_failed_download( $row->{id} ) } );
         $still_queued = $remove_ok ? 0 : 1;
     }
     else {
@@ -205,7 +205,7 @@ sub retry_failed_download {
         # the NEXT retry attempt sees it via $row->{local_path} above
         # and skips download_file entirely - only the still-failing
         # record_message write is retried, not the whole download.
-        D2TG::Poller::store_write_safe( $row->{chat_id}, 'mark_failed_download_downloaded', sub { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) } );
+        D2TG::Poller::Safe::store_write_safe( $row->{chat_id}, 'mark_failed_download_downloaded', sub { $store->mark_failed_download_downloaded( $row->{id}, $local_path ) } );
         print STDERR "STORE ERROR [$row->{chat_id}]: queue row not removed - "
           . "a future retry can still restore history for this message, without re-downloading\n";
         $still_queued = 1;
@@ -418,7 +418,7 @@ C<cli/retry-download.pl>) can retry again later.
 Both the C<record_message> and C<remove_failed_download> calls (TGT-194,
 found via a scheduled JOB-003 hourly bug hunt, reproduced live in a
 C<developer-dashboard:latest> container) are C<eval>-wrapped and
-classified via C<D2TG::Poller::_classify_store_error> - a locked/busy
+classified via C<D2TG::Poller::Safe::classify_store_error> - a locked/busy
 database at either one used to die raw, breaking this function's own
 documented return contract even though the download itself genuinely
 succeeded, and crashing C<cli/retry-download.pl>'s own per-row batch
@@ -446,7 +446,7 @@ re-downloads the same file from Telegram on every pass.
 This function's own C<record_message>/C<remove_failed_download>/
 C<mark_failed_download_downloaded> calls (TGT-198, found via a
 scheduled JOB-004 improvement hunt) are now routed through
-L<D2TG::Poller/store_write_safe> instead of each hand-writing its own
+L<D2TG::Poller::Safe/store_write_safe> instead of each hand-writing its own
 C<eval>/classify/print block - a pure refactor, printed
 C<STORE ERROR [chat_id]: ... failed - REASON> text unchanged.
 

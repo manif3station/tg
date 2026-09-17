@@ -8,7 +8,7 @@ use File::Spec;
 
 use D2TG::Config;
 use D2TG::Config::Flags;
-use D2TG::Poller;
+use D2TG::Poller::Safe;
 use D2TG::Store;
 use D2TG::Reply;
 use D2TG::Reply::Args;
@@ -46,11 +46,11 @@ D2TG::Config::require_existing_base_dir_or_die($base_dir);
 # byte-identical args (poller.pl passes admin_chat_id as an arrayref of
 # every configured group's chat_id; this script passes a plain scalar),
 # but the same eval/classify/refuse shape. Now goes through the shared
-# D2TG::Poller::open_store_or_die helper (TGT-186) - prints a clean,
+# D2TG::Poller::Safe::open_store_or_die helper (TGT-186) - prints a clean,
 # scrubbed refusal and exits 1 on a storage-open failure instead of
 # letting the raw Perl/DBI exception (which can embed the real db path)
 # propagate.
-my $store = D2TG::Poller::open_store_or_die(
+my $store = D2TG::Poller::Safe::open_store_or_die(
     skill_root    => File::Spec->catdir( $Bin, '..' ),
     base_dir      => $base_dir,
     admin_chat_id => D2TG::Config::chat_id(),

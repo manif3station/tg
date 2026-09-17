@@ -8,7 +8,7 @@ use File::Spec;
 
 use D2TG::Config;
 use D2TG::Config::Flags;
-use D2TG::Poller;
+use D2TG::Poller::Safe;
 use D2TG::Store;
 use D2TG::Reply;
 use D2TG::Reply::Args;
@@ -47,11 +47,11 @@ my $chat_id = $ARGV[0];
 # byte-identical args (poller.pl passes admin_chat_id as an arrayref of
 # every configured group's chat_id; this script passes a plain scalar),
 # but the same eval/classify/refuse shape. Now goes through the shared
-# D2TG::Poller::open_store_or_die helper (TGT-186) - prints a clean,
+# D2TG::Poller::Safe::open_store_or_die helper (TGT-186) - prints a clean,
 # scrubbed refusal and exits 1 on a storage-open failure instead of
 # letting the raw Perl/DBI exception (which can embed the real db path)
 # propagate.
-my $store = D2TG::Poller::open_store_or_die(
+my $store = D2TG::Poller::Safe::open_store_or_die(
     skill_root    => File::Spec->catdir( $Bin, '..' ),
     base_dir      => $base_dir,
     admin_chat_id => D2TG::Config::chat_id(),
@@ -69,7 +69,7 @@ my $store = D2TG::Poller::open_store_or_die(
 # refusal this project's established pattern provides everywhere else.
 my $approved = eval { $store->approve( $chat_id, $bot_key ) };
 if ($@) {
-    my $reason = D2TG::Poller::_classify_store_error($@);
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
     print STDERR "STORE ERROR: approve failed - $reason\n";
     exit 1;
 }
@@ -81,7 +81,7 @@ if ($approved) {
 
 my $allowed = eval { $store->is_allowed( $chat_id, $bot_key ) };
 if ($@) {
-    my $reason = D2TG::Poller::_classify_store_error($@);
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
     print STDERR "STORE ERROR: is_allowed failed - $reason\n";
     exit 1;
 }
@@ -147,7 +147,7 @@ C<chat_id> gets a consistent exit 2/Usage rather than an exit
 The C<approve>/C<is_allowed> calls themselves (TGT-195, found via a
 repo-wide grep sweep done as part of a Codex QA-stage review on
 TGT-194) are C<eval>-wrapped and classified via
-C<D2TG::Poller::_classify_store_error> - a locked/busy database at
+C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database at
 either one used to die raw, printing a raw Perl/DBI exception
 (potentially embedding the real db_path) to STDERR instead of a clean
 C<STORE ERROR: ... failed - REASON> refusal.

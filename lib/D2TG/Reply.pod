@@ -123,7 +123,7 @@ C<store> entirely.
 Given a C<send_reply> failure's C<$@> text, returns it unchanged unless
 L<D2TG::Config/is_transient_error> says it looks transient (a network
 timeout or a 5xx response - TGT-097 moved this classification into a
-shared predicate, also used by C<D2TG::Poller::run_once_safe>), in which
+shared predicate, also used by C<D2TG::Poller::Safe::run_once_safe>), in which
 case an explicit retry instruction is appended (TGT-096, a live user
 request: a real C<sendVoice> timeout looked identical to a permanent
 failure to the calling agent, with no signal that retrying would likely
