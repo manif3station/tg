@@ -175,7 +175,7 @@ sub is_transient_error {
     my ($error) = @_;
 
     return 1 if $error =~ /timed out/i;
-    return 1 if $error =~ /status 5\d\d/;
+    return 1 if $error =~ /status 5\d\d\b/;
 
     # TGT-160 (found via a scheduled hourly bug hunt): Telegram's own
     # Bot API documents 429 ("Too Many Requests") as a designed,

@@ -1,12 +1,11 @@
 # tg
 
-**Status: early implementation (v2.28).** BUGFIX (TGT-290, found via a
-user-requested comprehensive bug/improvement sweep): the shared
-multipart boundary generator used by `send_voice`/`send_photo`/
-`send_document` had only ~30 bits of entropy - a file whose raw bytes
-happened to contain the generated boundary string would corrupt the
-upload. Replaced with a `_generate_boundary` helper carrying 128 bits
-of real entropy, fixing all 3 upload paths in one place.
+**Status: early implementation (v2.29).** BUGFIX (TGT-291, found via a
+user-requested comprehensive bug/improvement sweep): `is_transient_error`'s
+5xx classification regex never got the same `\b` word-boundary anchor
+its 429 sibling has - a near-miss like "status 5001" was incorrectly
+matched and classified as transient. Added the anchor, matching the
+429 check's own established pattern.
 
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s

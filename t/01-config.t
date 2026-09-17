@@ -130,4 +130,11 @@ ok( D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request fa
 ok( !D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 401 Unauthorized)'),
     'is_transient_error() still returns false for a non-transient 4xx other than 429' );
 
+# TGT-291 (found via a user-requested comprehensive bug/improvement
+# sweep): the 5xx regex never got the same \b boundary the 429 check
+# above already has - a near-miss like "status 5001" would incorrectly
+# match /status 5\d\d/ and be misclassified as transient.
+ok( !D2TG::Config::is_transient_error('D2TG::Telegram getUpdates: HTTP request failed (status 5001 something else)'),
+    'is_transient_error() does not match a near-miss like status 5001 - the \b boundary holds, mirroring the 429 fix' );
+
 done_testing();

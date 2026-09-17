@@ -5977,3 +5977,27 @@ hardening fix - replacing a weak-entropy random-value generator with a
 cryptographically stronger one. No new shell invocation, no new file
 I/O, no new external-input handling, no system/exec/backtick/piped-
 open/eval-STRING patterns introduced.
+
+## TGT-291: is_transient_error's 5xx regex missing word-boundary anchor unlike its 429 sibling
+
+Found via the same comprehensive sweep as TGT-290. `is_transient_error`'s
+5xx classification (`/status 5\d\d/`) never got the same `\b`
+word-boundary anchor the 429 check three lines below it has (added by
+TGT-160, explicitly tested by `t/01-config.t` to reject a near-miss
+like "status 4290"). The same near-miss class was unguarded for 5xx: an
+error string containing "status 5001" (or any 4+ digit number starting
+with 500-599) would incorrectly match and be classified as transient -
+retried instead of surfaced as a real, permanent failure.
+
+**Fix**: one-character regex change, `/status 5\d\d/` -> `/status
+5\d\d\b/`, matching the 429 check's own pattern exactly.
+
+Extended the existing `t/01-config.t` (rather than creating a new test
+file) with one assertion mirroring its own established 429 near-miss
+test, since this is the identical bug class on the identical function -
+confirmed genuinely red beforehand.
+
+perlsec.pl-style vulnerability-scan audit: a single regex anchor
+addition - no new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/eval-STRING
+patterns introduced.

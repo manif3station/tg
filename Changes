@@ -1,5 +1,13 @@
 Revision history for the tg skill
 
+2.29  2026-09-18
+      - BUGFIX (TGT-291, found via a user-requested comprehensive
+        bug/improvement sweep): is_transient_error's 5xx regex never
+        got the same \b word-boundary anchor its 429 sibling has - a
+        near-miss like "status 5001" was incorrectly matched and
+        classified as transient. Added the anchor, matching the 429
+        check's own established pattern exactly.
+
 2.28  2026-09-18
       - BUGFIX (TGT-290, found via a user-requested comprehensive
         bug/improvement sweep): the shared multipart boundary generator
