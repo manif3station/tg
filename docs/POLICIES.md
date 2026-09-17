@@ -5904,3 +5904,34 @@ perlsec.pl-style vulnerability-scan audit: pure test-file
 warnings-pragma additions - no shell invocation, no file I/O, no
 system/exec/backtick/piped-open/eval-STRING patterns, no new
 external-input handling, no assertion or behavior change.
+
+## TGT-289: Tira upgrade-gate review (5.144 -> 5.150) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.144 to 5.150. This confirms `upgrade-unreviewed` (enabled
+via TGT-283) is working exactly as intended - it fired on this card
+within minutes of it landing in `backlog`, per `agent-still`'s own
+"diagnose the board-wide silence" instruction. Ran `d2
+tira.policy.undeclared` (empty - no undeclared rules) and read every
+Changes entry from 5.145 through 5.150:
+
+- 5.145 (TKT-1120): internal `policy_evaluate` duplicate-detection
+  scoping fix - no board-facing rule/option change.
+- 5.146 (TKT-908): `comment.add`'s refusal message now names `--text`
+  correctly when a caller passes `body =>` instead - message-quality
+  only.
+- 5.147 (TKT-967): policy-declaration forbidden-option refusal wording
+  improved (a shared per-option reason table) - message-quality only.
+- 5.148 (TKT-968): a doc-drift fix inside Tira's own `SKILLS.md`/test
+  suite - not applicable to this board.
+- 5.149 (TKT-970): removed a no-op `include_discard` argument from
+  Tira's internal `record_list` - this project only calls the `d2
+  tira.*` CLI, never that internal Perl API directly, so no impact.
+- 5.150 (TKT-972): a new `card-stamp-unreadable` finding, layered
+  automatically into rules this board already has declared
+  (`checklist-idle`, `card-duration`, `question-unanswered`, and
+  others) - strengthens existing coverage, needs no separate
+  `tira.policy.add`.
+
+Conclusion: nothing between 5.144 and 5.150 requires a new
+declaration, decline, or update to an existing one on this board.
