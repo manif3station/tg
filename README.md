@@ -1,15 +1,15 @@
 # tg
 
-**Status: early implementation (v2.24).** MAINTENANCE (TGT-281, own
-follow-up filed by TGT-280's pipeline-continuity backlog check):
-audited `cli/poller.pl` (766 lines) against the board's 500-line
-convention - decided against extraction. Every remaining block is
-order-dependent startup/shutdown sequencing with no cluster another
-caller would ever want independently; every reusable behavior is
-already delegated to `lib/D2TG::` and independently unit-tested there.
-The raw count is also misleading: 254 comment lines + 43 blank + 220
-lines of embedded POD leave only 249 actual code lines. Full rationale
-in `docs/POLICIES.md`. No functional change.
+**Status: early implementation (v2.25).** BUGFIX (TGT-286, found via a
+scheduled JOB-003 hourly bug hunt): `cli/poller.pl`'s two
+`D2TG::Config::Flags::bot_groups` calls were the only startup failure
+paths in this script never brought into the established clean-refusal
+convention (`... - refusing to start.` on STDERR, exit 1) - a malformed
+`--chat_id` shape or a duplicate/reused bot-token pair used to surface
+as a raw, uncaught Perl exception instead. Both calls now go through a
+new `bot_groups_or_die` wrapper matching every other failure path. No
+behavior change to exit codes or accepted inputs - only the STDERR
+message shape.
 
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s

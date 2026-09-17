@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+2.25  2026-09-17
+      - BUGFIX (TGT-286, found via a scheduled JOB-003 hourly bug hunt):
+        cli/poller.pl's two D2TG::Config::Flags::bot_groups calls (the
+        validation-only pass and the real one) were the only startup
+        failure paths in this script never brought into the
+        TGT-183/184/185 clean-refusal convention - a malformed
+        --chat_id shape, a duplicate (chat_id, bot token) pair, or a
+        bot token reused across chat ids used to surface as a raw,
+        uncaught Perl exception instead of the script's own "... -
+        refusing to start." STDERR shape. Both calls now go through a
+        new bot_groups_or_die wrapper that strips the module-qualified
+        prefix and refuses cleanly, matching every other failure path.
+        No behavior change to exit codes or which inputs are accepted -
+        only the STDERR message shape for the already-refused cases.
+
 2.24  2026-09-17
       - MAINTENANCE (TGT-281, own follow-up filed by TGT-280's
         pipeline-continuity backlog check): audited cli/poller.pl

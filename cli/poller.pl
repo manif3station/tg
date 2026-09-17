@@ -70,6 +70,31 @@ if ( grep { $_ eq '--help' || $_ eq '-h' } @ARGV ) {
 # the --db override and fall back to the default storage location.
 my @original_argv = @ARGV;
 
+# TGT-286 (found via a scheduled JOB-003 hourly bug hunt): both
+# D2TG::Config::Flags::bot_groups call sites below (the validation-only
+# pass and the real one) used to call it raw, unlike every other
+# startup-time failure path in this script (lock_path, heartbeat_path,
+# D2TG::Store->new - TGT-183/184/185), which are all eval-wrapped and
+# refuse cleanly. A malformed --chat_id shape or a duplicate/reused
+# bot-token pair used to surface as a raw, uncaught Perl exception
+# instead. This wrapper strips bot_groups' own
+# "D2TG::Config::Flags::bot_groups: " module-qualifying prefix (the
+# message itself is safe to show - it never embeds a bot token, only
+# chat ids and the CLI's own literal argument text) and prints the same
+# "... - refusing to start." shape every other failure path already
+# uses.
+sub bot_groups_or_die {
+    my (%args) = @_;
+    my @result = eval { D2TG::Config::Flags::bot_groups(%args) };
+    if ($@) {
+        ( my $reason = $@ ) =~ s/^D2TG::Config::Flags::bot_groups:\s*//;
+        $reason =~ s/\s+$//;
+        print STDERR "Invalid --chat_id/--bot configuration ($reason) - refusing to start.\n";
+        exit 1;
+    }
+    return @result;
+}
+
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
@@ -86,7 +111,7 @@ my ( $db_alias, @rest );
 # real, env-folding call die with "--bot given before any --chat_id" -
 # irrelevant here, since this pass only looks at what the CLI itself
 # declared).
-my ( undef, @cli_leftover ) = D2TG::Config::Flags::bot_groups(
+my ( undef, @cli_leftover ) = bot_groups_or_die(
     argv         => [@ARGV],
     env_chat_id  => undef,
     env_token    => undef,
@@ -119,7 +144,7 @@ exit 1
   && length $ENV{D2TG_CHAT_ID}
   && !D2TG::Config::require_chat_id_or_warn();
 
-my ( $groups, @leftover ) = D2TG::Config::Flags::bot_groups( argv => [@ARGV] );
+my ( $groups, @leftover ) = bot_groups_or_die( argv => [@ARGV] );
 @ARGV = @leftover;
 
 my $base_dir = D2TG::Config::resolve_alias_dir_or_die( alias => $db_alias );
@@ -672,7 +697,15 @@ via a scheduled bug hunt) whenever C<D2TG_CHAT_ID> is non-empty but fails the
 same canonical-shape check, even when a CLI C<--chat_id> group was
 given - before this fix, that combination skipped validation entirely
 and L<D2TG::Config::Flags/bot_groups> still silently folded the malformed
-value in as an extra, broken poll group instead of refusing. Once past every guard, prints a
+value in as an extra, broken poll group instead of refusing. Both
+L<D2TG::Config::Flags/bot_groups> calls in this script (the
+validation-only pass above and the real one that builds C<$groups>) go
+through a local C<bot_groups_or_die> wrapper (TGT-286, found via a
+scheduled bug hunt) that refuses with the same clean C<... - refusing
+to start.> STDERR shape every other startup failure path in this script
+already uses, rather than letting a malformed C<--chat_id> shape, a
+duplicate C<(chat_id, bot token)> pair, or a reused bot token surface
+as a raw, uncaught Perl exception. Once past every guard, prints a
 startup line naming each group's chat id and its bots' masked tokens
 (L<D2TG::Config/masked_token>, TGT-045; the single-bot case keeps the
 original one-line format verbatim), opens a L<D2TG::Store> (auto-

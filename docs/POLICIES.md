@@ -5765,3 +5765,53 @@ investigation-write-up convention (TGT-274, TGT-279's `D2TG::Telegram.pm`
 survey). No functional code changed; no `.pm`/`.pod` files touched, so
 REQ-028/029 (POD-split, 500-line-cap audits) are not applicable to this
 ticket's own diff.
+
+## TGT-286: cli/poller.pl's two bot_groups calls weren't eval-wrapped like every other failure path
+
+Found via a scheduled JOB-003 hourly bug hunt: `cli/poller.pl`'s
+startup failure paths (`lock_path`, `heartbeat_path`, `D2TG::Store->new`
+- TGT-183/184/185) were all deliberately `eval`-wrapped and refuse with
+a clean, fixed `... - refusing to start.` STDERR message rather than
+letting a raw, uncaught Perl exception escape. The two
+`D2TG::Config::Flags::bot_groups` calls (the validation-only pass at
+what was line 89, and the real call that builds `$groups` at what was
+line 122) were never brought into that same convention - a malformed
+`--chat_id` shape, a duplicate `(chat_id, bot token)` pair, or a bot
+token reused across chat ids all still died raw, surfacing
+`D2TG::Config::Flags::bot_groups: <reason>` verbatim on STDERR with
+Perl's own default exit code (255) instead of this script's own clean
+shape (exit 1).
+
+Not a functional defect on its own - the process still exits non-zero
+and does not hang, and no secret is ever embedded in any of
+`bot_groups`'s own die messages (`masked_token` is used in the
+cross-chat-id case; the duplicate-pair case names only the chat id and
+the literal CLI token text, matching what the user themselves typed).
+But it is a genuine, live inconsistency against this script's own
+hard-won TGT-183/184/185 convention, found by the same class of
+scheduled review that produced those three tickets.
+
+**Fix**: added a `bot_groups_or_die` wrapper local to `cli/poller.pl`
+(not a `lib/D2TG::` extraction - it is three lines of glue specific to
+this script's own STDERR-message convention, not reusable logic) that
+`eval`-wraps the call, strips `bot_groups`'s own
+`D2TG::Config::Flags::bot_groups: ` module-qualifying prefix, and
+prints `Invalid --chat_id/--bot configuration (REASON) - refusing to
+start.` on STDERR before exiting 1. Both call sites now go through it.
+
+`t/286-poller-bot-groups-eval-wrapped.t` (new): drives a malformed
+`--chat_id` through the real `cli/poller.pl` subprocess (via the
+shared `Test::CaptureStdio::run_capturing_stderr` helper, TGT-203) and
+asserts the clean-refusal shape; confirmed genuinely red beforehand (2
+of 3 assertions failed, both against the raw module-qualified die text
+instead of the new message). `t/202`/`t/213`/`t/126`/`t/77` (the
+existing tests already exercising a `bot_groups` die through this
+script) re-confirmed green and unaffected - none of them asserted the
+exact STDERR text this fix changed, only that a refusal happened.
+
+perlsec.pl-style vulnerability-scan audit: the new wrapper only
+`eval`s an existing, already-reviewed function call and does a plain
+string substitution/print - no new shell invocation, no new file I/O,
+no new system/exec/backtick/piped-open/eval-STRING patterns, and no
+secret is newly exposed (confirmed above - the underlying die messages
+never embedded a bot token to begin with).
