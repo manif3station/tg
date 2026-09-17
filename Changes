@@ -1,5 +1,24 @@
 Revision history for the tg skill
 
+2.23  2026-09-17
+      - MAINTENANCE (TGT-280, own follow-up filed by TGT-279's
+        survey): D2TG::Store.pm's _ensure_schema (355 lines, its own
+        schema/migration DDL logic, tightly coupled to new()) extracted
+        into a new D2TG::Store::Schema module as a single
+        ensure_schema($dbh) function, preserving exact migration call
+        order - later migrations depend on columns/tables earlier ones
+        create. D2TG::Store.pm is now 232 lines. Also addressed
+        D2TG::Telegram.pm (547 lines) without any risky function-level
+        split: its own embedded POD (210 lines, never previously in a
+        separate file) was the real overage driver - extracted to
+        Telegram.pod, leaving the module at 338 lines. Both modules
+        are now comfortably under the board's 500-line-per-module cap,
+        closing out the D2TG::Store.pm/D2TG::Telegram.pm decomposition
+        chain started by TGT-278. New t/280-store-schema-module.t
+        proves the new module's ownership. Zero behavior change - full
+        Docker suite (211 files, 2362 tests) and 100% coverage on all
+        3 touched modules confirmed unchanged.
+
 2.22  2026-09-17
       - MAINTENANCE (TGT-279, own follow-up filed by TGT-278's survey):
         continued D2TG::Store.pm's decomposition - extracted the

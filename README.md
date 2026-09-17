@@ -1,5 +1,18 @@
 # tg
 
+**Status: early implementation (v2.23).** MAINTENANCE (TGT-280, own
+follow-up filed by TGT-279's survey): extracted `D2TG::Store.pm`'s
+`_ensure_schema` (355 lines, its own schema/migration DDL, tightly
+coupled to `new()`) into a new `D2TG::Store::Schema` module as a
+single `ensure_schema($dbh)` function, preserving exact migration call
+order. `D2TG::Store.pm` is now 232 lines. Also addressed
+`D2TG::Telegram.pm` (547 lines) without any risky function-level
+split - its own embedded POD (never in a separate file before) was the
+real overage driver, extracted to `Telegram.pod`, leaving the module
+at 338 lines. Both modules are now comfortably under the 500-line cap,
+closing out the decomposition chain started by TGT-278. Zero behavior
+change - full Docker suite and 100% coverage confirmed unchanged.
+
 **Status: early implementation (v2.22).** MAINTENANCE (TGT-279, own
 follow-up filed by TGT-278's survey): extracted `D2TG::Store.pm`'s
 access-control cluster into a new `D2TG::Store::AccessControl` module

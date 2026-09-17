@@ -52,29 +52,15 @@ checkpointed back into the main file). WAL is appropriate for this
 skill's single-host, local-filesystem usage; it is not suitable for a
 database file shared over a network filesystem between hosts.
 
-Ensuring the schema re-runs the C<messages> table's C<read_at> column
-migration (TGT-046) on every call, which is expected to fail with
-C<duplicate column name> on any database that's already been migrated -
-that specific, already-handled case never reaches C<STDERR> (TGT-053,
-C<PrintError> suppressed just for that one statement); a genuinely
-different, unexpected failure still propagates via C<die> as before.
-It also re-runs C<allow_list>/C<pending>'s C<bot_key> migration
-(TGT-098) on every call, via C<PRAGMA table_info> detection rather than
-a bare C<ALTER TABLE ... ADD COLUMN> - a C<PRIMARY KEY> change can't be
-done that way in SQLite, so a pre-migration table (detected once, no
-C<bot_key> column) is rebuilt: renamed aside, replaced with the new
-composite-C<(chat_id, bot_key)>-PK shape, every row copied across with
-C<bot_key=DEFAULT_BOT_KEY> (TGT-101 - a single named constant, still C<''>,
-replacing 8 bare-literal occurrences that used to exist across this file -
-the 2 CREATE TABLE DDL strings above, the migration block's own CREATE
-TABLE/INSERT strings below, and 4 "unless defined" guards),
-old table dropped, the whole sequence wrapped in one
-transaction so a failure partway through rolls back to the untouched
-original state (a genuine, testable concern for a rename/create/copy/drop
-sequence, unlike the single-statement C<ADD COLUMN> migration above) -
-re-opening after a failed attempt migrates cleanly from scratch rather
-than working against a half-migrated table. Already-migrated databases
-are a no-op (the C<PRAGMA> check finds C<bot_key> already present).
+Ensuring the schema (TGT-280, own follow-up filed by TGT-279's survey:
+the schema/migration DDL itself moved into L<D2TG::Store::Schema> as a
+single C<ensure_schema($dbh)> function - a genuinely different shape
+from the other extracted clusters, since it has no state of its own to
+keep between calls and its own statements are strictly order-dependent)
+re-runs every column/table migration this project has ever shipped on
+every call, each one tolerant of being re-run against an
+already-migrated database. Full documentation of every migration lives
+in C<D2TG/Store/Schema.pod>.
 
 =head2 Access control
 

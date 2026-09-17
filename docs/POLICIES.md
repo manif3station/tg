@@ -5213,6 +5213,82 @@ none introduce a new event type, command, or board-visible concept
 this board's own 53 active + 10 declined policy set doesn't already
 cover. Conclusion: no policy change needed for this upgrade.
 
+## TGT-280: closing out the D2TG::Store.pm/D2TG::Telegram.pm decomposition chain
+
+Own follow-up filed by TGT-279's survey - the final ticket in the chain
+started by TGT-278's own original `wc -l` sweep.
+
+**D2TG::Store.pm's `_ensure_schema`** (355 lines) was the one remaining
+piece of that module's own overage after TGT-278/279's cluster
+extractions - a single large schema-migration function tightly coupled
+to `new()`, genuinely different in shape from every prior extraction
+this session (RetryQueue/History/AccessControl/SentReplyAudit are all
+sets of independent methods sharing only `$dbh`; `_ensure_schema` is
+one function whose own internal statements are strictly order-
+dependent - e.g. the TGT-232 `bot_key` migration for `messages` copies
+the `read_at`/`local_path` columns added by the two `ALTER TABLE`
+blocks immediately before it, and the TGT-221 `last_retry_at` column
+for `failed_downloads` is deliberately placed *after* the TGT-219
+`bot_key` migration rather than before it, since that migration's own
+`CREATE TABLE` only lists the columns it explicitly knows about and
+would otherwise silently drop a column added out of order).
+
+Extracted as a single plain function - `D2TG::Store::Schema::ensure_schema($dbh)`
+- rather than an object, since it needs no state of its own between
+calls. Moved verbatim, preserving the exact statement order from the
+original `_ensure_schema` body; `D2TG::Store::new` now calls it
+directly instead of via a `$self->` instance method.
+`D2TG::Store.pm` is now 232 lines - comfortably under the cap, closing
+out its own decomposition chain after 4 tickets (TGT-278/279/280).
+
+**D2TG::Telegram.pm** (547 lines) was surveyed by TGT-279 but not
+extracted, since its 16 functions are all tightly coupled to the
+shared HTTP transport - a genuinely different shape from
+`D2TG::Store`'s independent methods. Investigating further before
+attempting a function-level split revealed the real driver of its
+overage: its own embedded POD (210 lines) had never been extracted to
+a separate `.pod` file, unlike every other large module this session
+touched - the actual I<code> is only 338 lines, already comfortably
+under the cap on its own. Extracted the POD to `Telegram.pod` -
+closing out this module's own decomposition with zero functional
+change and none of the risk a forced outbound-send module split would
+have carried. This is a useful general lesson from this whole
+decomposition chain: always check whether embedded POD alone explains
+an overage before designing a functional split - TGT-273's own
+Poller.pm work established this pattern, but it wasn't systematically
+re-checked for every subsequently-discovered oversized module until
+this ticket.
+
+Extracting both `.pod` files surfaced the same class of podchecker
+bug TGT-277 already fixed elsewhere: 6 unresolved `L</name>` links in
+`Telegram.pod` (one had no matching `=head2` anchor at all -
+`_validate_reply_to_message_id` is only ever mentioned in prose, never
+given its own section - fixed by making it plain `C<>` code text
+instead of a link) plus the familiar bare-name-vs-signature mismatch
+for the rest, plus one benign `empty section in previous paragraph`
+warning (two `=head2` headers - `send_photo`/`send_document` -
+deliberately sharing one body, matching an existing pattern elsewhere
+in this codebase; a warning, not an error, so it doesn't fail
+`t/277-podchecker-clean.t`'s own zero-I<error> assertion). Fixed all
+of them using the same pattern established in TGT-277/278/279.
+
+New `t/280-store-schema-module.t` proves `D2TG::Store::Schema`'s
+ownership via `can()` - confirmed genuinely red pre-fix. Zero behavior
+change - the full pre-existing test suite passed unchanged with no
+test edits needed for either extraction. Full Docker suite (211 files,
+2362 tests) passes unchanged (one flaky, unrelated
+`t/54-lock-acquire-race.t` failure under `Devel::Cover`'s own added
+load, confirmed genuinely flaky via a clean standalone re-run); 100%
+statement + subroutine coverage confirmed on `D2TG::Store`,
+`D2TG::Store::Schema`, and `D2TG::Telegram`.
+
+perlsec.pl-style vulnerability-scan audit: a pure code-relocation
+refactor (the schema function moved verbatim, no logic changed) plus a
+documentation-only extraction (POD moved to a separate file, zero code
+touched) - no new external-input handling, no new shell/file/SQL
+surface; every DDL statement is unchanged from its pre-extraction
+form.
+
 ## TGT-279: continuing D2TG::Store.pm decomposition (720 -> 574 lines)
 
 Own follow-up filed by TGT-278's survey. Extracted the 2 remaining

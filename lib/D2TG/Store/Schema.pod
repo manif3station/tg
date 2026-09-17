@@ -1,0 +1,51 @@
+=head1 NAME
+
+D2TG::Store::Schema - SQLite schema/migration DDL for the tg skill
+
+=head1 SYNOPSIS
+
+    D2TG::Store::Schema::ensure_schema($dbh);
+
+=head1 DESCRIPTION
+
+TGT-280 (own follow-up filed by TGT-279's survey): D2TG::Store.pm was
+still 574 lines, entirely due to C<_ensure_schema> (355 lines) - a
+single large schema-migration function tightly coupled to C<new()>,
+not a set of independent methods sharing only C<$dbh> like every prior
+extraction this session (RetryQueue/History/AccessControl/
+SentReplyAudit). Extracted here as a single plain function rather than
+an object - it has no state of its own to keep between calls, it just
+runs a fixed sequence of C<CREATE TABLE>/C<ALTER TABLE>/migration
+statements against whatever C<$dbh> it's given, once, at
+C<D2TG::Store::new> time.
+
+B<Call order matters.> Several migrations depend on state an earlier
+one created - the C<messages> table's own C<bot_key> migration (TGT-232)
+copies the C<read_at>/C<local_path> columns added by the two C<ALTER
+TABLE> blocks immediately before it, and the C<failed_downloads>
+C<last_retry_at> column (TGT-221) is deliberately placed after the
+C<bot_key> migration (TGT-219) rather than before it, since that
+migration's own C<CREATE TABLE> only lists the columns it explicitly
+knows about and would otherwise silently drop a column added out of
+order. C<ensure_schema> must always run its statements in exactly the
+order they appear in this file.
+
+=head1 FUNCTIONS
+
+=head2 ensure_schema($dbh)
+
+Creates every table this skill needs (C<allow_list>, C<pending>,
+C<meta>, C<messages>, C<failed_downloads>, C<failed_transcriptions>,
+C<sent_replies>) if they don't already exist, and runs every
+column/schema migration this project has ever shipped, each one
+tolerant of being re-run against an already-migrated database (a
+duplicate C<ALTER TABLE ... ADD COLUMN> is caught and ignored; a
+C<PRAGMA table_info> check skips a rename/create/copy/drop migration
+that's already been applied). Called once, synchronously, from
+L<D2TG::Store/new> before any other storage object is built. Every
+rename/create/copy/drop migration (the C<PRIMARY KEY> changes that
+can't be done via a plain C<ALTER TABLE> in SQLite) runs inside its own
+transaction, rolling back cleanly on any failure so a crash mid-
+migration can never orphan data in a half-renamed table.
+
+=cut
