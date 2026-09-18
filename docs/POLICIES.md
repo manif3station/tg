@@ -6571,6 +6571,47 @@ human-readable local timestamp to a diagnostic print line - no new
 shell invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
 
+## TGT-308: send_reply's is_recent_duplicate_reply call leaked the raw db path
+
+Found via a JOB-003 hourly bug hunt. `D2TG::Reply::send_reply`'s own
+dedup check (TGT-114) calls `$args{store}->is_recent_duplicate_reply`
+completely unwrapped inside its own `if` condition - the same bug
+class TGT-183/186/195/293/306 already fixed elsewhere, but genuinely
+worse here: `cli/reply.pl` does wrap the whole `send_reply` call in
+`eval`, but its own catch handler, `D2TG::Reply::format_send_error`,
+prints `$@` verbatim (both of its own return branches return the raw
+error unmodified, only appending a transient-error hint - neither ever
+routes through `D2TG::Poller::Safe::classify_store_error`). A
+locked/busy database at this exact call would therefore print a raw
+Perl/DBI exception - which can embed the real database filesystem path
+- straight to a user's own STDERR via `d2 tg.reply`'s normal error
+output, not merely crash silently the way an un-caught internal die
+would.
+
+**Fix**: eval-wrapped the `is_recent_duplicate_reply` call and
+classified any failure via `classify_store_error`, dying with a clean
+`STORE ERROR: is_recent_duplicate_reply failed - REASON` message -
+matching the established convention exactly, and specifically ensuring
+nothing raw ever reaches `format_send_error`'s own pass-through print.
+
+Extended the existing `t/192-store-write-failures-non-fatal.t`
+(rather than a new file, since it already has the exact
+`Fake::Store::DyingWrite` fixture this needed - just one new
+`dies_on` key) with a new test block asserting the resulting die is
+scrubbed and never contains a raw Perl stack trace. Confirmed
+genuinely red beforehand (`Tests=46 Failed=1` - the raw `database is
+locked` text, with no `STORE ERROR` classification, reached the
+assertion). Full Docker suite green after (`Files=228, Tests=2854`).
+
+perlsec.pl-style vulnerability-scan audit: this is exactly a security
+hardening fix, closing a path where a raw DBI exception (embedding the
+real database filesystem path) could reach a user's own terminal
+output via the command's normal, expected error-reporting path - a
+more direct exposure than the earlier TGT-306 finding (which degraded
+silently instead of leaking). No new shell invocation, no new file
+I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
 This concludes the 14-ticket comprehensive bug/improvement sweep
 (TGT-290 through TGT-303) requested 2026-09-17: 6 bugfixes (TGT-290,
 291, 292, 293, 294, 302) and 8 improvements/maintenance items

@@ -51,7 +51,23 @@ sub send_reply {
     # same d2 tg.reply command, previously had no way to avoid delivering
     # the identical message twice. Only checked when a store is given -
     # unchanged behavior for a caller that never opts into this feature.
-    if ( $args{store} && $args{store}->is_recent_duplicate_reply( $chat_id, $text, bot_key => $args{bot_key} ) ) {
+    # TGT-308 (found via a JOB-003 hourly bug hunt): this call ran
+    # unwrapped - the same bug class TGT-183/186/195/293/306 already
+    # fixed elsewhere, but worse here: cli/reply.pl's own
+    # format_send_error prints $@ verbatim (never routing through
+    # classify_store_error), so a locked/busy database at this exact
+    # call used to leak a raw Perl/DBI exception (which can embed the
+    # real db path) straight to a user's own STDERR via d2 tg.reply's
+    # normal error output.
+    my $is_duplicate = eval {
+        $args{store} && $args{store}->is_recent_duplicate_reply( $chat_id, $text, bot_key => $args{bot_key} );
+    };
+    if ($@) {
+        my $reason = D2TG::Poller::Safe::classify_store_error($@);
+        die "STORE ERROR: is_recent_duplicate_reply failed - $reason\n";
+    }
+
+    if ($is_duplicate) {
         die "D2TG::Reply::send_reply: refusing to send - this exact text was already sent to "
           . "chat_id $chat_id moments ago (duplicate within the dedup window)\n";
     }

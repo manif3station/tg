@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.44).** BUGFIX (TGT-308, found via a
+JOB-003 hourly bug hunt): `D2TG::Reply::send_reply`'s own
+`is_recent_duplicate_reply` call ran unwrapped - worse than the same
+bug class fixed elsewhere, since `cli/reply.pl`'s own error formatting
+prints the caught exception verbatim, so a locked/busy database here
+could leak the real database path straight to a user's own STDERR.
+Eval-wrapped and classified the call.
+
 **Status: early implementation (v2.43).** IMPROVEMENT (TGT-304, per
 Michael's own decision after a live incident investigation):
 `cli/poller.pl`'s version-change restart-announcement line now

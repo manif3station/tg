@@ -57,7 +57,11 @@ sub mark_read {
     return;
 }
 
-sub is_recent_duplicate_reply { return 0; }
+sub is_recent_duplicate_reply {
+    my ($self) = @_;
+    die "database is locked\n" if $self->{dies_on}{is_recent_duplicate_reply};
+    return 0;
+}
 
 package Fake::Telegram::MalformedVoiceResult;
 
@@ -124,6 +128,40 @@ package main;
     like( $err, qr/STORE ERROR \[999\]: record_sent_voice failed/, 'a record_sent_voice failure is logged non-fatally, classified' );
     ok( defined $result, 'send_reply does not die on a record_sent_voice failure either' );
     ok( ( grep { $_->[0] eq 'mark_read' } @{ $store->{calls} } ), 'mark_read is still attempted even after record_sent_voice failed' );
+}
+
+# TGT-308 (found via a JOB-003 hourly bug hunt): send_reply's own
+# is_recent_duplicate_reply call ran unwrapped - the same bug class
+# TGT-183/186/195/293/306 already fixed elsewhere, but worse here:
+# cli/reply.pl's own format_send_error prints $@ verbatim (never
+# routing through D2TG::Poller::Safe::classify_store_error), so a
+# locked/busy database at this exact call used to leak a raw Perl/DBI
+# exception (which can embed the real db path) straight to a user's
+# own STDERR via d2 tg.reply's normal error output - not merely a
+# silent crash.
+{
+    my $telegram = Fake::ReplyTelegram->new;
+    my $store    = Fake::Store::DyingWrite->new( dies_on => { is_recent_duplicate_reply => 1 } );
+
+    my $died = eval {
+        D2TG::Reply::send_reply(
+            telegram   => $telegram,
+            chat_id    => 999,
+            text       => 'hello',
+            store      => $store,
+            synthesize => sub { return '/tmp/fake-voice.ogg' },
+        );
+        0;
+    };
+    my $error = $@;
+
+    ok( !$died && $error, 'send_reply dies when is_recent_duplicate_reply itself fails' )
+      or diag("expected a die, got: " . ( $died ? 'no die' : 'unexpected success' ));
+    like( $error, qr/STORE ERROR: is_recent_duplicate_reply failed - database is locked/,
+        'the die is a clean, classified message (D2TG::Poller::Safe::classify_store_error\'s own fixed output)' );
+    unlike( $error, qr/at \S+\.pm line \d+/,
+        'the raw exception is never echoed as an uncaught Perl trace - it cannot reach cli/reply.pl\'s own format_send_error verbatim' );
+    ok( !@{ $telegram->{sent_messages} // [] }, 'send_message was never called - the dedup check failing refuses the send entirely, matching a genuine detected duplicate' );
 }
 
 {

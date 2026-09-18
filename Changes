@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+2.44  2026-09-18
+      - BUGFIX (TGT-308, found via a JOB-003 hourly bug hunt):
+        D2TG::Reply::send_reply's own is_recent_duplicate_reply call
+        ran unwrapped - the same bug class TGT-183/186/195/293/306
+        already fixed elsewhere, but worse here: cli/reply.pl's own
+        format_send_error prints the caught exception verbatim (never
+        classifying it), so a locked/busy database at this exact call
+        could leak a raw Perl/DBI exception - including the real
+        database filesystem path - straight to a user's own STDERR via
+        d2 tg.reply's normal error output. Eval-wrapped the call and
+        classified any failure via D2TG::Poller::Safe::classify_store_error,
+        dying with a clean, scrubbed message instead.
+
 2.43  2026-09-18
       - IMPROVEMENT (TGT-304, per Michael's own decision after a live
         incident investigation): cli/poller.pl's version-change

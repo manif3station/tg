@@ -88,6 +88,15 @@ I<ambiguous> C<send_message> failure (the request errored/timed out
 without confirming whether Telegram actually received it) - see
 L<D2TG::Store/is_recent_duplicate_reply>'s own documented limitations.
 
+TGT-308 (found via a JOB-003 hourly bug hunt): the
+C<is_recent_duplicate_reply> call itself is C<eval>-wrapped and
+classified via C<D2TG::Poller::Safe::classify_store_error> - a
+locked/busy database here used to die raw, and since
+C<L</format_send_error($error)>> prints its caught exception
+verbatim, that raw text (which can embed the real db path) used to
+reach a user's own STDERR directly via C<cli/reply.pl>'s normal error
+output, not merely crash silently.
+
 =head2 resend_voice(telegram => $tg, chat_id => $id, text => $text, synthesize => \&coderef, tts_args => \%hash, reply_to_message_id => $id, store => $store, bot_key => $key, text_message_id => $id)
 
 TGT-109 (live-experienced incident): recovers from the specific failure
