@@ -62,11 +62,7 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
 # risk TGT-183/186/195 already fixed for other call sites in this
 # project, just never swept this widely.
 my $local_path = eval { $store->get_attachment_path( $chat_id, $message_id, bot_key => $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: get_attachment_path failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'get_attachment_path' ) if $@;
 if ( !defined $local_path ) {
     print STDERR "d2 tg.attachment: no attachment recorded for chat $chat_id message $message_id\n";
     exit 1;
@@ -131,11 +127,7 @@ close $fh;
 # two - the agent never runs a separate mark-read step for a media
 # message either.
 eval { $store->mark_read( $chat_id, $message_id, bot_key => $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: mark_read failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'mark_read' ) if $@;
 
 exit 0;
 

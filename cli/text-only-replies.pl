@@ -43,11 +43,7 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
 # risk TGT-183/186/195 already fixed for other call sites in this
 # project, just never swept this widely.
 my $flagged = eval { $store->text_only_replies };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: text_only_replies failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'text_only_replies' ) if $@;
 
 if ( !@$flagged ) {
     print "No text-only replies found.\n";

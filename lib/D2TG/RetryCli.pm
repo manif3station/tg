@@ -21,11 +21,7 @@ sub _list_or_die {
     my (%args) = @_;
 
     my $result = eval { $args{list}->() };
-    if ($@) {
-        my $reason = D2TG::Poller::Safe::classify_store_error($@);
-        print STDERR "STORE ERROR: failed_$args{label}s failed - $reason\n";
-        exit 1;
-    }
+    D2TG::Poller::Safe::die_store_error( $@, "failed_$args{label}s" ) if $@;
     return $result;
 }
 

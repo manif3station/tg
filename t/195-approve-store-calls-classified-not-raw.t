@@ -44,24 +44,23 @@ unlike( $source, qr/if\s*\(\s*\$store->is_allowed\(/,
 # thrown off by the POD's own prose mention of the same identifier -
 # it would miss the more relevant partial regression of one branch
 # staying eval-wrapped while reporting the raw $@ instead of the
-# classified reason. Extract each individual failure-handling block
-# (approve's own "if ($@) { ... }", and is_allowed's own) and assert
-# each one, specifically, contains its own classifier call and its own
-# STORE ERROR line - not a codebase-wide count.
-my ($approve_error_block) = $source =~ /(my \$approved = eval.*?\n\}\n)/s;
-ok( defined $approve_error_block, 'found the approve failure-handling block' );
-like( $approve_error_block, qr/D2TG::Poller::Safe::classify_store_error/,
-    'the approve failure-handling block itself calls the classifier - not just somewhere else in the file' );
-like( $approve_error_block, qr/STORE ERROR: approve failed - \$reason/,
-    'the approve failure-handling block itself prints the classified STORE ERROR line' );
-like( $approve_error_block, qr/exit 1;/, 'an approve failure exits 1, not 0' );
-
-my ($is_allowed_error_block) = $source =~ /(my \$allowed = eval.*?\n\}\n)/s;
-ok( defined $is_allowed_error_block, 'found the is_allowed failure-handling block' );
-like( $is_allowed_error_block, qr/D2TG::Poller::Safe::classify_store_error/,
-    'the is_allowed failure-handling block itself calls the classifier - not just somewhere else in the file' );
-like( $is_allowed_error_block, qr/STORE ERROR: is_allowed failed - \$reason/,
-    'the is_allowed failure-handling block itself prints the classified STORE ERROR line' );
-like( $is_allowed_error_block, qr/exit 1;/, 'an is_allowed failure exits 1, not 0' );
+# classified reason. Extract each individual failure-handling line
+# (approve's own, and is_allowed's own) and assert each one,
+# specifically, hands its own op label to the shared die_store_error
+# helper - not a codebase-wide count.
+#
+# TGT-314 (found via a scheduled JOB-004 improvement hunt): the
+# classify+print+exit shape itself moved out of this script entirely,
+# into a new shared D2TG::Poller::Safe::die_store_error helper - each
+# call site here shrank from a 4-line "if ($@) {...}" block to one line
+# calling that helper with its own op_label, so there is no longer a
+# multi-line block to extract; the assertions below were adapted to the
+# new single-line call shape. die_store_error's own internal classify/
+# print/exit shape is covered by t/314-die-store-error-helper.t and
+# Safe.pm's own source directly, not re-asserted here.
+like( $source, qr/D2TG::Poller::Safe::die_store_error\( \$@, 'approve' \) if \$@;/,
+    'an approve failure hands off to the shared die_store_error helper with its own op label' );
+like( $source, qr/D2TG::Poller::Safe::die_store_error\( \$@, 'is_allowed' \) if \$@;/,
+    'an is_allowed failure hands off to the shared die_store_error helper with its own op label' );
 
 done_testing();

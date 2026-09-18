@@ -66,11 +66,7 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
 # die-at-top-level behavior, instead of the same clean, scrubbed
 # refusal this project's established pattern provides everywhere else.
 my $approved = eval { $store->approve( $chat_id, $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: approve failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'approve' ) if $@;
 
 if ($approved) {
     print "Approved $chat_id\n";
@@ -78,11 +74,7 @@ if ($approved) {
 }
 
 my $allowed = eval { $store->is_allowed( $chat_id, $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: is_allowed failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'is_allowed' ) if $@;
 
 if ($allowed) {
     print STDERR "$chat_id is already allowed - nothing to do\n";

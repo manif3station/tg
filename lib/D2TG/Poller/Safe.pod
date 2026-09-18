@@ -36,6 +36,19 @@ error can embed the database file's own real path (TGT-133 precedent).
 Every other function below that wraps a store write shares this same
 classification via this one helper.
 
+=head2 die_store_error($err, $op_label)
+
+TGT-314 (found via a scheduled JOB-004 improvement hunt): 13 call sites
+(12 across 7 C<cli/*.pl> scripts, plus one inside
+L<D2TG::RetryCli|D2TG::RetryCli>) each duplicated the same shape after
+an eval-wrapped store call failed - classify C<$err> via
+L<classify_store_error()|/classify_store_error($error)>, print C<STORE
+ERROR: E<lt>op labelE<gt> failed - E<lt>reasonE<gt>>, exit 1 -
+differing only by the literal op label. Collapsed into this one
+helper: pass the just-raised C<$@> and a short op-label string (e.g.
+C<'get_message'>, C<'approve'>), and it does the classify/print/exit
+in one call. Never returns.
+
 =head2 open_store_or_die(%args)
 
 TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live

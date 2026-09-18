@@ -59,11 +59,7 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
 # raw-crash/db-path-leak risk TGT-183/186/195 already fixed for other
 # call sites in this project, just never swept this widely.
 my @unread = eval { $store->unread_messages( bot_key => $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: unread_messages failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'unread_messages' ) if $@;
 
 if ( !@unread ) {
     print "No unread messages.\n";
@@ -83,11 +79,7 @@ else {
 # messages, naming the exact recovery command - matching
 # NEW TG MEDIA FAILED's own poller-side visibility fix.
 my @queued_failures = eval { @{ $store->failed_downloads } };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: failed_downloads failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'failed_downloads' ) if $@;
 if (@queued_failures) {
     print "\n" if @unread;
 
@@ -135,11 +127,7 @@ if (@queued_failures) {
 # no listed argument. Mirrors the failed_downloads section above
 # exactly, including its own multi-bot RETRY WITH scoping (TGT-229).
 my @queued_transcriptions = eval { @{ $store->failed_transcriptions } };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: failed_transcriptions failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'failed_transcriptions' ) if $@;
 if (@queued_transcriptions) {
     print "\n" if @unread || @queued_failures;
 

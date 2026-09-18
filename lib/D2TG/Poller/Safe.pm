@@ -20,6 +20,18 @@ sub classify_store_error {
       :                                    'an unexpected error';
 }
 
+# TGT-314 (found via a scheduled JOB-004 improvement hunt): 12 direct
+# call sites across 7 cli/*.pl scripts, plus lib/D2TG/RetryCli.pm's own
+# copy, all duplicated this exact shape - classify $@, print a "STORE
+# ERROR: <op> failed - <reason>" line, exit 1 - differing only by the
+# literal <op> label. Collapsed into this one helper.
+sub die_store_error {
+    my ( $error, $op_label ) = @_;
+    my $reason = classify_store_error($error);
+    print STDERR "STORE ERROR: $op_label failed - $reason\n";
+    exit 1;
+}
+
 sub open_store_or_die {
     my (%args) = @_;
 

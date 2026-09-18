@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.50).** REFACTOR (TGT-314, found via a
+JOB-004 improvement hunt): 12 direct call sites across 7 `cli/*.pl`
+scripts (`fetch.pl`, `attachment.pl`, `approve.pl`, `history.pl`,
+`text-only-replies.pl`, `reply.pl`, `unread.pl`), plus one already
+inside `lib/D2TG/RetryCli.pm`, all duplicated the exact same shape -
+classify a store-call failure, print a `STORE ERROR: <op> failed -
+<reason>` line, exit 1 - differing only by the literal `<op>` label.
+Extracted into one shared `D2TG::Poller::Safe::die_store_error($@,
+$op_label)` helper, called from all 13 sites. Pure refactor,
+byte-identical STDERR output and exit code.
+
 **Status: early implementation (v2.49).** REFACTOR (TGT-313, found via a
 JOB-004 improvement hunt reviewing TGT-312's own freshly-shipped diff):
 `D2TG::Poller::Dispatch::handle_plain_update`'s text branch and

@@ -67,6 +67,13 @@ via a shared, C<eval>-wrapped helper (TGT-293's own
 C<classify_store_error> convention) - a locked/busy database dies raw
 inside this coderef and is caught, classified, and reported as C<STORE
 ERROR: ...> before exiting 1, never propagating the raw exception.
+TGT-314 (found via a scheduled JOB-004 improvement hunt): the
+classify/print/exit shape itself now lives in
+L<D2TG::Poller::Safe/die_store_error($err, $op_label)>, shared with 12
+other call sites across 7 C<cli/*.pl> scripts - this module's own
+C<_list_or_die> just hands off C<$@> and its own C<"failed_$args
+{label}s"> op label to that one helper instead of inlining the
+classify/print/exit itself.
 
 =item C<store>
 

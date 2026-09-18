@@ -137,11 +137,7 @@ my @messages = eval {
       ? $store->messages_in_range( since => $since, until => $until, bot_key => $bot_key )
       : reverse $store->recent_messages( 10, bot_key => $bot_key );
 };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: history lookup failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'history lookup' ) if $@;
 
 if ( !@messages ) {
     print "No messages found.\n";

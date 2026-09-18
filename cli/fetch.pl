@@ -45,13 +45,10 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
 );
 
 # TGT-293's own established shape: eval-wrapped, classified via
-# D2TG::Poller::Safe::classify_store_error.
+# D2TG::Poller::Safe::classify_store_error. TGT-314: the classify/print/
+# exit shape itself now lives in D2TG::Poller::Safe::die_store_error.
 my $message = eval { $store->get_message( $chat_id, $message_id, bot_key => $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: get_message failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'get_message' ) if $@;
 if ( !defined $message ) {
     print STDERR "d2 tg.fetch: no message recorded for chat $chat_id message $message_id\n";
     exit 1;
@@ -66,11 +63,7 @@ print "$message->{summary}\n";
 # the whole point of this command: fetching and marking read are one
 # action, not two - the agent never runs a separate mark-read step.
 eval { $store->mark_read( $chat_id, $message_id, bot_key => $bot_key ) };
-if ($@) {
-    my $reason = D2TG::Poller::Safe::classify_store_error($@);
-    print STDERR "STORE ERROR: mark_read failed - $reason\n";
-    exit 1;
-}
+D2TG::Poller::Safe::die_store_error( $@, 'mark_read' ) if $@;
 
 exit 0;
 

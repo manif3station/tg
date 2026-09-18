@@ -6975,3 +6975,66 @@ pre-existing print/record statements, parameterized by `label`/
 `safe_content` (already-sanitized values, not new input); no string
 eval, no shell/exec/system/backtick/piped-open patterns, no change to
 what reaches storage or the network.
+
+## TGT-314: extracted the repeated STORE ERROR print+exit pattern shared by 7 cli/*.pl scripts and D2TG::RetryCli into a helper
+
+Found via a scheduled JOB-004 improvement hunt, 2026-09-18, reviewing
+`CODE/` for further genuine duplication after TGT-313's own extraction.
+Initial estimate ("~22 times across 9 cli/*.pl scripts") was corrected
+after precise measurement (`grep -rn 'print STDERR "STORE ERROR:'
+cli/*.pl lib/D2TG/*.pm`): the real count was 13 occurrences of the
+exact shape - 12 direct call sites across 7 files (`cli/fetch.pl` x2,
+`cli/attachment.pl` x2, `cli/approve.pl` x2, `cli/history.pl` x1,
+`cli/text-only-replies.pl` x1, `cli/reply.pl` x1, `cli/unread.pl` x3),
+plus 1 already inside `lib/D2TG/RetryCli.pm` (shared by
+`cli/retry-download.pl`/`cli/retry-transcription.pl` since TGT-310's
+own earlier extraction - those two scripts never needed touching).
+`cli/poller.pl`'s own `classify_store_error` call sites (4 occurrences)
+are a different, startup-guard message shape and were correctly left
+out of scope from the start.
+
+Every one of the 13 sites duplicated: `if ($@) { my $reason =
+D2TG::Poller::Safe::classify_store_error($@); print STDERR "STORE
+ERROR: <op> failed - $reason\n"; exit 1; }`, differing only by the
+literal `<op>` label - the same class of duplication this project's
+own established convention already extracts on sight (TGT-167/170/
+171/172/177/181/313 precedent: "found it twice, extract it").
+
+Fix: a new `D2TG::Poller::Safe::die_store_error($err, $op_label)`
+helper does the classify+print+exit in one call. Every one of the 13
+sites now calls it with just its own `$@`/label, shrinking from 4-5
+lines to 1. `lib/D2TG/RetryCli.pm`'s own `_list_or_die` was updated the
+same way, so all 13 sites - not just the 12 in `cli/*.pl` - share one
+definition. Pure refactor: byte-identical STDERR text and exit code
+for every existing scenario.
+
+Test strategy: matching TGT-279/313's own precedent for a
+pure-extraction refactor, a genuinely-red
+`t/314-die-store-error-helper.t` (`D2TG::Poller::Safe->can
+('die_store_error')`) was written and confirmed failing before the
+helper existed. After implementing, the full suite surfaced 3
+pre-existing source-structure regression tests needing real updates,
+since they asserted directly on the old inline
+classify/print/exit source shape rather than on behavior:
+`t/195-approve-store-calls-classified-not-raw.t` (its multi-line
+block-extraction regexes no longer matched a now-single-line call site
+- replaced with direct assertions that each call site hands off to
+`die_store_error` with its own op label), `t/293-cli-store-calls-eval-
+wrapped.t` (its per-script `classify_store_error`/`STORE ERROR: ...
+failed` assertions were replaced with a single per-script
+`die_store_error` assertion), and `t/310-retrycli-store-call-eval-
+wrapped.t` (same substitution, for `D2TG::RetryCli`'s own single call
+site). Each update preserves the exact safety property the original
+assertion checked (a store-call failure is never left unclassified or
+silently swallowed), just adapted to the new one-line call shape - a
+deliberate, understood consequence of the extraction, not a masked
+behavior change. Full suite green after (`Files=234, Tests=2946`);
+100% statement + subroutine coverage confirmed on both touched
+modules (`lib/D2TG/Poller/Safe.pm`, `lib/D2TG/RetryCli.pm`).
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow extraction
+- `die_store_error`'s own body is a verbatim reuse of the
+classify/print/exit statements every call site already had, taking
+only an already-raised `$@` and a literal op-label string as
+parameters; no string eval, no shell/exec/system/backtick/piped-open
+patterns, no change to what reaches storage, STDERR, or the network.

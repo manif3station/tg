@@ -40,6 +40,16 @@ use File::Spec;
 # they don't eval-wrap the call themselves) and covered instead by
 # t/310-retrycli-store-call-eval-wrapped.t, which checks the new home
 # directly.
+#
+# TGT-314 (found via a scheduled JOB-004 improvement hunt): the
+# classify+print+exit shape itself moved out of every script in this
+# list, into a new shared D2TG::Poller::Safe::die_store_error helper -
+# each script's own classify_store_error/"STORE ERROR: ... failed"
+# lines were replaced by a single die_store_error(...) if $@; call per
+# site. The per-script classify/STORE-ERROR checks below were adapted
+# to assert on die_store_error instead; die_store_error's own internal
+# shape is covered by t/314-die-store-error-helper.t and Safe.pm's own
+# source directly, not re-asserted per-script here.
 
 my %expect = (
     'history.pl' => [
@@ -97,10 +107,8 @@ for my $script ( sort keys %expect ) {
     is( $real_call_count, scalar( @{ $expect{$script} } ),
         "cli/$script: every real \$store-> call site is accounted for by an eval-wrapped pattern above" );
 
-    like( $source, qr/D2TG::Poller::Safe::classify_store_error/,
-        "cli/$script: uses the shared classifier on a store-call failure" );
-    like( $source, qr/STORE ERROR: .* failed - \$reason/,
-        "cli/$script: prints a classified STORE ERROR line on failure" );
+    like( $source, qr/D2TG::Poller::Safe::die_store_error\( \$@, /,
+        "cli/$script: hands a store-call failure to the shared die_store_error helper" );
 }
 
 done_testing();

@@ -124,11 +124,7 @@ if ($voice_only) {
     # risk TGT-183/186/195 already fixed for other call sites in this
     # project, just never swept this widely.
     my $text_only_replies = eval { $store->text_only_replies( bot_key => $bot_key ) };
-    if ($@) {
-        my $reason = D2TG::Poller::Safe::classify_store_error($@);
-        print STDERR "STORE ERROR: text_only_replies failed - $reason\n";
-        exit 1;
-    }
+    D2TG::Poller::Safe::die_store_error( $@, 'text_only_replies' ) if $@;
     my ($latest_text_only) =
       sort { $b->{text_message_id} <=> $a->{text_message_id} }
       grep { $_->{chat_id} == $chat_id }
