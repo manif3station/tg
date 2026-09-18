@@ -6173,3 +6173,32 @@ never derived from external input, so no SQL-injection surface is
 introduced. No new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/
 eval-STRING patterns introduced.
+
+## TGT-296: Config::Paths.pm's 4 path resolvers collapsed onto 1 shared helper
+
+Found via the same comprehensive sweep as TGT-290-295. `state_db_path`,
+`attachments_dir`, `lock_path`, and `heartbeat_path` each duplicated
+the identical "if `base_dir` given, resolve under `.tira/`, else fall
+back to `DEVELOPER_DASHBOARD_SKILL_ROOT`/`default_root`/. and a
+`state/` or `files/` dir, `make_path` if missing" logic, differing
+only in the final directory segments and filename.
+
+**Fix**: introduced one private helper, `_resolve_state_path`, taking
+the base-form and fallback-form directory segments (as arrayrefs) plus
+an optional filename for each (`undef` meaning "return the directory
+itself", matching `attachments_dir`'s own shape) - all 4 public
+functions now delegate to it. Zero observable behavior change; every
+public function's signature, defaults, and return shape are unchanged.
+
+New test `t/296-paths-shared-helper.t` asserts the shared helper exists
+and is called by all 4 public functions, plus full behavioral coverage
+of both the `base_dir` and `default_root`-fallback forms for each.
+Confirmed genuinely red beforehand (`Tests=13 Failed=5` - the
+structural helper-existence assertions failed against the pre-refactor
+file). Full Docker suite green after (`Files=220, Tests=2730`); 100%
+statement+subroutine coverage confirmed on the touched module.
+
+perlsec.pl-style vulnerability-scan audit: pure internal refactor, no
+new shell invocation, no new file I/O beyond the pre-existing
+`make_path` calls, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

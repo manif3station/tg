@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.34).** MAINTENANCE (TGT-296, found
+via a user-requested comprehensive bug/improvement sweep):
+`D2TG::Config::Paths.pm`'s 4 path resolvers (`state_db_path`,
+`attachments_dir`, `lock_path`, `heartbeat_path`) each duplicated
+identical `base_dir`/`.tira` resolution logic. Collapsed onto one
+shared private helper (`_resolve_state_path`) - zero observable
+behavior change, 100% statement+subroutine coverage confirmed.
+
 **Status: early implementation (v2.33).** MAINTENANCE (TGT-295, found
 via a user-requested comprehensive bug/improvement sweep):
 `D2TG::Store::RetryQueue.pm`'s download and transcription sides were

@@ -13,78 +13,53 @@ use D2TG::OrDie;
 # thin forwarding subs with the same names for every existing caller -
 # no behavior change, just a smaller Config.pm.
 
-sub state_db_path {
-    my (%args) = @_;
+# TGT-296 (found via a user-requested comprehensive bug/improvement
+# sweep): state_db_path, attachments_dir, lock_path, and
+# heartbeat_path each duplicated this identical resolution logic -
+# base_dir given -> resolve under base_dir/.tira (+ any extra
+# segments), else fall back to DEVELOPER_DASHBOARD_SKILL_ROOT/
+# default_root/. and a state/ or files/ dir - differing only in the
+# final directory segments and filename. $base_segments/
+# $fallback_segments are arrayrefs of directory segments (beyond the
+# resolved root); a filename of undef means "return the directory
+# itself", matching attachments_dir's own shape.
+sub _resolve_state_path {
+    my ( $base_segments, $base_filename, $fallback_segments, $fallback_filename, %args ) = @_;
 
     if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.messages.db' );
+        my $dir = File::Spec->catdir( $args{base_dir}, @$base_segments );
+        make_path($dir) unless -d $dir;
+        return defined $base_filename ? File::Spec->catfile( $dir, $base_filename ) : $dir;
     }
 
     my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
       // $args{default_root}
       // '.';
 
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
+    my $dir = File::Spec->catdir( $skill_root, @$fallback_segments );
+    make_path($dir) unless -d $dir;
 
-    return File::Spec->catfile( $state_dir, 'store.sqlite' );
+    return defined $fallback_filename ? File::Spec->catfile( $dir, $fallback_filename ) : $dir;
+}
+
+sub state_db_path {
+    my (%args) = @_;
+    return _resolve_state_path( ['.tira'], 'telegram.messages.db', ['state'], 'store.sqlite', %args );
 }
 
 sub attachments_dir {
     my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $dir = File::Spec->catdir( $args{base_dir}, '.tira', 'attachments' );
-        make_path($dir) unless -d $dir;
-        return $dir;
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT} // $args{default_root} // '.';
-
-    my $dir = File::Spec->catdir( $skill_root, 'files' );
-    make_path($dir) unless -d $dir;
-
-    return $dir;
+    return _resolve_state_path( [ '.tira', 'attachments' ], undef, ['files'], undef, %args );
 }
 
 sub lock_path {
     my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.pid' );
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
-      // $args{default_root}
-      // '.';
-
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
-
-    return File::Spec->catfile( $state_dir, 'poller.pid' );
+    return _resolve_state_path( ['.tira'], 'telegram.pid', ['state'], 'poller.pid', %args );
 }
 
 sub heartbeat_path {
     my (%args) = @_;
-
-    if ( defined $args{base_dir} ) {
-        my $vault_dir = File::Spec->catdir( $args{base_dir}, '.tira' );
-        make_path($vault_dir) unless -d $vault_dir;
-        return File::Spec->catfile( $vault_dir, 'telegram.heartbeat' );
-    }
-
-    my $skill_root = $ENV{DEVELOPER_DASHBOARD_SKILL_ROOT}
-      // $args{default_root}
-      // '.';
-
-    my $state_dir = File::Spec->catdir( $skill_root, 'state' );
-    make_path($state_dir) unless -d $state_dir;
-
-    return File::Spec->catfile( $state_dir, 'poller.heartbeat' );
+    return _resolve_state_path( ['.tira'], 'telegram.heartbeat', ['state'], 'poller.heartbeat', %args );
 }
 
 sub write_heartbeat {
@@ -227,3 +202,23 @@ sub _developer_dashboard_paths {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+D2TG::Config::Paths - path/alias resolution helpers for the tg skill
+
+=head1 IMPLEMENTATION NOTES
+
+TGT-296 (found via a user-requested comprehensive bug/improvement
+sweep): C<state_db_path>, C<attachments_dir>, C<lock_path>, and
+C<heartbeat_path> each duplicated identical "resolve under
+C<base_dir>/C<.tira>, else fall back to
+C<DEVELOPER_DASHBOARD_SKILL_ROOT>/C<default_root>/. and a C<state>/
+C<files> dir, C<make_path> if missing" logic, differing only in the
+final directory segments and filename. All 4 now delegate to one
+shared private helper, C<_resolve_state_path> - zero behavior change,
+every public function's own signature and return shape unchanged.
+
+=cut
