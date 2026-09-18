@@ -109,7 +109,7 @@ C<TIRA_HOME> fallback) must already exist - refuses to start otherwise
 rather than creating it (TGT-090, see L<D2TG::Config/require_existing_base_dir>).
 
 C<--bot <token>> (TGT-098) scopes the approval to that bot, using
-L<D2TG::Reply/extract_bot_flag> - the same leading-position shape
+L<extract_bot_flag()|D2TG::Reply::Args/extract_bot_flag(@args)> - the same leading-position shape
 C<cli/reply.pl>'s own C<--bot> uses (TGT-057). The SYNOPSIS/Usage text
 now shows this leading position correctly (TGT-210, found via a
 scheduled bug-hunt): both previously showed C<--bot> after C<<chat_id>>,

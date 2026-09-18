@@ -250,7 +250,7 @@ as multiple unquoted shell words containing the literal token
 C<--reply-to-message-id>). When given, both the voice and text sends
 carry Telegram's own C<reply_to_message_id>, so the reply threads
 natively under the original message in Telegram's UI instead of arriving
-as a fresh, unthreaded message. See L<D2TG::Reply/parse_cli_args>.
+as a fresh, unthreaded message. See L<parse_cli_args()|D2TG::Reply::Args/parse_cli_args(@ARGV)>.
 Omitting it is unchanged from before TGT-040 - no C<reply_to_message_id>
 is sent.
 

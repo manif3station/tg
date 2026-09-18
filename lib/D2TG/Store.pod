@@ -252,7 +252,7 @@ C<failed_transcriptions> queue (TGT-237, explicitly modeled on
 C<failed_downloads>' own shape) never did - a transient transcription
 failure sat queued until a human/agent ran C<d2 tg.retry-transcription>
 by hand, with no automatic recovery at all. See
-L<D2TG::Transcribe/auto_retry_failed_transcriptions>.
+L<auto_retry_failed_transcriptions()|D2TG::Transcribe::Retry/auto_retry_failed_transcriptions($telegram, $store, bot_key =E<gt> $b, ua =E<gt> $optional_client)>.
 
 =head2 mark_failed_transcription_retried($id)
 

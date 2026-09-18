@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.30).** BUGFIX (TGT-292, found via a
+user-requested comprehensive bug/improvement sweep): 5 stale POD `L<>`
+cross-references left over from the TGT-263/265 module moves
+(`cli/reply.pl`, `cli/retry-download.pl`, `cli/approve.pl`,
+`cli/retry-transcription.pl`, `lib/D2TG/Store.pod`) pointed at functions
+in their old, pre-move locations. `t/266`'s own regression test - written
+specifically to catch this class of drift - never matched the
+`L<Module/name>` POD link syntax these files use, only the fully-qualified
+`Module::name` call syntax, so the staleness went undetected. Fixed all 5
+links and widened `t/266`'s own regex to catch both syntaxes.
+
 **Status: early implementation (v2.29).** BUGFIX (TGT-291, found via a
 user-requested comprehensive bug/improvement sweep): `is_transient_error`'s
 5xx classification regex never got the same `\b` word-boundary anchor

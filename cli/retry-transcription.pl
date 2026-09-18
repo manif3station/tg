@@ -154,7 +154,7 @@ neither numeric nor C<--all>) runs before C<--db> storage resolution,
 matching C<cli/retry-download.pl>'s own established ordering.
 
 With a numeric C<id>, retries exactly that queued entry via
-L<D2TG::Transcribe/retry_failed_transcription> - re-downloads the voice
+L<retry_failed_transcription()|D2TG::Transcribe::Retry/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)> - re-downloads the voice
 file using its saved C<file_id> (transiently, never landing in the
 shared attachments vault, matching C<cli/poller.pl>'s own
 C<$transcribe_voice> coderef) and re-attempts transcription; on

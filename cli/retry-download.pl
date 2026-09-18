@@ -165,7 +165,7 @@ retry-download - list and retry queued failed media downloads, dispatched as C<d
 
 C<--bot <token>> (TGT-219, found via a scheduled improvement hunt)
 scopes both listing and retrying to that bot, using
-L<D2TG::Reply/extract_bot_flag> - the same leading-position shape
+L<extract_bot_flag()|D2TG::Reply::Args/extract_bot_flag(@args)> - the same leading-position shape
 C<cli/reply.pl>/C<cli/approve.pl>'s own C<--bot> use. Telegram's own
 C<file_id> values are bot-token-scoped, so a failure queued under a
 non-default bot in a multi-bot config must be retried as that same

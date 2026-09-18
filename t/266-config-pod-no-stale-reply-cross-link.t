@@ -28,6 +28,20 @@ my @stale_patterns = (
     qr/D2TG::Reply::parse_cli_args\b/,
     qr/D2TG::Transcribe::retry_failed_transcription\b/,
     qr/D2TG::Transcribe::auto_retry_failed_transcriptions\b/,
+
+    # TGT-292 (found via a user-requested comprehensive bug/improvement
+    # sweep): the patterns above only match the fully-qualified
+    # Module::name call syntax - they never matched the POD cross-
+    # reference syntax (L<Module/name>, single slash) actually used by
+    # 5 real stale references (cli/reply.pl, cli/retry-download.pl,
+    # cli/approve.pl, cli/retry-transcription.pl, lib/D2TG/Store.pod),
+    # so this test passed green while the real staleness sat
+    # undetected. These patterns close that gap.
+    qr{D2TG::Reply/extract_bot_flag_or_die\b},
+    qr{D2TG::Reply/extract_bot_flag\b(?!::)},
+    qr{D2TG::Reply/parse_cli_args\b},
+    qr{D2TG::Transcribe/retry_failed_transcription\b},
+    qr{D2TG::Transcribe/auto_retry_failed_transcriptions\b},
 );
 
 my @files;

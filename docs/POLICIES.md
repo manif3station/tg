@@ -6001,3 +6001,52 @@ perlsec.pl-style vulnerability-scan audit: a single regex anchor
 addition - no new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/eval-STRING
 patterns introduced.
+
+## TGT-292: 5 stale POD cross-references from the TGT-263/265 module moves, missed by t/266's own regex gap
+
+Found via the same comprehensive sweep as TGT-290/291. TGT-263/265 moved
+several functions into new modules (`D2TG::Reply::Args`,
+`D2TG::Transcribe::Retry`) and, per the project's own established
+convention, `t/266-config-pod-no-stale-reply-cross-link.t` exists
+specifically to catch any `L<>` POD cross-reference left pointing at a
+function's old, pre-move location. But that test's own regex patterns
+only matched the fully-qualified `Module::name` call syntax (e.g.
+`D2TG::Reply::parse_cli_args`) - not the `L<Module/name>` POD link
+syntax (e.g. `L<D2TG::Reply/parse_cli_args>`), which is what every one
+of the 5 stale references actually used. The staleness sat undetected
+since the TGT-263/265 moves themselves.
+
+**Root cause**: a POD `L<>` link's target half can be written either as
+plain text naming a module and section, or the `Module/section` shorthand
+that POD renders as a clickable cross-reference - `t/266` was written
+against only the first form.
+
+**Fix**: corrected all 5 stale links to point at their function's real,
+current location, following this project's own established `L<>`-fixing
+convention (`L<name()|/exact anchor text>` for a same-document link,
+`L<name()|Module::Name/exact anchor text>` for cross-document, with a
+literal `=>` inside anchor text escaped as `=E<gt>` since `L<>` cannot
+contain a bare `>`):
+
+- `cli/reply.pl`: `L<D2TG::Reply/parse_cli_args>` ->
+  `L<parse_cli_args()|D2TG::Reply::Args/parse_cli_args(@ARGV)>`
+- `cli/retry-download.pl`: `L<D2TG::Reply/extract_bot_flag>` ->
+  `L<extract_bot_flag()|D2TG::Reply::Args/extract_bot_flag(@args)>`
+- `cli/approve.pl`: same fix as retry-download.pl
+- `cli/retry-transcription.pl`: `L<D2TG::Transcribe/retry_failed_transcription>` ->
+  `L<retry_failed_transcription()|D2TG::Transcribe::Retry/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)>`
+- `lib/D2TG/Store.pod`: `L<D2TG::Transcribe/auto_retry_failed_transcriptions>` ->
+  `L<auto_retry_failed_transcriptions()|D2TG::Transcribe::Retry/auto_retry_failed_transcriptions($telegram, $store, bot_key =E<gt> $b, ua =E<gt> $optional_client)>`
+
+Widened `t/266`'s own `@stale_patterns` list (rather than writing a
+separate new test) with 5 new patterns matching the `L<Module/name>`
+syntax alongside the existing `Module::name` ones - deliberately turning
+the widening itself into the red-confirmation step. Confirmed exactly 5
+new failures (out of 541 total assertions) after widening, matching the
+5 real stale references identified by review, before any fix was
+applied; all 5 pass after the fix.
+
+perlsec.pl-style vulnerability-scan audit: pure documentation/POD text
+changes plus a test-regex widening - no new shell invocation, no new
+file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
