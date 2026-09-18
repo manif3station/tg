@@ -1,5 +1,11 @@
 # tg
 
+**Status: early implementation (v2.39).** IMPROVEMENT (TGT-301, found
+via a user-requested comprehensive bug/improvement sweep): `cli/send.pl`'s
+own `--db` validation computed `base_dir` but never used it. Removed
+the unused variable, kept the validation call itself, and added an
+explicit comment stating why.
+
 **Status: early implementation (v2.38).** MAINTENANCE (TGT-300, found
 via a user-requested comprehensive bug/improvement sweep): extracted
 embedded POD from 6 modules (`Download.pm`, `Lock.pm`, `Subprocess.pm`,

@@ -93,7 +93,13 @@ while (@ARGV) {
     }
 }
 
-my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
+# TGT-301 (found via a user-requested comprehensive bug/improvement
+# sweep): the resolved directory itself is never used - this script
+# never opens a Store and never touches attachments_dir, it's a pure
+# Telegram-API passthrough. Called only for its side effect: refusing
+# an unregistered/nonexistent --db alias before any network call,
+# matching every other d2 tg.* command's own --db validation.
+D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 my ( $chat_id, $file_path, @extra ) = @ARGV;
 

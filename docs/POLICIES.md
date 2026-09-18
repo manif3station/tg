@@ -6382,3 +6382,31 @@ perlsec.pl-style vulnerability-scan audit: pure documentation
 reorganization - no code change, no new shell invocation, no new file
 I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-301: cli/send.pl's dead base_dir variable
+
+Found via the same comprehensive sweep as TGT-290-300. `cli/send.pl`'s
+own `D2TG::Config::resolve_and_require_base_dir_or_die(alias =>
+$db_alias)` call computed `base_dir` but it was never used anywhere
+else in the file (confirmed via `grep` - `base_dir` appeared exactly
+once). `send.pl` never opens a `Store` and never touches
+`attachments_dir`; it's a pure Telegram-API passthrough. The `--db`
+validation still has a real side effect (requires the alias to resolve
+to an existing directory before any network call), so per this
+ticket's own acceptance criteria the call was kept, not removed - only
+the unused variable assignment was.
+
+**Fix**: dropped the `my $base_dir = ...` assignment, calling the same
+function in void context for its side effect only, with an explicit
+comment stating why the resolved value is unused.
+
+New test `t/301-send-no-dead-base-dir.t` asserts the unused variable is
+gone, the validation call itself remains, and an explicit comment
+explains why. Confirmed genuinely red beforehand (`Tests=3 Failed=2`
+against the pre-fix file). Full Docker suite green after
+(`Files=225, Tests=2832`).
+
+perlsec.pl-style vulnerability-scan audit: removing an unused variable
+assignment - no new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.

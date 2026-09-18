@@ -1,5 +1,14 @@
 Revision history for the tg skill
 
+2.39  2026-09-18
+      - IMPROVEMENT (TGT-301, found via a user-requested comprehensive
+        bug/improvement sweep): cli/send.pl's own --db validation
+        computed base_dir but never used it - the script never opens
+        a Store and never touches attachments_dir. Removed the unused
+        variable assignment, kept the validation call itself (a real
+        side effect - it requires the alias to resolve to an existing
+        directory), and added an explicit comment stating why.
+
 2.38  2026-09-18
       - MAINTENANCE (TGT-300, found via a user-requested comprehensive
         bug/improvement sweep): extracted embedded POD from 6 modules
