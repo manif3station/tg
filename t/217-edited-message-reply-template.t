@@ -10,7 +10,7 @@ require Fake::Store;
 
 # TGT-217 (found via a scheduled JOB-003 hourly bug hunt): every other
 # actionable inbound-message branch in D2TG::Poller::run_once
-# (message/media/voice/document/photo) calls _print_reply_template
+# (message/media/voice/document/photo) calls D2TG::Poller::Format::print_reply_template
 # right after its own NEW TG ... line, printing the REPLY WITH: d2
 # tg.reply ... template the whole bridge-notification architecture
 # depends on (tg-skill-design.md's Q-004 decision). The edited_message

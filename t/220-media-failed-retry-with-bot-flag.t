@@ -20,7 +20,7 @@ package main;
 # failure retries nothing, since cli/retry-download.pl's own --all
 # with no --bot only acts on the default-bot sentinel queue. This test
 # proves the fix: the RETRY WITH line now carries a masked --bot flag
-# whenever $bot_token is defined, matching _print_reply_template's own
+# whenever $bot_token is defined, matching D2TG::Poller::Format::print_reply_template's own
 # already-established convention exactly.
 
 sub capture_std {

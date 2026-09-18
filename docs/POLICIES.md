@@ -6100,3 +6100,37 @@ established eval/classify/refuse pattern, which itself exists to avoid
 leaking the real database path in an uncaught exception. No new shell
 invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-294: stale _print_reply_template doc/test-comment references from the TGT-259/276 decomposition
+
+Found via the same comprehensive sweep as TGT-290/291/292/293.
+`docs/commands.md` and `lib/D2TG/Poller.pod` both referred to
+`D2TG::Poller::_print_reply_template` as the poller's `REPLY WITH`
+recovery-command template function. That function was renamed and
+relocated during the TGT-259/TGT-276 decomposition of `D2TG::Poller`
+and is now `D2TG::Poller::Format::print_reply_template` - no leading
+underscore, a different package entirely. Anyone grepping the codebase
+for the string these docs gave them would find nothing. The same stale
+name also survived, unnoticed, in 3 comments inside currently-passing
+tests (`t/217-edited-message-reply-template.t`,
+`t/220-media-failed-retry-with-bot-flag.t`,
+`t/226-bot-flag-helper-extracted.t`) - not user-facing, but the same
+drift, and a comment nobody reads twice is exactly how this kind of
+staleness survives a decomposition unnoticed.
+
+**Fix**: corrected all 5 references to name the function's current,
+real location. `docs/POLICIES.md`'s own historical write-ups (the
+sections describing TGT-217/219/220/226/227 etc. as they were true AT
+THE TIME of each past ticket) were deliberately left untouched -
+rewriting history there would make the changelog inaccurate, not more
+correct, and this ticket's own scope explicitly excludes it.
+
+New test `t/294-no-stale-print-reply-template-name.t` asserts none of
+the 5 named files contain the stale `_print_reply_template` string.
+Confirmed genuinely red beforehand (`Tests=5 Failed=5` against the
+pre-fix files).
+
+perlsec.pl-style vulnerability-scan audit: pure documentation/POD/
+test-comment text changes - no new shell invocation, no new file I/O,
+no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

@@ -384,8 +384,8 @@ recognized only in the *leading* position, before `chat_id`, for the
 same collision-avoidance reason, and in any order relative to each
 other)
 
-The poller's own `REPLY WITH` recovery-command template (`D2TG::Poller::
-_print_reply_template`) prints `--bot` in this same leading position
+The poller's own `REPLY WITH` recovery-command template
+(`D2TG::Poller::Format::print_reply_template`) prints `--bot` in this same leading position
 (TGT-227, found via a scheduled JOB-003 hourly bug hunt - previously it
 printed `--bot` AFTER `chat_id`, a position this command never actually
 parses; a `--bot` flag there fell into the reply text itself and was

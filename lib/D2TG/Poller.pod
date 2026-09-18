@@ -139,7 +139,7 @@ edit still re-announces, an accepted, documented gap. Also prints a
 C<REPLY WITH> template (TGT-217,
 found via a scheduled hourly bug hunt) for both the text-edit and
 caption/media-only-edit cases, matching every other actionable branch's
-own C<_print_reply_template> call - this branch was the sole actionable
+own C<D2TG::Poller::Format::print_reply_template> call - this branch was the sole actionable
 one missing it, leaving an edited message with no ready-to-run reply
 command, unlike every other event type this poller announces. Deletion
 of an ordinary chat message cannot be

@@ -9,7 +9,7 @@ require D2TG::Config;
 
 # TGT-226 (found via a scheduled JOB-004 improvement hunt): the masked
 # "--bot <token>" flag fragment was built via an identical 3-line
-# ternary duplicated verbatim in two places - _print_reply_template
+# ternary duplicated verbatim in two places - D2TG::Poller::Format::print_reply_template
 # and the NEW TG MEDIA FAILED branch (added by TGT-220). This test
 # exercises the new shared helper directly, matching this project's
 # own established extract-once-duplicated precedent

@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.32).** BUGFIX (TGT-294, found via a
+user-requested comprehensive bug/improvement sweep): `docs/commands.md`
+and `lib/D2TG/Poller.pod` both referred to
+`D2TG::Poller::_print_reply_template` as the poller's `REPLY WITH`
+template function - renamed and relocated during the TGT-259/TGT-276
+decomposition to `D2TG::Poller::Format::print_reply_template`. The same
+stale name also appeared in 3 test comments (`t/217`, `t/220`, `t/226`).
+Corrected all 5 references.
+
 **Status: early implementation (v2.31).** BUGFIX (TGT-293, found via a
 user-requested comprehensive bug/improvement sweep): 14 `$store->` method
 calls across 7 cli scripts (`history.pl`, `retry-download.pl`,
