@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.49).** REFACTOR (TGT-313, found via a
+JOB-004 improvement hunt reviewing TGT-312's own freshly-shipped diff):
+`D2TG::Poller::Dispatch::handle_plain_update`'s text branch and
+voice-success branch used to duplicate an identical-shaped
+`defined($message_id)`-branching announce/record block - the same
+duplication shape that let TGT-311's own regression (TGT-312) happen.
+Both branches now call one shared private helper,
+`_announce_and_record`, instead - a pure refactor, byte-identical
+output, no behavior change.
+
 **Status: early implementation (v2.48).** BUGFIX (TGT-312, a TGT-311
 regression found via a JOB-003 hourly bug hunt, reproduced live in the
 perl-test Docker container): a text or successfully-transcribed-voice

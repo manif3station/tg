@@ -98,6 +98,29 @@ genuinely new edit the very first time it arrived. A transient lookup
 error degrades the same way every other dedup check in this module
 already does (treated as not-previously-seen, proceed as normal).
 
+=head2 _announce_and_record(%args)
+
+TGT-313 (found via a JOB-004 improvement hunt, reviewing TGT-312's own
+freshly-shipped diff): private helper shared by C<handle_plain_update>'s
+text branch and voice-success branch, both of which used to duplicate
+an identical-shaped C<defined($message_id)>-branching announce/record
+block - the same duplication shape that let TGT-311's own regression
+(TGT-312) happen, since one copy got the C<defined> guard added and the
+other only partially did. Takes C<ts>, C<chat_id>, C<sender>,
+C<msg_note>, C<reply_ctx>, C<message_id>, C<label> (C<'NEW TG'> or
+C<'NEW TG VOICE'>), C<safe_content> (the already-sanitized text or
+transcript), C<store>, C<offset_cap_ref>, C<update_id>, C<bot_token> -
+the only two arguments that actually vary between the two call sites
+are C<label> and C<safe_content>. When C<message_id> is defined,
+applies TGT-311's fetch-command-only treatment
+(L<D2TG::Poller::Format/print_fetch_template> +
+L<D2TG::Poller::Format/print_reply_template> + a
+L<D2TG::Poller::Safe/record_message_and_track_offset> store-write);
+when undefined, falls back to TGT-312's inline-content-printing
+treatment. Pure extraction - byte-identical output and store-write
+behavior to the pre-TGT-313 duplicated code for every existing
+scenario.
+
 =head2 handle_plain_update($update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, $transcribe_voice, $download_media)
 
 The fallback branch for every update that is neither a
@@ -138,7 +161,9 @@ line did before TGT-311 - only when C<message_id> is genuinely
 undefined (a malformed/defensive payload shape; real Telegram Bot API
 traffic always sets it), since neither C<FETCH WITH> nor the
 store-write below can function without an id to reference; the
-C<defined(message_id)> case is completely unaffected. Photo/document
+C<defined(message_id)> case is completely unaffected. TGT-313: both
+paths' branching now lives in the shared C<_announce_and_record>
+helper (above), called once from each branch. Photo/document
 messages (when
 C<download_media> is given) are size-checked against
 C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, Telegram's Bot API C<getFile>

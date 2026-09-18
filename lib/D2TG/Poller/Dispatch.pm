@@ -7,6 +7,33 @@ use D2TG::Poller::Safe;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
+# TGT-313 (found via a JOB-004 improvement hunt, reviewing TGT-312's own
+# freshly-shipped diff): handle_plain_update's text branch and
+# voice-success branch used to duplicate this exact defined($message_id)
+# branching shape - the same duplication that let TGT-311's own
+# regression (TGT-312) happen, where one copy got the defined-guard
+# added and the other didn't. Both branches now call this one helper
+# instead.
+sub _announce_and_record {
+    my (%args) = @_;
+    my ( $ts, $chat_id, $sender, $msg_note, $reply_ctx, $message_id, $label, $safe_content, $store, $offset_cap_ref, $update_id, $bot_token )
+      = @args{qw(ts chat_id sender msg_note reply_ctx message_id label safe_content store offset_cap_ref update_id bot_token)};
+
+    if ( defined $message_id ) {
+        print "$ts $label [$chat_id] $sender$msg_note$reply_ctx\n";
+        D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id );
+        D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
+        if ($store) {
+            D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_content, bot_key => $bot_token );
+        }
+    }
+    else {
+        print "$ts $label [$chat_id] $sender: $safe_content$reply_ctx\n";
+        D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
+    }
+    return;
+}
+
 sub handle_message_reaction {
     my ( $reaction, $store, $bot_token ) = @_;
     my $chat_id = $reaction->{chat}{id};
@@ -157,19 +184,23 @@ sub handle_plain_update {
         # completely: never shown inline (TGT-311 removed that), never
         # stored, no FETCH WITH command to name it by. Falls back to
         # printing the content inline in that one case - the only way
-        # left to avoid losing it outright.
-        if ( defined $message_id ) {
-            print "$ts NEW TG [$chat_id] $sender$msg_note$reply_ctx\n";
-            D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id );
-            D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-            if ($store) {
-                D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
-            }
-        }
-        else {
-            print "$ts NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
-            D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-        }
+        # left to avoid losing it outright. TGT-313: this branching now
+        # lives in the shared _announce_and_record helper (above), used
+        # by both this branch and the voice-success branch below.
+        _announce_and_record(
+            ts             => $ts,
+            chat_id        => $chat_id,
+            sender         => $sender,
+            msg_note       => $msg_note,
+            reply_ctx      => $reply_ctx,
+            message_id     => $message_id,
+            label          => 'NEW TG',
+            safe_content   => $safe_text,
+            store          => $store,
+            offset_cap_ref => $offset_cap_ref,
+            update_id      => $update_id,
+            bot_token      => $bot_token,
+        );
     }
     elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
         my $file_id = $message->{voice}{file_id};
@@ -195,18 +226,23 @@ sub handle_plain_update {
             # and_track_offset can't run at all, so the transcript
             # would vanish completely rather than merely go unfetchable
             # by id. Falls back to inline printing in that one case.
-            if ( defined $message_id ) {
-                print "$ts NEW TG VOICE [$chat_id] $sender$msg_note$reply_ctx\n";
-                D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id );
-                D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-                if ($store) {
-                    D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
-                }
-            }
-            else {
-                print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$reply_ctx\n";
-                D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-            }
+            # TGT-313: this branching now lives in the shared
+            # _announce_and_record helper (top of file), same as the
+            # plain-text branch above.
+            _announce_and_record(
+                ts             => $ts,
+                chat_id        => $chat_id,
+                sender         => $sender,
+                msg_note       => $msg_note,
+                reply_ctx      => $reply_ctx,
+                message_id     => $message_id,
+                label          => 'NEW TG VOICE',
+                safe_content   => $safe_transcript,
+                store          => $store,
+                offset_cap_ref => $offset_cap_ref,
+                update_id      => $update_id,
+                bot_token      => $bot_token,
+            );
         }
         elsif ( $store && defined $message_id && defined $file_id ) {
             eval {

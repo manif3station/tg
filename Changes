@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+2.49  2026-09-18
+      - REFACTOR (TGT-313, found via a JOB-004 improvement hunt
+        reviewing TGT-312's own freshly-shipped diff):
+        D2TG::Poller::Dispatch::handle_plain_update's text branch and
+        voice-success branch used to duplicate an identical-shaped
+        defined(message_id)-branching announce/record block, differing
+        only by a literal label ('NEW TG' vs 'NEW TG VOICE') and which
+        sanitized variable was printed/recorded - the same duplication
+        shape that let TGT-311's own regression (TGT-312) happen, since
+        one copy could be edited without the other being kept in sync.
+        Extracted into a single shared private helper,
+        _announce_and_record, called from both branches. Pure refactor:
+        byte-identical stdout output and store-write behavior, no
+        change to any acceptance criteria. t/181's own source-structure
+        regression test (which asserts directly on record_message_and_
+        track_offset's call-site count/shape in the source) needed
+        updating to match the new call-site shape (5 -> 4 call sites,
+        since the two consolidated branches now share one) - a
+        deliberate, understood consequence of the extraction, not a
+        behavior change.
+
 2.48  2026-09-18
       - BUGFIX (TGT-312, a TGT-311 regression found via a JOB-003
         hourly bug hunt, reproduced live in the perl-test Docker

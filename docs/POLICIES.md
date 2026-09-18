@@ -6913,3 +6913,65 @@ reusing existing sanitized `$safe_text`/`$safe_transcript` values
 already computed by the pre-existing code) - no new input path, no
 string eval, no shell/exec/system/backtick/piped-open patterns, no
 change to what reaches storage or the network.
+
+## TGT-313: extracted handle_plain_update's duplicated defined(message_id) announce/record logic into a shared helper
+
+Found via a scheduled JOB-004 improvement hunt, 2026-09-18, reviewing
+the diff TGT-312 had just shipped - the first move any JOB-003/004 pass
+must make per `.claude/rules/service-jobs-immediately-and-live.md` is
+to stress-test/review the most recently shipped diff before looking
+anywhere else.
+
+TGT-312's own fix gave `handle_plain_update`'s text branch and
+voice-success branch each an identical-shaped block: `if (defined
+$message_id) { print announce; print_fetch_template;
+print_reply_template; if ($store) { record_message_and_track_offset }
+} else { print fallback-announce-with-content; print_reply_template
+}`, differing only by a literal label (`'NEW TG'` vs `'NEW TG VOICE'`)
+and which sanitized variable (`$safe_text` vs `$safe_transcript`) was
+printed/recorded. This is exactly the duplication shape that let
+TGT-311's own regression (TGT-312) happen in the first place - TGT-311
+added the `defined($message_id)` guard to both copies, but only
+partially, missing the case that turned into TGT-312's own bug.
+Reducing the duplication directly reduces the chance of a repeat.
+
+Fix: extracted a shared private helper, `_announce_and_record(%args)`,
+taking the two genuinely-varying pieces (`label`, `safe_content`) plus
+everything else both branches already had in scope (`ts`, `chat_id`,
+`sender`, `msg_note`, `reply_ctx`, `message_id`, `store`,
+`offset_cap_ref`, `update_id`, `bot_token`). Both call sites now call
+this one helper instead of duplicating the branching logic - a pure
+refactor, byte-identical stdout output and store-write behavior for
+every existing scenario.
+
+Test strategy: matching TGT-279's own precedent for a pure-extraction
+refactor (a `can()`-based structural test rather than a new-behavior
+test, since there is no new behavior), a genuinely-red
+`t/313-dispatch-announce-and-record-helper.t` (`D2TG::Poller::
+Dispatch->can('_announce_and_record')`) was written and confirmed
+failing before the helper existed. After implementing, the full suite
+surfaced one genuine pre-existing test needing an update:
+`t/181-record-message-offset-tracking-dedup.t` asserts directly on
+`record_message_and_track_offset`'s call-site count and shape in
+`Dispatch.pm`'s own source text (a deliberate source-structure
+regression guard, not a behavior test) - its expected call-site count
+dropped from 5 to 4 (the two consolidated branches now share one call
+site inside the helper instead of each having their own), and its
+`'plain text branch'`/`'transcribed voice branch'` anchors were
+replaced with an anchor on the helper's own call plus two new anchors
+confirming each branch calls the helper with the correct
+`label`/`safe_content` mapping - preserving the same "catch a call
+moved to the wrong branch or with the wrong arguments" guarantee the
+original anchors provided, just adapted to the new call shape. This is
+a deliberate, understood consequence of the extraction this ticket set
+out to do, not a masked behavior change - confirmed by the full suite
+being otherwise unaffected. Full suite green after (`Files=233,
+Tests=2958`); 100% statement + subroutine coverage confirmed on
+`lib/D2TG/Poller/Dispatch.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow extraction
+- the helper's own body is a verbatim reuse of the two branches'
+pre-existing print/record statements, parameterized by `label`/
+`safe_content` (already-sanitized values, not new input); no string
+eval, no shell/exec/system/backtick/piped-open patterns, no change to
+what reaches storage or the network.
