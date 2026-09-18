@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+2.46  2026-09-18
+      - IMPROVEMENT (TGT-310, found via a scheduled JOB-004 improvement
+        hunt): cli/retry-download.pl and cli/retry-transcription.pl
+        duplicated the identical argv-dispatch/list/retry-loop/
+        reporting skeleton (a diff of the two scripts was 296 of ~480
+        total lines) - the same class of duplication
+        D2TG::Store::RetryQueue.pm's own shared helpers already fixed
+        at the lib layer (TGT-295), just never applied to the CLI
+        layer above it. Extracted the shared skeleton into a new
+        lib/D2TG/RetryCli.pm, parameterized by label, list/retry/
+        telegram-builder/format-success coderefs, and the RETRY
+        PARTIAL wording - a pure extraction, no behavior change. Every
+        existing test for both scripts stays green; 100% coverage on
+        the new module.
+
 2.45  2026-09-18
       - IMPROVEMENT (TGT-309, found via a scheduled JOB-004 improvement
         hunt): cli/reply.pl, cli/send.pl, and cli/history.pl still

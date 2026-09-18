@@ -14,6 +14,7 @@ use D2TG::Telegram;
 use D2TG::Download;
 use D2TG::Reply;
 use D2TG::Reply::Args;
+use D2TG::RetryCli;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
@@ -60,76 +61,31 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-# TGT-293 (found via a user-requested comprehensive bug/improvement
-# sweep): all 3 failed_downloads() call sites in this file ran
-# unwrapped - the same raw-crash/db-path-leak risk TGT-183/186/195
-# already fixed for other call sites in this project, just never swept
-# this widely.
-sub _failed_downloads_or_die {
-    my $result = eval { $store->failed_downloads( bot_key => $bot_key ) };
-    if ($@) {
-        my $reason = D2TG::Poller::Safe::classify_store_error($@);
-        print STDERR "STORE ERROR: failed_downloads failed - $reason\n";
-        exit 1;
-    }
-    return $result;
-}
-
-if ( !@ARGV ) {
-    my $queued = _failed_downloads_or_die();
-    if ( !@$queued ) {
-        print "No failed downloads queued.\n";
-        exit 0;
-    }
-    for my $row (@$queued) {
-        print "[$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} "
-          . "file_id=$row->{file_id} error=\"$row->{error}\" queued_at=$row->{created_at}\n";
-    }
-    exit 0;
-}
-
+# TGT-310 (found via a scheduled JOB-004 improvement hunt): the
+# argv-dispatch/retry-loop/reporting skeleton below (formerly ~150
+# lines of this script, near-byte-identical to cli/retry-transcription.pl's
+# own copy of the same skeleton) is now shared via D2TG::RetryCli::run
+# - a pure extraction, no behavior change. attachments_dir is still
+# resolved eagerly here (a pure path computation, no I/O, safe even for
+# a pure-listing invocation that never uses it) but D2TG::Telegram
+# construction stays lazy (telegram_builder below, invoked by run()
+# at most once and only once there's actually something to retry) -
+# D2TG::Telegram->new dies without a token, and a caller with no token
+# configured must still be able to list the queue, exactly as before
+# this extraction.
 my $attachments_dir = D2TG::Config::attachments_dir(
     default_root => File::Spec->catdir( $Bin, '..' ),
     base_dir      => $base_dir,
 );
 
-my $telegram = D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D2TG::Config::token() );
-
-my @to_retry;
-if ( $ARGV[0] eq '--all' ) {
-    @to_retry = @{ _failed_downloads_or_die() };
-    if ( !@to_retry ) {
-        print "No failed downloads queued.\n";
-        exit 0;
-    }
-}
-else {
-    my $id = $ARGV[0];
-    my ($row) = grep { $_->{id} == $id } @{ _failed_downloads_or_die() };
-    if ( !$row ) {
-        print STDERR "No queued failed download with id $id.\n";
-        exit 1;
-    }
-    @to_retry = ($row);
-}
-
-my $exit_code = 0;
-for my $row (@to_retry) {
-    my ( $ok, $result_or_error, $still_queued ) =
-      D2TG::Download::retry_failed_download( $telegram, $store, $row, $attachments_dir );
-
-    if ( !$ok ) {
-        if ( D2TG::Config::is_expired_file_error($result_or_error) ) {
-            print STDERR "RETRY EXPIRED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: "
-              . "Telegram reports this file_id as permanently gone (not merely a transient failure) - $result_or_error\n";
-        }
-        else {
-            print STDERR "RETRY FAILED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $result_or_error\n";
-        }
-        $exit_code = 1;
-        next;
-    }
-
+D2TG::RetryCli::run(
+    label            => 'download',
+    argv             => \@ARGV,
+    store            => $store,
+    list             => sub { return $store->failed_downloads( bot_key => $bot_key ) },
+    telegram_builder => sub {
+        return D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D2TG::Config::token() );
+    },
     # TGT-247 (found via a scheduled JOB-003 hourly bug hunt,
     # live-reproduced): $ok alone does not mean the retry fully
     # completed. D2TG::Download::retry_failed_download's own 3rd return
@@ -144,15 +100,12 @@ for my $row (@to_retry) {
     # still incomplete - retry_failed_download's own STORE ERROR STDERR
     # line (from D2TG::Download itself) is the only place that gap was
     # ever visible before this fix.
-    if ($still_queued) {
-        print "RETRY PARTIAL [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
-          . "download succeeded but the history record could not be written yet; "
-          . "the entry remains queued (still queued) and will be retried automatically, "
-          . "or retry again with d2 tg.retry-download $row->{id}\n";
-        $exit_code = 1;
-        next;
-    }
-
+    retry => sub {
+        my ( $telegram, $store, $row ) = @_;
+        return D2TG::Download::retry_failed_download( $telegram, $store, $row, $attachments_dir );
+    },
+    partial_note      => 'download succeeded but the history record could not be written yet',
+    retry_command_name => 'd2 tg.retry-download',
     # TGT-146: never print $result_or_error here - on success it is
     # D2TG::Download::retry_failed_download's raw local filesystem path
     # return value. This line reaches the target project's
@@ -160,11 +113,11 @@ for my $row (@to_retry) {
     # onto a shared board - the same never-expose-the-real-path
     # convention TGT-133 already established for D2TG::Poller's own
     # media-download success path and cli/attachment.pl.
-    print "RETRY OK [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
-      . "GET ATTACHMENT WITH: d2 tg.attachment $row->{chat_id} $row->{message_id}\n";
-}
-
-exit $exit_code;
+    format_success => sub {
+        my ($row) = @_;
+        return " - GET ATTACHMENT WITH: d2 tg.attachment $row->{chat_id} $row->{message_id}";
+    },
+);
 
 =head1 NAME
 
@@ -256,12 +209,21 @@ C<RETRY PARTIAL> instead - naming the row as still queued for a future
 automatic or manual (C<d2 tg.retry-download E<lt>idE<gt>>) retry - and
 sets a non-zero exit code, rather than falsely claiming full success.
 
-All 3 C<failed_downloads> lookups in this script (TGT-293, found via a
-user-requested comprehensive bug/improvement sweep) are C<eval>-wrapped
-via a shared C<_failed_downloads_or_die> helper and classified via
-C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database at
-any of them used to die raw, printing a raw Perl/DBI exception
-(potentially embedding the real db_path) to STDERR instead of a clean
-C<STORE ERROR: ... failed - REASON> refusal.
+All 3 C<failed_downloads> lookups (TGT-293, found via a user-requested
+comprehensive bug/improvement sweep) are C<eval>-wrapped and classified
+via C<D2TG::Poller::Safe::classify_store_error> - a locked/busy
+database at any of them used to die raw, printing a raw Perl/DBI
+exception (potentially embedding the real db_path) to STDERR instead
+of a clean C<STORE ERROR: ... failed - REASON> refusal.
+
+The argv-dispatch/list/retry-loop/reporting skeleton above (TGT-310,
+found via a scheduled JOB-004 improvement hunt) is shared with
+C<cli/retry-transcription.pl> via L<D2TG::RetryCli/run(%args)> - see
+that module's own POD for the full parameterization (C<label>,
+C<list>, C<telegram_builder>, C<retry>, C<partial_note>,
+C<retry_command_name>, C<format_success>). Only this script's own
+C<--bot>/C<--db> flag parsing, C<attachments_dir> resolution, this
+C<Usage:> text, and this POD stay here - a pure extraction, no
+behavior change.
 
 =cut

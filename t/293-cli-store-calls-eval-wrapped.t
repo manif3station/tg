@@ -28,17 +28,23 @@ use File::Spec;
 # present) rather than by a generic strip-all-eval-blocks-then-grep
 # approach, since several call sites dereference with C<@{ ... }>,
 # whose own inner C<{ }> defeats a naive non-nested brace strip.
+#
+# TGT-310 (found via a scheduled JOB-004 improvement hunt): retry-
+# download.pl/retry-transcription.pl's own $store->failed_downloads/
+# failed_transcriptions calls, and the eval-wrap+classify+STORE ERROR
+# handling around them, moved into the new shared
+# lib/D2TG/RetryCli.pm (D2TG::RetryCli::_list_or_die) - a pure
+# extraction, the safety property still holds, just relocated. Removed
+# from this script-level %expect (the pattern would no longer match -
+# these 2 scripts now only pass a list coderef to D2TG::RetryCli::run,
+# they don't eval-wrap the call themselves) and covered instead by
+# t/310-retrycli-store-call-eval-wrapped.t, which checks the new home
+# directly.
 
 my %expect = (
     'history.pl' => [
         qr/eval \{\s*\n\s*\(\s*defined \$since \|\| defined \$until\s*\)\s*\n\s*\?\s*\$store->messages_in_range\(/s,
         qr/reverse \$store->recent_messages\(/,
-    ],
-    'retry-download.pl' => [
-        qr/my \$result = eval \{ \$store->failed_downloads\(/,
-    ],
-    'retry-transcription.pl' => [
-        qr/my \$result = eval \{ \$store->failed_transcriptions\(/,
     ],
     'attachment.pl' => [
         qr/my \$local_path = eval \{ \$store->get_attachment_path\(/,

@@ -16,6 +16,7 @@ use D2TG::Transcribe;
 use D2TG::Transcribe::Retry;
 use D2TG::Reply;
 use D2TG::Reply::Args;
+use D2TG::RetryCli;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
@@ -41,71 +42,23 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-# TGT-293 (found via a user-requested comprehensive bug/improvement
-# sweep): all 3 failed_transcriptions() call sites in this file ran
-# unwrapped - the same raw-crash/db-path-leak risk TGT-183/186/195
-# already fixed for other call sites in this project, just never swept
-# this widely.
-sub _failed_transcriptions_or_die {
-    my $result = eval { $store->failed_transcriptions( bot_key => $bot_key ) };
-    if ($@) {
-        my $reason = D2TG::Poller::Safe::classify_store_error($@);
-        print STDERR "STORE ERROR: failed_transcriptions failed - $reason\n";
-        exit 1;
-    }
-    return $result;
-}
-
-if ( !@ARGV ) {
-    my $queued = _failed_transcriptions_or_die();
-    if ( !@$queued ) {
-        print "No failed transcriptions queued.\n";
-        exit 0;
-    }
-    for my $row (@$queued) {
-        print "[$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} "
-          . "file_id=$row->{file_id} error=\"$row->{error}\" queued_at=$row->{created_at}\n";
-    }
-    exit 0;
-}
-
-my $telegram = D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D2TG::Config::token() );
-
-my @to_retry;
-if ( $ARGV[0] eq '--all' ) {
-    @to_retry = @{ _failed_transcriptions_or_die() };
-    if ( !@to_retry ) {
-        print "No failed transcriptions queued.\n";
-        exit 0;
-    }
-}
-else {
-    my $id = $ARGV[0];
-    my ($row) = grep { $_->{id} == $id } @{ _failed_transcriptions_or_die() };
-    if ( !$row ) {
-        print STDERR "No queued failed transcription with id $id.\n";
-        exit 1;
-    }
-    @to_retry = ($row);
-}
-
-my $exit_code = 0;
-for my $row (@to_retry) {
-    my ( $ok, $result_or_error, $still_queued ) =
-      D2TG::Transcribe::Retry::retry_failed_transcription( $telegram, $store, $row );
-
-    if ( !$ok ) {
-        if ( D2TG::Config::is_expired_file_error($result_or_error) ) {
-            print STDERR "RETRY EXPIRED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: "
-              . "Telegram reports this file_id as permanently gone (not merely a transient failure) - $result_or_error\n";
-        }
-        else {
-            print STDERR "RETRY FAILED [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $result_or_error\n";
-        }
-        $exit_code = 1;
-        next;
-    }
-
+# TGT-310 (found via a scheduled JOB-004 improvement hunt): the
+# argv-dispatch/retry-loop/reporting skeleton below (formerly ~110
+# lines of this script, near-byte-identical to cli/retry-download.pl's
+# own copy of the same skeleton) is now shared via D2TG::RetryCli::run
+# - a pure extraction, no behavior change. D2TG::Telegram construction
+# stays lazy (telegram_builder below, invoked by run() at most once and
+# only once there's actually something to retry) - D2TG::Telegram->new
+# dies without a token, and a caller with no token configured must
+# still be able to list the queue, exactly as before this extraction.
+D2TG::RetryCli::run(
+    label            => 'transcription',
+    argv             => \@ARGV,
+    store            => $store,
+    list             => sub { return $store->failed_transcriptions( bot_key => $bot_key ) },
+    telegram_builder => sub {
+        return D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D2TG::Config::token() );
+    },
     # TGT-248 (found via a scheduled JOB-003 hourly bug hunt): $ok alone
     # does not mean the retry fully completed. retry_failed_transcription's
     # own 3rd return value, $still_queued, is true when the transcript
@@ -114,24 +67,22 @@ for my $row (@to_retry) {
     # written into the messages table. Printing the ordinary RETRY OK
     # line in this state falsely claimed full success, mirroring the
     # exact bug TGT-247 already fixed in cli/retry-download.pl.
-    if ($still_queued) {
-        print "RETRY PARTIAL [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id} - "
-          . "transcript recovered but the history record could not be written yet; "
-          . "the entry remains queued (still queued) and will be retried automatically, "
-          . "or retry again with d2 tg.retry-transcription $row->{id}\n";
-        $exit_code = 1;
-        next;
-    }
-
+    retry => sub {
+        my ( $telegram, $store, $row ) = @_;
+        return D2TG::Transcribe::Retry::retry_failed_transcription( $telegram, $store, $row );
+    },
+    partial_note      => 'transcript recovered but the history record could not be written yet',
+    retry_command_name => 'd2 tg.retry-transcription',
     # TGT-146's own never-expose-the-real-path convention doesn't apply
     # here - a transcript is text, not a filesystem path, so it's safe
     # to print directly (matching NEW TG VOICE's own success-path line).
-    my $safe_transcript = $result_or_error;
-    $safe_transcript =~ s/[\r\n]+/ /g;
-    print "RETRY OK [$row->{id}] chat_id=$row->{chat_id} message_id=$row->{message_id}: $safe_transcript\n";
-}
-
-exit $exit_code;
+    format_success => sub {
+        my ( $row, $result_or_error ) = @_;
+        my $safe_transcript = $result_or_error;
+        $safe_transcript =~ s/[\r\n]+/ /g;
+        return ": $safe_transcript";
+    },
+);
 
 =head1 NAME
 
@@ -206,12 +157,20 @@ future automatic or manual (C<d2 tg.retry-transcription E<lt>idE<gt>>)
 retry - and sets a non-zero exit code, rather than falsely claiming full
 success.
 
-All 3 C<failed_transcriptions> lookups in this script (TGT-293, found
-via a user-requested comprehensive bug/improvement sweep) are
-C<eval>-wrapped via a shared C<_failed_transcriptions_or_die> helper and
-classified via C<D2TG::Poller::Safe::classify_store_error> - a
+All 3 C<failed_transcriptions> lookups (TGT-293, found via a
+user-requested comprehensive bug/improvement sweep) are C<eval>-wrapped
+and classified via C<D2TG::Poller::Safe::classify_store_error> - a
 locked/busy database at any of them used to die raw, printing a raw
 Perl/DBI exception (potentially embedding the real db_path) to STDERR
 instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
+
+The argv-dispatch/list/retry-loop/reporting skeleton above (TGT-310,
+found via a scheduled JOB-004 improvement hunt) is shared with
+C<cli/retry-download.pl> via L<D2TG::RetryCli/run(%args)> - see that
+module's own POD for the full parameterization (C<label>, C<list>,
+C<telegram_builder>, C<retry>, C<partial_note>, C<retry_command_name>,
+C<format_success>). Only this script's own C<--bot>/C<--db> flag
+parsing, this C<Usage:> text, and this POD stay here - a pure
+extraction, no behavior change.
 
 =cut

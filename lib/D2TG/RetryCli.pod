@@ -1,0 +1,117 @@
+=head1 NAME
+
+D2TG::RetryCli - the shared list/dispatch/retry/report skeleton behind d2 tg.retry-download and d2 tg.retry-transcription
+
+=head1 SYNOPSIS
+
+    D2TG::RetryCli::run(
+        label            => 'download',
+        argv             => \@ARGV,
+        store            => $store,
+        list             => sub { return $store->failed_downloads( bot_key => $bot_key ) },
+        telegram_builder => sub { return D2TG::Telegram->new( token => $token ) },
+        retry            => sub {
+            my ( $telegram, $store, $row ) = @_;
+            return D2TG::Download::retry_failed_download( $telegram, $store, $row, $attachments_dir );
+        },
+        partial_note        => 'download succeeded but the history record could not be written yet',
+        retry_command_name  => 'd2 tg.retry-download',
+        format_success      => sub {
+            my ($row) = @_;
+            return " - GET ATTACHMENT WITH: d2 tg.attachment $row->{chat_id} $row->{message_id}";
+        },
+    );
+
+=head1 DESCRIPTION
+
+TGT-310 (found via a scheduled JOB-004 improvement hunt): C<cli/retry-download.pl>
+and C<cli/retry-transcription.pl> hand-rolled the identical list/
+dispatch/retry/report skeleton (a diff of the two scripts was 296 of
+~480 total lines) - the same class of duplication
+L<D2TG::Store::RetryQueue>'s own C<_record_failed>/C<_list_failed>/
+C<_due_for_retry> helpers already fixed at the lib layer (TGT-295),
+just never applied to the CLI layer above it. C<run()> is a pure
+extraction of that shared skeleton - each caller's own flag-parsing
+preamble, C<Usage:> text, and POD stay in the script; only this piece
+moved, with zero behavior change.
+
+=head1 FUNCTIONS
+
+=head2 run(%args)
+
+Drives the whole list/dispatch/retry/report flow and exits the process
+directly (never returns) - matches both pre-extraction scripts' own
+behavior exactly, including every exit code.
+
+Required arguments:
+
+=over 4
+
+=item C<label>
+
+C<'download'> or C<'transcription'> - used to build every user-facing
+message (C<No failed E<lt>labelE<gt>s queued.>, C<STORE ERROR:
+failed_E<lt>labelE<gt>s failed - ...>, C<No queued failed
+E<lt>labelE<gt> with id ...>).
+
+=item C<argv>
+
+An arrayref: the remaining C<@ARGV> after the caller's own flag-parsing
+preamble has already consumed C<--db>/C<--bot> - either empty (list
+mode), C<['--all']>, or a single numeric id.
+
+=item C<list>
+
+A coderef, no arguments, returning an arrayref of queued rows. Called
+via a shared, C<eval>-wrapped helper (TGT-293's own
+C<classify_store_error> convention) - a locked/busy database dies raw
+inside this coderef and is caught, classified, and reported as C<STORE
+ERROR: ...> before exiting 1, never propagating the raw exception.
+
+=item C<store>
+
+Passed straight through to C<retry> as its second argument.
+
+=item C<telegram_builder>
+
+A coderef, no arguments, returning a L<D2TG::Telegram> instance.
+Called AT MOST ONCE, and only once C<@to_retry> is confirmed
+non-empty - neither pre-extraction script ever constructed
+C<D2TG::Telegram> for a pure-listing invocation, since
+C<D2TG::Telegram-E<gt>new> dies without a token; a caller with no token
+configured must still be able to list the queue.
+
+=item C<retry>
+
+A coderef C<($telegram, $store, $row) -E<gt> ($ok, $result_or_error,
+$still_queued)> - the two existing retry functions
+(L<D2TG::Download/retry_failed_download>,
+L<D2TG::Transcribe::Retry/retry_failed_transcription>) already have
+this exact shape.
+
+=item C<partial_note>
+
+Free text describing what succeeded when C<$still_queued> is true
+(e.g. C<"download succeeded but the history record could not be
+written yet">) - substituted into the C<RETRY PARTIAL> line.
+
+=item C<retry_command_name>
+
+The C<d2 tg.*> command name printed in the C<RETRY PARTIAL> line's own
+"retry again with ..." suggestion.
+
+=item C<format_success>
+
+A coderef C<($row, $result_or_error) -E<gt> $trailing_text> - the
+C<RETRY OK> line's own trailing text, including its own leading
+separator punctuation and spacing. Deliberately not hardcoded here:
+the two pre-extraction scripts differ even in the separator itself
+(C<cli/retry-download.pl> used C<" - GET ATTACHMENT WITH: ...">,
+matching TGT-146's never-leak-the-real-path convention;
+C<cli/retry-transcription.pl> used C<": E<lt>transcriptE<gt>"> with no
+dash at all, since a transcript is text, not a path, so no equivalent
+leak risk exists there).
+
+=back
+
+=cut

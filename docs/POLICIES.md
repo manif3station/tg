@@ -6684,3 +6684,82 @@ two existing, already-reviewed code blocks (argv validation, storage
 resolution) swap execution order with no new logic. No new shell
 invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-310: cli/retry-download.pl and cli/retry-transcription.pl duplicated their argv-dispatch/retry-loop skeleton
+
+Found via a scheduled JOB-004 improvement hunt. A diff of
+`cli/retry-download.pl` (267 lines) and `cli/retry-transcription.pl`
+(217 lines) was 296 of ~480 total lines identical: same `--db`/`--bot`
+flag extraction, same argv-shape `Usage:` validation (TGT-211's
+canonical order), same `open_store_or_die` call, same
+`_failed_X_or_die` eval-wrap-classify-exit helper shape (TGT-293), same
+`--all`/single-id dispatch loop, same `RETRY EXPIRED`/`RETRY FAILED`/
+`RETRY PARTIAL` (TGT-247/248) reporting shape - differing only in
+table/method names, whether `attachments_dir` is resolved, the retry
+function called, and the success-line format (`GET ATTACHMENT WITH`
+vs. a printed transcript). This is the exact class of duplication
+`D2TG::Store::RetryQueue.pm`'s own `_record_failed`/`_list_failed`/
+`_due_for_retry`/`_mark_retried`/`_remove_failed` helpers already fixed
+at the lib layer (TGT-295) - the CLI layer above it was never given
+the same treatment, so a bug fixed in one script's shared skeleton
+(TGT-247's own `RETRY PARTIAL` handling) had to be manually re-applied
+to the other by hand one day later (TGT-248).
+
+Fixed by extracting the shared skeleton into a new
+`lib/D2TG/RetryCli.pm` (`run(%args)`), parameterized by `label`
+(`'download'`/`'transcription'`), `list`/`retry` coderefs, a lazily-
+invoked `telegram_builder` coderef, `partial_note`/`retry_command_name`
+strings, and `format_success` (the `RETRY OK` line's own trailing text
+and separator). Two genuine behavior-preservation risks were found and
+fixed during the extraction itself, not just at review time:
+
+1. **Lazy `D2TG::Telegram` construction.** Neither pre-extraction
+   script ever constructed `D2TG::Telegram` for a pure-listing
+   invocation - `D2TG::Telegram->new` dies without a token, and a
+   caller with no token configured could still list the queue before
+   this refactor. An early draft passed a pre-built `telegram` object
+   into `run()`, which would have silently broken exactly that case.
+   Fixed by passing a `telegram_builder` coderef instead, invoked by
+   `run()` at most once and only once `@to_retry` is confirmed
+   non-empty.
+2. **The RETRY OK separator itself differs between callers**, not just
+   the trailing text - `cli/retry-download.pl` used `" - GET
+   ATTACHMENT WITH: ..."` (TGT-146's never-leak-the-real-path
+   convention), `cli/retry-transcription.pl` used `":
+   <transcript>"` with no dash at all. An early draft hardcoded `" -
+   "` in the shared `run()`, which would have silently changed
+   `cli/retry-transcription.pl`'s own output. Fixed by having
+   `format_success` supply its own full leading separator.
+
+Test strategy: ran the full suite before touching any code
+(`Files=228, Tests=2863`, establishing the behavior-preservation
+baseline), then re-ran it after the extraction - 3 pre-existing tests
+went genuinely red (`t/104-retry-download-cli-no-raw-path.t`,
+`t/247-retry-download-still-queued-message.t`,
+`t/293-cli-store-calls-eval-wrapped.t`), each a source-inspection
+regression test that had checked the moved code's OLD location. All 3
+were relocated to check the code's new home in `lib/D2TG/RetryCli.pm`
+(matching TGT-309's own precedent for a test needing to move with the
+code it protects, not a weakened assertion). A new
+`t/310-retrycli-store-call-eval-wrapped.t` covers the module's own
+eval-wrap/classify/`STORE ERROR` invariant directly. A new
+`t/310-retrycli-run-coverage.t` exercises `D2TG::RetryCli::run`
+in-process (the `CORE::GLOBAL::exit`-interception technique already
+established by `t/186-open-store-or-die-coverage.t`, since Devel::Cover
+has no visibility into the subprocess-invoked CLI scripts' own
+execution) - covering the empty-queue, non-empty-list,
+`--all`-empty, single-id-not-found, `STORE ERROR`, successful-retry,
+`RETRY FAILED`, `RETRY EXPIRED`, and `RETRY PARTIAL` branches
+individually, since `D2TG::RetryCli.pm` showed 0% coverage entirely
+without it - the two scripts' own existing tests invoke the CLI as
+real subprocesses, which Devel::Cover cannot see into. Full suite green
+after (`Files=230, Tests=2919`); `lib/D2TG/RetryCli.pm` at 100.0/100.0/
+100.0 (statement/subroutine/total).
+
+perlsec.pl-style vulnerability-scan audit: a pure extraction - the
+moved code was already reviewed at its old location (no new logic, no
+new shell/exec/system/eval-STRING patterns, no new external-input
+handling). The one genuinely new construct, the `telegram_builder`
+lazy-coderef indirection, only changes *when* an already-reviewed
+`D2TG::Telegram->new(token => ...)` call happens, not what it does. No
+new vulnerability surface.

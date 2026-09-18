@@ -1,5 +1,17 @@
 # tg
 
+**Status: early implementation (v2.46).** IMPROVEMENT (TGT-310, found
+via a scheduled JOB-004 improvement hunt): `cli/retry-download.pl` and
+`cli/retry-transcription.pl` duplicated the identical argv-dispatch/
+list/retry-loop/reporting skeleton (296 of ~480 total lines were
+identical between the two scripts) - the same class of duplication
+`D2TG::Store::RetryQueue.pm`'s own shared helpers already fixed at the
+lib layer (TGT-295), just never applied to the CLI layer above it.
+Extracted into a new `lib/D2TG/RetryCli.pm`, parameterized by label,
+list/retry/telegram-builder/format-success coderefs - a pure
+extraction, no behavior change. Every existing test for both scripts
+stays green unmodified; 100% coverage on the new module.
+
 **Status: early implementation (v2.45).** IMPROVEMENT (TGT-309, found
 via a scheduled JOB-004 improvement hunt): `cli/reply.pl`, `cli/send.pl`,
 and `cli/history.pl` still resolved storage before validating argv

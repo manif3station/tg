@@ -16,6 +16,19 @@ use File::Spec;
 # directly instead of going through the same never-expose-the-real-path
 # indirection.
 #
+# TGT-310 (found via a scheduled JOB-004 improvement hunt): the actual
+# "RETRY OK ..." print statement moved into the new shared
+# lib/D2TG/RetryCli.pm as part of extracting cli/retry-download.pl and
+# cli/retry-transcription.pl's own duplicated skeleton. D2TG::RetryCli::
+# run legitimately passes $result_or_error through to whichever
+# format_success closure the caller supplied (cli/retry-transcription.pl's
+# own closure genuinely needs it, to print the recovered transcript
+# text) - the real safety property this test protects is narrower and
+# still checked at its true source: cli/retry-download.pl's own
+# format_success closure specifically must never use $result_or_error
+# to build its output, since for THIS script it would be the raw local
+# filesystem path.
+#
 # A full functional test would need to mock both D2TG::Telegram's
 # get_file HTTP call and the subsequent raw byte-fetch, for which this
 # script has no injectable seam (unlike D2TG::Download::retry_failed_
@@ -24,19 +37,35 @@ use File::Spec;
 # regression test instead, matching this project's own precedent
 # (t/88-poller-help-pod-parity.t) for exactly this situation.
 
-my $script_path = File::Spec->catfile( $Bin, '..', 'cli', 'retry-download.pl' );
-open my $fh, '<', $script_path or die "can't read $script_path: $!";
-local $/;
-my $source = <$fh>;
-close $fh;
+{
+    my $module_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'RetryCli.pm' );
+    open my $fh, '<', $module_path or die "can't read $module_path: $!";
+    local $/;
+    my $source = <$fh>;
+    close $fh;
 
-my ($success_line) = $source =~ /^\s*(print "RETRY OK.*?;\n)/ms;
-ok( defined $success_line, 'found the RETRY OK success print statement in cli/retry-download.pl' );
+    my ($success_line) = $source =~ /^\s*(print "RETRY OK.*?;\n)/ms;
+    ok( defined $success_line, 'found the RETRY OK success print statement in lib/D2TG/RetryCli.pm' );
 
-unlike( $success_line, qr/\$result_or_error/,
-    'the RETRY OK success line never interpolates the raw local path ($result_or_error) - TGT-146' );
+    like( $success_line, qr/\$format_success->\(/,
+        'D2TG::RetryCli::run\'s RETRY OK line composes its trailing text only via the caller-supplied format_success coderef' );
+}
 
-like( $success_line, qr/GET ATTACHMENT WITH/,
-    'the RETRY OK success line instead names the d2 tg.attachment fetch command' );
+{
+    my $script_path = File::Spec->catfile( $Bin, '..', 'cli', 'retry-download.pl' );
+    open my $fh, '<', $script_path or die "can't read $script_path: $!";
+    local $/;
+    my $source = <$fh>;
+    close $fh;
+
+    my ($closure) = $source =~ /(format_success\s*=>\s*sub\s*\{.*?\n\s*\},\n\);)/s;
+    ok( defined $closure, 'found the format_success closure in cli/retry-download.pl' );
+
+    unlike( $closure, qr/\$result_or_error/,
+        'the format_success closure never interpolates the raw local path ($result_or_error) - TGT-146' );
+
+    like( $closure, qr/GET ATTACHMENT WITH/,
+        'the format_success closure instead names the d2 tg.attachment fetch command' );
+}
 
 done_testing();
