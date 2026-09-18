@@ -54,7 +54,16 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-my @unread = $store->unread_messages( bot_key => $bot_key );
+# TGT-293 (found via a user-requested comprehensive bug/improvement
+# sweep): all 3 $store-> calls in this file ran unwrapped - the same
+# raw-crash/db-path-leak risk TGT-183/186/195 already fixed for other
+# call sites in this project, just never swept this widely.
+my @unread = eval { $store->unread_messages( bot_key => $bot_key ) };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: unread_messages failed - $reason\n";
+    exit 1;
+}
 
 if ( !@unread ) {
     print "No unread messages.\n";
@@ -73,7 +82,12 @@ else {
 # command exists to surface. Listed separately, after the unread
 # messages, naming the exact recovery command - matching
 # NEW TG MEDIA FAILED's own poller-side visibility fix.
-my @queued_failures = @{ $store->failed_downloads };
+my @queued_failures = eval { @{ $store->failed_downloads } };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: failed_downloads failed - $reason\n";
+    exit 1;
+}
 if (@queued_failures) {
     print "\n" if @unread;
 
@@ -120,7 +134,12 @@ if (@queued_failures) {
 # happened, or by running d2 tg.retry-transcription speculatively with
 # no listed argument. Mirrors the failed_downloads section above
 # exactly, including its own multi-bot RETRY WITH scoping (TGT-229).
-my @queued_transcriptions = @{ $store->failed_transcriptions };
+my @queued_transcriptions = eval { @{ $store->failed_transcriptions } };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: failed_transcriptions failed - $reason\n";
+    exit 1;
+}
 if (@queued_transcriptions) {
     print "\n" if @unread || @queued_failures;
 
@@ -210,5 +229,12 @@ eviction with zero visibility). Structured identically to the
 failed-downloads section above it, including the same per-bot
 C<RETRY WITH> scoping (TGT-229's own convention); naming
 C<d2 tg.retry-transcription --all> as the recovery command.
+
+All 3 store calls in this script (TGT-293, found via a
+user-requested comprehensive bug/improvement sweep) are C<eval>-wrapped
+and classified via C<D2TG::Poller::Safe::classify_store_error> - a
+locked/busy database at any of them used to die raw, printing a raw
+Perl/DBI exception (potentially embedding the real db_path) to STDERR
+instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
 
 =cut

@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+2.31  2026-09-18
+      - BUGFIX (TGT-293, found via a user-requested comprehensive
+        bug/improvement sweep): 14 $store-> method calls across 7 cli
+        scripts (history.pl, retry-download.pl, retry-transcription.pl,
+        attachment.pl, unread.pl, reply.pl, text-only-replies.pl) ran
+        completely unwrapped by eval. D2TG::Store->new sets
+        RaiseError => 1, and D2TG::Poller::Safe::open_store_or_die only
+        wraps the constructor call itself - a locked/busy SQLite
+        database at any of these 14 call sites raw-crashed with an
+        uncaught DBI exception (which can embed the real db path)
+        instead of this project's own established clean-refusal
+        convention. Only cli/approve.pl's own $store-> calls were
+        already correctly wrapped. All 14 sites now eval-wrapped and
+        classified via D2TG::Poller::Safe::classify_store_error,
+        matching the pattern TGT-183/186/195 already established for
+        other call sites.
+
 2.30  2026-09-18
       - BUGFIX (TGT-292, found via a user-requested comprehensive
         bug/improvement sweep): 5 stale POD L<> cross-references left

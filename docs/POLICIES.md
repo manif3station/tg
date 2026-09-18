@@ -6050,3 +6050,53 @@ perlsec.pl-style vulnerability-scan audit: pure documentation/POD text
 changes plus a test-regex widening - no new shell invocation, no new
 file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-293: 14 unwrapped $store-> calls across 7 cli scripts
+
+Found via the same comprehensive sweep as TGT-290/291/292.
+`D2TG::Store->new` sets `RaiseError => 1` on its DBI handle, and
+`D2TG::Poller::Safe::open_store_or_die` only wraps the constructor call
+itself, not any later method call on the returned `$store` object.
+14 call sites across 7 cli scripts (`history.pl` x2, `retry-download.pl`
+x3, `retry-transcription.pl` x3, `attachment.pl` x1, `unread.pl` x3,
+`reply.pl` x1, `text-only-replies.pl` x1) invoked `$store->method(...)`
+completely unwrapped by eval. A locked/busy SQLite database at the
+exact moment any of these calls ran would raw-crash with an uncaught
+DBI exception (which can embed the real db path) instead of this
+project's own established clean-refusal convention
+(`STORE ERROR: ... failed - REASON`, exit 1) - the exact bug class
+TGT-183/186/195 already fixed for other call sites, just never swept
+this widely. Only `cli/approve.pl`'s own `$store->` calls were already
+correctly wrapped in this whole file family.
+
+**Fix**: wrapped every named call site in `eval { ... }`, classified any
+failure via the shared `D2TG::Poller::Safe::classify_store_error`, and
+printed a scrubbed `STORE ERROR: <method> failed - $reason` line before
+exiting 1 - matching the established pattern exactly.
+`retry-download.pl` and `retry-transcription.pl` each had 3 identical
+`failed_downloads`/`failed_transcriptions` call sites, so a small local
+`_failed_downloads_or_die`/`_failed_transcriptions_or_die` helper
+function was introduced in each file to avoid repeating the same
+eval/classify/print block 3 times.
+
+New test `t/293-cli-store-calls-eval-wrapped.t` (source-inspection
+regression test, matching the established precedent in
+`t/195-approve-store-calls-classified-not-raw.t` for exactly this
+situation - a real locked-database failure occurring strictly after
+`D2TG::Store->new` already succeeded is not reliably reproducible
+black-box via a CLI subprocess) asserts each of the 14 named call sites
+matches an explicit `eval { $store->method(...)` pattern, that the file
+uses the shared classifier and prints a classified `STORE ERROR` line,
+and that the total count of `$store->` occurrences in each file exactly
+matches the number of explicitly-checked wrapped patterns (so no
+additional, still-unwrapped call site could be hiding elsewhere in the
+file). Confirmed genuinely red beforehand by checking the pre-fix
+version of all 7 files via `git show HEAD:cli/<file>` against the same
+patterns - none had any wrapped occurrence.
+
+perlsec.pl-style vulnerability-scan audit: this is exactly a hardening
+fix - replacing raw, unguarded database calls with the project's
+established eval/classify/refuse pattern, which itself exists to avoid
+leaking the real database path in an uncaught exception. No new shell
+invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

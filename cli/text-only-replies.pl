@@ -38,7 +38,16 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-my $flagged = $store->text_only_replies;
+# TGT-293 (found via a user-requested comprehensive bug/improvement
+# sweep): this call ran unwrapped - the same raw-crash/db-path-leak
+# risk TGT-183/186/195 already fixed for other call sites in this
+# project, just never swept this widely.
+my $flagged = eval { $store->text_only_replies };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: text_only_replies failed - $reason\n";
+    exit 1;
+}
 
 if ( !@$flagged ) {
     print "No text-only replies found.\n";
@@ -103,5 +112,12 @@ half then also failed - the same best-effort tradeoff TGT-104's failed-
 download queue documents for its own non-fatal queue write. This is not
 a guarantee, only a substantial improvement over having no record at
 all.
+
+The C<text_only_replies> lookup itself (TGT-293, found via a
+user-requested comprehensive bug/improvement sweep) is C<eval>-wrapped
+and classified via C<D2TG::Poller::Safe::classify_store_error> - a
+locked/busy database at that call used to die raw, printing a raw
+Perl/DBI exception (potentially embedding the real db_path) to STDERR
+instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
 
 =cut

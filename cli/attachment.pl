@@ -57,7 +57,16 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
-my $local_path = $store->get_attachment_path( $chat_id, $message_id, bot_key => $bot_key );
+# TGT-293 (found via a user-requested comprehensive bug/improvement
+# sweep): this call ran unwrapped - the same raw-crash/db-path-leak
+# risk TGT-183/186/195 already fixed for other call sites in this
+# project, just never swept this widely.
+my $local_path = eval { $store->get_attachment_path( $chat_id, $message_id, bot_key => $bot_key ) };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: get_attachment_path failed - $reason\n";
+    exit 1;
+}
 if ( !defined $local_path ) {
     print STDERR "d2 tg.attachment: no attachment recorded for chat $chat_id message $message_id\n";
     exit 1;
@@ -170,5 +179,12 @@ change in between - re-testing C<-f> on the open filehandle itself,
 not the path, closes that race); any other C<open> failure (e.g. a
 genuine permissions problem) falls back to the generic message naming
 C<$!>.
+
+The C<get_attachment_path> lookup itself (TGT-293, found via a
+user-requested comprehensive bug/improvement sweep) is C<eval>-wrapped
+and classified via C<D2TG::Poller::Safe::classify_store_error> - a
+locked/busy database at that call used to die raw, printing a raw
+Perl/DBI exception (potentially embedding the real db_path) to STDERR
+instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
 
 =cut

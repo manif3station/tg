@@ -113,10 +113,20 @@ if ($voice_only) {
     # successful recovery here clears that audit-trail flag - the
     # operator running --voice-only doesn't know (and isn't asked for)
     # that earlier send's own message_id.
+    # TGT-293 (found via a user-requested comprehensive bug/improvement
+    # sweep): this call ran unwrapped - the same raw-crash/db-path-leak
+    # risk TGT-183/186/195 already fixed for other call sites in this
+    # project, just never swept this widely.
+    my $text_only_replies = eval { $store->text_only_replies( bot_key => $bot_key ) };
+    if ($@) {
+        my $reason = D2TG::Poller::Safe::classify_store_error($@);
+        print STDERR "STORE ERROR: text_only_replies failed - $reason\n";
+        exit 1;
+    }
     my ($latest_text_only) =
       sort { $b->{text_message_id} <=> $a->{text_message_id} }
       grep { $_->{chat_id} == $chat_id }
-      @{ $store->text_only_replies( bot_key => $bot_key ) };
+      @$text_only_replies;
 
     eval {
         D2TG::Reply::resend_voice(
@@ -257,5 +267,13 @@ is sent.
 When C<--reply-to-message-id> is given, that message is also marked read
 in L<D2TG::Store> (TGT-046) once the reply has actually been sent
 successfully - never for a reply that failed.
+
+The C<--voice-only> recovery path's C<text_only_replies> lookup
+(TGT-293, found via a user-requested comprehensive bug/improvement
+sweep) is C<eval>-wrapped and classified via
+C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database at
+that call used to die raw, printing a raw Perl/DBI exception
+(potentially embedding the real db_path) to STDERR instead of a clean
+C<STORE ERROR: ... failed - REASON> refusal.
 
 =cut

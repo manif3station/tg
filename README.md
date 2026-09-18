@@ -1,5 +1,17 @@
 # tg
 
+**Status: early implementation (v2.31).** BUGFIX (TGT-293, found via a
+user-requested comprehensive bug/improvement sweep): 14 `$store->` method
+calls across 7 cli scripts (`history.pl`, `retry-download.pl`,
+`retry-transcription.pl`, `attachment.pl`, `unread.pl`, `reply.pl`,
+`text-only-replies.pl`) ran completely unwrapped by eval - a locked/busy
+SQLite database at any of these call sites raw-crashed with an uncaught
+DBI exception (which can embed the real db path) instead of this
+project's own established clean-refusal convention. All 14 sites are now
+eval-wrapped and classified via `D2TG::Poller::Safe::classify_store_error`,
+matching the pattern TGT-183/186/195 already established for other call
+sites.
+
 **Status: early implementation (v2.30).** BUGFIX (TGT-292, found via a
 user-requested comprehensive bug/improvement sweep): 5 stale POD `L<>`
 cross-references left over from the TGT-263/265 module moves

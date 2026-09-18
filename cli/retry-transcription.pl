@@ -41,8 +41,23 @@ my $store = D2TG::Poller::Safe::open_store_or_die(
     admin_chat_id => D2TG::Config::chat_id(),
 );
 
+# TGT-293 (found via a user-requested comprehensive bug/improvement
+# sweep): all 3 failed_transcriptions() call sites in this file ran
+# unwrapped - the same raw-crash/db-path-leak risk TGT-183/186/195
+# already fixed for other call sites in this project, just never swept
+# this widely.
+sub _failed_transcriptions_or_die {
+    my $result = eval { $store->failed_transcriptions( bot_key => $bot_key ) };
+    if ($@) {
+        my $reason = D2TG::Poller::Safe::classify_store_error($@);
+        print STDERR "STORE ERROR: failed_transcriptions failed - $reason\n";
+        exit 1;
+    }
+    return $result;
+}
+
 if ( !@ARGV ) {
-    my $queued = $store->failed_transcriptions( bot_key => $bot_key );
+    my $queued = _failed_transcriptions_or_die();
     if ( !@$queued ) {
         print "No failed transcriptions queued.\n";
         exit 0;
@@ -58,7 +73,7 @@ my $telegram = D2TG::Telegram->new( token => defined $bot_token ? $bot_token : D
 
 my @to_retry;
 if ( $ARGV[0] eq '--all' ) {
-    @to_retry = @{ $store->failed_transcriptions( bot_key => $bot_key ) };
+    @to_retry = @{ _failed_transcriptions_or_die() };
     if ( !@to_retry ) {
         print "No failed transcriptions queued.\n";
         exit 0;
@@ -66,7 +81,7 @@ if ( $ARGV[0] eq '--all' ) {
 }
 else {
     my $id = $ARGV[0];
-    my ($row) = grep { $_->{id} == $id } @{ $store->failed_transcriptions( bot_key => $bot_key ) };
+    my ($row) = grep { $_->{id} == $id } @{ _failed_transcriptions_or_die() };
     if ( !$row ) {
         print STDERR "No queued failed transcription with id $id.\n";
         exit 1;
@@ -190,5 +205,13 @@ prints C<RETRY PARTIAL> instead - naming the row as still queued for a
 future automatic or manual (C<d2 tg.retry-transcription E<lt>idE<gt>>)
 retry - and sets a non-zero exit code, rather than falsely claiming full
 success.
+
+All 3 C<failed_transcriptions> lookups in this script (TGT-293, found
+via a user-requested comprehensive bug/improvement sweep) are
+C<eval>-wrapped via a shared C<_failed_transcriptions_or_die> helper and
+classified via C<D2TG::Poller::Safe::classify_store_error> - a
+locked/busy database at any of them used to die raw, printing a raw
+Perl/DBI exception (potentially embedding the real db_path) to STDERR
+instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
 
 =cut
