@@ -1,5 +1,14 @@
 Revision history for the tg skill
 
+2.36  2026-09-18
+      - IMPROVEMENT (TGT-298, found via a user-requested comprehensive
+        bug/improvement sweep): added 2 idempotent indexes,
+        idx_messages_read_at and idx_messages_created_at, so an
+        unscoped unread_messages or a wide --since/--until history
+        query no longer requires a full table scan as message volume
+        grows. Additive migration, safe on both fresh and existing
+        databases.
+
 2.35  2026-09-18
       - MAINTENANCE (TGT-297, found via a user-requested comprehensive
         bug/improvement sweep): D2TG::Store::AccessControl.pm's

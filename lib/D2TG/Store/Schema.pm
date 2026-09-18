@@ -111,6 +111,19 @@ sub ensure_schema {
         }
     }
 
+    # TGT-298 (found via a user-requested comprehensive bug/improvement
+    # sweep): D2TG::Store::History's unread_messages (WHERE read_at IS
+    # NULL) and messages_in_range (a created_at range scan) can filter
+    # across every chat/bot with no bot_key given, and neither column
+    # had a dedicated index beyond the (chat_id, bot_key, message_id)
+    # primary key - an unscoped unread_messages or a wide --since/
+    # --until history query does a full table scan. Both additive and
+    # idempotent (CREATE INDEX IF NOT EXISTS), safe to run on every
+    # ensure_schema call including a database migrated by the bot_key
+    # block just above.
+    $dbh->do('CREATE INDEX IF NOT EXISTS idx_messages_read_at ON messages(read_at)');
+    $dbh->do('CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)');
+
     # TGT-104: a failed inbound photo/document download used to be
     # reported once (a MEDIA DOWNLOAD ERROR line) and forgotten - no way
     # to retry it later. This table persists what's needed to retry
@@ -364,3 +377,23 @@ sub ensure_schema {
 }
 
 1;
+
+__END__
+
+=head1 NAME
+
+D2TG::Store::Schema - database schema and migrations for the tg skill
+
+=head1 IMPLEMENTATION NOTES
+
+TGT-298 (found via a user-requested comprehensive bug/improvement
+sweep): added 2 additive, idempotent indexes -
+C<idx_messages_read_at> and C<idx_messages_created_at> - so
+C<D2TG::Store::History>'s C<unread_messages> (a C<read_at IS NULL>
+scan) and C<messages_in_range> (a C<created_at> range scan) don't
+require a full table scan across every chat/bot as message volume
+grows. C<CREATE INDEX IF NOT EXISTS> makes both migrations safe to run
+on every C<ensure_schema> call, including a database that has already
+been migrated by the C<messages>/C<bot_key> block above them.
+
+=cut

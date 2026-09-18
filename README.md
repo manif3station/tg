@@ -1,5 +1,11 @@
 # tg
 
+**Status: early implementation (v2.36).** IMPROVEMENT (TGT-298, found
+via a user-requested comprehensive bug/improvement sweep): added 2
+idempotent indexes (`idx_messages_read_at`, `idx_messages_created_at`)
+so an unscoped `unread_messages` or a wide `--since`/`--until` history
+query no longer requires a full table scan as message volume grows.
+
 **Status: early implementation (v2.35).** MAINTENANCE (TGT-297, found
 via a user-requested comprehensive bug/improvement sweep):
 `D2TG::Store::AccessControl.pm` used positional-argument `bot_key`

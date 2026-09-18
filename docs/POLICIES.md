@@ -6249,3 +6249,37 @@ perlsec.pl-style vulnerability-scan audit: pure calling-convention
 change - no new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/
 eval-STRING patterns introduced.
+
+## TGT-298: added indexes for unread_messages/messages_in_range's full-table-scan risk
+
+Found via the same comprehensive sweep as TGT-290-297.
+`D2TG::Store::History`'s `unread_messages` (a `read_at IS NULL` scan)
+and `messages_in_range` (a `created_at` range scan) can filter across
+every chat/bot when no `bot_key` is given, and neither `messages
+(read_at)` nor `messages(created_at)` had a dedicated index beyond the
+`(chat_id, bot_key, message_id)` primary key - an unscoped
+`unread_messages` or a wide `--since`/`--until` history query does a
+full table scan. Bounded today by `prune_history`'s 90-day default
+retention, but worth an index before message volume grows further.
+
+**Fix**: added `idx_messages_read_at` and `idx_messages_created_at` via
+`CREATE INDEX IF NOT EXISTS` - additive and idempotent, matching every
+existing migration's own established pattern, placed right after the
+`messages`/`bot_key` migration block so it applies regardless of
+whether that block ran a fresh `CREATE TABLE` or the rename/copy
+migration path.
+
+New test `t/298-messages-read-created-index.t` asserts both indexes
+exist on a fresh database, are not duplicated across a second
+`ensure_schema` call (idempotency), and are correctly backfilled onto a
+pre-existing database that predates this ticket's own `bot_key`
+migration. Confirmed genuinely red beforehand (`Tests=6 Failed=6`
+against the pre-fix schema). Full Docker suite green after
+(`Files=222, Tests=2748`); 100% statement+subroutine coverage confirmed
+on the touched module.
+
+perlsec.pl-style vulnerability-scan audit: 2 additive
+`CREATE INDEX IF NOT EXISTS` statements on column names hardcoded in
+this module's own source - no external input, no new shell invocation,
+no new file I/O, no system/exec/backtick/piped-open/eval-STRING
+patterns introduced.
