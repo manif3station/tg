@@ -6444,3 +6444,40 @@ perlsec.pl-style vulnerability-scan audit: added validation using a
 core Perl module (`Time::Piece`, no new dependency) - no new shell
 invocation, no new file I/O, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-303: cli/tts.pl never documented why it skips the --db guard
+
+Found via the same comprehensive sweep as TGT-290-302 - the final
+ticket of the sweep. Unlike `cli/help.pl`, which explicitly documents
+why TGT-059's mandatory `--db`/`-d`/`D2TG_DB` guard doesn't apply to
+it, `cli/tts.pl` also skips that guard (never calls
+`extract_db_flag_or_die`/`resolve_and_require_base_dir_or_die`) but
+never stated why in its own POD - a reader had to infer it from the
+absence of the call rather than being told.
+
+**Fix**: added a DESCRIPTION paragraph explicitly naming the guard and
+stating why it doesn't apply, matching `help.pl`'s own established
+precedent almost word-for-word: this command touches no state, no
+network beyond the TTS engine itself, and no credentials at all.
+
+New test `t/303-tts-db-guard-documented.t` asserts the POD explicitly
+names the guard and explicitly states it doesn't apply. Confirmed
+genuinely red beforehand (`Tests=2 Failed=2` against the pre-fix POD).
+Full Docker suite green after (`Files=227, Tests=2845`).
+
+perlsec.pl-style vulnerability-scan audit: pure POD documentation
+addition - no code change, no new shell invocation, no new file I/O,
+no new external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.
+
+---
+
+This concludes the 14-ticket comprehensive bug/improvement sweep
+(TGT-290 through TGT-303) requested 2026-09-17: 6 bugfixes (TGT-290,
+291, 292, 293, 294, 302) and 8 improvements/maintenance items
+(TGT-295, 296, 297, 298, 299, 300, 301, 303) found via a deep
+adversarial multi-pass code review, each shipped through the full
+TDD-then-gate-chain pipeline with a genuinely red test confirmed
+before every fix, 100% coverage on every touched `.pm` module, and
+zero regressions across the growing test suite (2658 tests at the
+start of the sweep, 2845 at the end).

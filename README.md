@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.41).** IMPROVEMENT (TGT-303, found
+via a user-requested comprehensive bug/improvement sweep - the final
+ticket of this sweep): `cli/tts.pl` also skips the mandatory
+`--db`/`-d`/`D2TG_DB` guard, matching `cli/help.pl`'s own precedent,
+but never explained why. Added a DESCRIPTION paragraph stating the
+guard doesn't apply since this command touches no state, network
+beyond the TTS engine, or credentials at all.
+
 **Status: early implementation (v2.40).** BUGFIX (TGT-302, found via a
 user-requested comprehensive bug/improvement sweep): `cli/history.pl`'s
 `--since`/`--until` shape regex accepted syntactically well-formed but

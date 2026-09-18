@@ -52,6 +52,15 @@ tts - synthesize text to a local audio file with no Telegram interaction, dispat
 
 =head1 DESCRIPTION
 
+TGT-303 (found via a user-requested comprehensive bug/improvement
+sweep): unlike every other C<d2 tg.*> command, this one does not
+require C<--db>/C<-d>/C<D2TG_DB> and never calls
+C<extract_db_flag_or_die>/C<resolve_and_require_base_dir_or_die> - it
+touches no state, network beyond the TTS engine itself, or credentials
+at all, matching C<cli/help.pl>'s own precedent for the same guard's
+absence. Synthesizes to a local file and exits; there is nothing here
+that TGT-059's storage-location guard would ever need to validate.
+
 TGT-106 (user-supplied feature-gap analysis): the old C<~/skills/tg>
 blueprint's text-to-speech step was a small, self-contained piece
 callable directly by anything on the project - the new skill's
