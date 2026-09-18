@@ -494,6 +494,13 @@ an *ambiguous* `send_message` failure (one whose response never
 confirmed success or failure to this process) - only a confirmed prior
 success is ever checked against.
 
+`chat_id`/`text`/`--reply-to-message-id` validation now runs **before**
+`--db`/`-d` is resolved (TGT-309, found via a scheduled JOB-004
+improvement hunt) - a caller supplying both a bad `--db` alias and
+malformed positional args gets exit 2 (`Usage:`), never exit 1 from a
+storage-resolution error, matching TGT-211's own established ordering
+for every sibling `d2 tg.*` command.
+
 ## `d2 tg.text-only-replies [--db <alias> | -d <alias>]`
 
 TGT-105 (user-supplied feature-gap analysis): TGT-083 deliberately
@@ -572,6 +579,13 @@ a genuine regular file (`-f`, not merely `-e` - another Codex finding:
 a valid upload, and a FIFO could block the read indefinitely) before any
 network call is attempted - a missing/non-regular file or a bad chat_id
 refuses with a clear message rather than an opaque Telegram API error.
+
+`chat_id`/`file_path`/`@extra` validation now runs **before** `--db`/
+`-d` is resolved (TGT-309, found via a scheduled JOB-004 improvement
+hunt) - a caller supplying both a bad `--db` alias and malformed
+positional args gets exit 2 (`Usage:`), never exit 1 from a
+storage-resolution error, matching TGT-211's own established ordering
+for every sibling `d2 tg.*` command.
 
 The local file's basename is escaped and sanitized before it reaches
 the outbound multipart request (TGT-125, found via a scheduled
@@ -1008,6 +1022,13 @@ silently ignored, exiting 0 as if the (mistyped) invocation had
 succeeded - reproduced as `No messages found.` when nothing happened
 to match, but a query that happened to match real history would print
 it, unrelated to the actual (bad) invocation.
+
+All of this argv validation now runs **before** `--db`/`-d` is resolved
+(TGT-309, found via a scheduled JOB-004 improvement hunt) - a caller
+supplying both a bad `--db` alias and malformed args gets exit 2
+(`Usage:` or one of the date-validation messages above, also exit 2),
+never exit 1 from a storage-resolution error, matching TGT-211's own
+established ordering for every sibling `d2 tg.*` command.
 
 ## Registering as a Tira monitor job
 

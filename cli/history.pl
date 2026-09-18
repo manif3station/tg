@@ -27,8 +27,6 @@ my ( $bot_token, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV
 @ARGV = @after_bot;
 my $bot_key = defined $bot_token ? $bot_token : '';
 
-my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
-
 my ( $since, $until );
 {
     my @rest;
@@ -103,6 +101,16 @@ if (@ARGV) {
     print STDERR "Usage: d2 tg.history [--bot <token>] [--since <iso8601>] [--until <iso8601>] [--db <alias> | -d <alias>]\n";
     exit 2;
 }
+
+# TGT-309 (found via a scheduled JOB-004 improvement hunt): resolving
+# storage now runs AFTER all argv validation above (the --since/--until
+# shape/calendar checks and this leftover-@ARGV check) - TGT-211 already
+# fixed this exact ordering bug for attachment.pl/retry-download.pl/
+# approve.pl, but missed this script. A caller with both a bad --db
+# alias and malformed args must get exit 2/Usage: (or this script's own
+# more specific --since/--until error, also exit 2), not exit 1/a
+# storage-resolution error, matching every sibling command.
+my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 # TGT-186 (found via a scheduled JOB-003 hourly bug hunt, reproduced live):
 # this call was unwrapped, the same raw-crash/db-path-leak risk TGT-183
@@ -225,5 +233,16 @@ via C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database
 at that call used to die raw, printing a raw Perl/DBI exception
 (potentially embedding the real db_path) to STDERR instead of a clean
 C<STORE ERROR: ... failed - REASON> refusal.
+
+Storage resolution (the C<--db>/C<-d> block above) now runs AFTER all
+of this script's own argv validation - the C<--since>/C<--until>
+shape/calendar checks and the leftover-argument check (TGT-309, found
+via a scheduled JOB-004 improvement hunt). TGT-211 already established
+this ordering for C<cli/attachment.pl>/C<cli/retry-download.pl>/
+C<cli/approve.pl>; this script was the same minority-family bug, just
+missed from that sweep. A caller supplying both a bad C<--db> alias
+and malformed args now gets exit 2 (C<Usage:> or one of this script's
+own specific date-validation messages, also exit 2), never exit 1 from
+a storage-resolution error - matching every sibling C<d2 tg.*> command.
 
 =cut

@@ -93,14 +93,6 @@ while (@ARGV) {
     }
 }
 
-# TGT-301 (found via a user-requested comprehensive bug/improvement
-# sweep): the resolved directory itself is never used - this script
-# never opens a Store and never touches attachments_dir, it's a pure
-# Telegram-API passthrough. Called only for its side effect: refusing
-# an unregistered/nonexistent --db alias before any network call,
-# matching every other d2 tg.* command's own --db validation.
-D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
-
 my ( $chat_id, $file_path, @extra ) = @ARGV;
 
 # Codex review finding: --caption/--reply-to-message-id are only ever
@@ -110,6 +102,13 @@ my ( $chat_id, $file_path, @extra ) = @ARGV;
 # dropped. Before this fix, `d2 tg.send 42 img.jpg --caption "hi"` sent
 # the file with no caption at all and no error, exactly the "silently
 # ignored, not refused" danger TGT-107 exists to close for cli/poller.pl.
+#
+# TGT-309 (found via a scheduled JOB-004 improvement hunt): this argv
+# validation now runs BEFORE resolving storage below - TGT-211 already
+# fixed this exact ordering bug for attachment.pl/retry-download.pl/
+# approve.pl, but missed this script. A caller with both a bad --db
+# alias and malformed positional args must get exit 2/Usage:, not
+# exit 1/a storage-resolution error, matching every sibling command.
 if ( !defined $chat_id
     || $chat_id !~ /^-?\d+$/
     || !defined $file_path
@@ -120,6 +119,14 @@ if ( !defined $chat_id
     print STDERR "Usage: d2 tg.send [--db <alias> | -d <alias>] [--bot <token>] [--caption <text>] [--reply-to-message-id <id>] <chat_id> <file_path>\n";
     exit 2;
 }
+
+# TGT-301 (found via a user-requested comprehensive bug/improvement
+# sweep): the resolved directory itself is never used - this script
+# never opens a Store and never touches attachments_dir, it's a pure
+# Telegram-API passthrough. Called only for its side effect: refusing
+# an unregistered/nonexistent --db alias before any network call,
+# matching every other d2 tg.* command's own --db validation.
+D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 # Codex review finding: -e also accepts directories, FIFOs, devices, and
 # sockets - a FIFO could block indefinitely inside _send_file's blocking
@@ -204,5 +211,14 @@ socket, any of which is not a valid upload, and a FIFO could block
 C<_send_file>'s read indefinitely) before any network call is attempted
 - a missing or non-regular-file path refuses with a clear message
 rather than an opaque Telegram API error.
+
+Storage resolution (C<--db>/C<-d>) now runs AFTER the C<chat_id>/
+C<file_path>/C<@extra> validation above (TGT-309, found via a scheduled
+JOB-004 improvement hunt) - TGT-211 already established this ordering
+for C<cli/attachment.pl>/C<cli/retry-download.pl>/C<cli/approve.pl>;
+this script was the same minority-family bug, just missed from that
+sweep. A caller supplying both a bad C<--db> alias and malformed
+positional args now gets exit 2 (C<Usage:>), never exit 1 from a
+storage-resolution error - matching every sibling C<d2 tg.*> command.
 
 =cut

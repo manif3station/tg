@@ -28,6 +28,13 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 # skip-guard for the same limitation) - combined with malformed
 # positional args, and asserts every affected script now behaves like
 # the majority family: exit 2 with a Usage: message, never exit 1.
+#
+# TGT-309 (found via a scheduled JOB-004 improvement hunt): TGT-211's
+# own writeup only reordered attachment.pl/retry-download.pl/approve.pl
+# - cli/reply.pl, cli/send.pl, and cli/history.pl were the exact same
+# minority-family bug, just missed from that sweep's scope. Added here
+# rather than a new file since this is the same fixture/assertion
+# shape TGT-211 already built, just extended to 3 more scripts.
 
 my %scripts = (
     'attachment.pl' => {
@@ -41,6 +48,18 @@ my %scripts = (
     'approve.pl' => {
         cli  => File::Spec->catfile( $Bin, '..', 'cli', 'approve.pl' ),
         args => ['not-a-number'],
+    },
+    'reply.pl' => {
+        cli  => File::Spec->catfile( $Bin, '..', 'cli', 'reply.pl' ),
+        args => ['not-a-number'],
+    },
+    'send.pl' => {
+        cli  => File::Spec->catfile( $Bin, '..', 'cli', 'send.pl' ),
+        args => ['not-a-number'],
+    },
+    'history.pl' => {
+        cli  => File::Spec->catfile( $Bin, '..', 'cli', 'history.pl' ),
+        args => ['extra-leftover-arg'],
     },
 );
 

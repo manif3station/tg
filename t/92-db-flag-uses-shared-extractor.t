@@ -120,6 +120,20 @@ for my $case ( [ 'status.pl', qr/^poller: not running$/m ], [ 'whoami.pl', qr/^d
     # whole argv before the --caption loop even runs) must still safely
     # REFUSE - never silently send with a wrong/missing caption, and
     # never silently send at all.
+    #
+    # TGT-309 (found via a scheduled JOB-004 improvement hunt): this
+    # invocation also happens to leave both required positionals
+    # (chat_id, file_path) unfilled once --caption consumes
+    # '/tmp/photo.jpg' as its own value - exactly the compound "bad --db
+    # alias AND malformed positional args" case TGT-211/TGT-309 exist to
+    # fix the priority of. Since send.pl now validates argv shape BEFORE
+    # resolving storage (matching every sibling script), the refusal
+    # this test observes changed from "Unknown --db/-d alias" (storage
+    # resolution ran first) to "Usage:" (argv validation now runs
+    # first) - still a clean, non-zero refusal either way; only which
+    # of the two genuinely-true problems is reported first changed,
+    # which is the intended effect of TGT-309's fix, not a regression
+    # in this test's own guarantee (never sends).
     my $send_cli    = File::Spec->catfile( $Bin, '..', 'cli', 'send.pl' );
     my $fake_db_dir = tempdir( CLEANUP => 1 );
     setup_mandatory_db_env( $Bin, $fake_db_dir );
@@ -131,7 +145,7 @@ for my $case ( [ 'status.pl', qr/^poller: not running$/m ], [ 'whoami.pl', qr/^d
     my $rc  = $? >> 8;
 
     isnt( $rc, 0, 'a --caption value that looks like --db still refuses cleanly, rather than sending anything' );
-    like( $out, qr/Unknown --db\/-d alias/, 'the refusal names the actual (accepted, documented) cause - extract_db_flag claimed the token first' );
+    like( $out, qr/^Usage:/m, 'the refusal is the Usage: message - argv shape validation now runs before storage resolution (TGT-309)' );
 }
 
 done_testing();

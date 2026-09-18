@@ -70,10 +70,14 @@ while (@ARGV) {
     }
 }
 
-my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
-
 my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args(@ARGV);
 
+# TGT-309 (found via a scheduled JOB-004 improvement hunt): this argv
+# validation now runs BEFORE resolving storage below - TGT-211 already
+# fixed this exact ordering bug for attachment.pl/retry-download.pl/
+# approve.pl, but missed this script. A caller with both a bad --db
+# alias and malformed positional args must get exit 2/Usage:, not
+# exit 1/a storage-resolution error, matching every sibling command.
 if ( !defined $chat_id
     || $chat_id !~ /^-?\d+$/
     || !length $text
@@ -82,6 +86,8 @@ if ( !defined $chat_id
     print STDERR "Usage: d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]\n";
     exit 2;
 }
+
+my $base_dir = D2TG::Config::resolve_and_require_base_dir_or_die( alias => $db_alias );
 
 my $telegram = D2TG::Telegram->new( token => $bot_token // D2TG::Config::token() );
 
@@ -275,5 +281,15 @@ C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database at
 that call used to die raw, printing a raw Perl/DBI exception
 (potentially embedding the real db_path) to STDERR instead of a clean
 C<STORE ERROR: ... failed - REASON> refusal.
+
+Storage resolution (C<--db>/C<-d>) now runs AFTER the C<chat_id>/
+C<text>/C<--reply-to-message-id> validation above (TGT-309, found via
+a scheduled JOB-004 improvement hunt) - TGT-211 already established
+this ordering for C<cli/attachment.pl>/C<cli/retry-download.pl>/
+C<cli/approve.pl>; this script was the same minority-family bug, just
+missed from that sweep. A caller supplying both a bad C<--db> alias
+and malformed positional args now gets exit 2 (C<Usage:>), never exit
+1 from a storage-resolution error - matching every sibling C<d2 tg.*>
+command.
 
 =cut

@@ -6621,3 +6621,66 @@ TDD-then-gate-chain pipeline with a genuinely red test confirmed
 before every fix, 100% coverage on every touched `.pm` module, and
 zero regressions across the growing test suite (2658 tests at the
 start of the sweep, 2845 at the end).
+
+## TGT-309: cli/reply.pl, send.pl, history.pl still resolved storage before validating argv shape (TGT-211's own sweep missed them)
+
+Found via a scheduled JOB-004 improvement hunt. TGT-211 (see above)
+fixed exactly this inconsistency - resolving `--db`/`-d` storage before
+validating a script's own argv shape gives a caller with both a bad
+alias AND malformed positional args an inconsistent exit 1/
+storage-error instead of exit 2/`Usage:`, depending purely on which
+sibling `cli/*.pl` command they happened to call. TGT-211's own fix
+only reordered `cli/attachment.pl`, `cli/retry-download.pl`, and
+`cli/approve.pl`. Direct source read confirmed `cli/reply.pl`,
+`cli/send.pl`, and `cli/history.pl` were the exact same minority-family
+bug, just left out of that sweep's scope - a genuine miss, not a
+declined/deferred decision (TGT-211's own writeup never names these 3
+scripts as out of scope).
+
+Investigated first via a fork dispatched to search specifically for
+improvement opportunities (not bugs, and explicitly told not to re-flag
+the already-checked `$store->`/eval-wrap bug class this session had
+just swept clean) - it found this by grepping `docs/POLICIES.md` for
+TGT-211's own context and cross-checking its 3-script scope against a
+direct read of all argv-taking `cli/*.pl` scripts. Verified directly
+before filing: `cli/reply.pl` resolved storage at line 73, validated
+argv at lines 75-84; `cli/send.pl` resolved at ~line 102, validated at
+lines 113-120; `cli/history.pl` resolved at line 30 (before even
+parsing `--since`/`--until`), validated at lines 102-104 - all 3
+confirmed resolve-before-validate.
+
+Fixed by reordering all 3 scripts to validate argv shape first, moving
+the `D2TG::Config::resolve_and_require_base_dir_or_die` call to after
+every validation branch (including `cli/history.pl`'s own
+`--since`/`--until` shape/calendar checks) - a pure block-reorder, no
+new logic, exactly matching TGT-211's own canonical order and precedent.
+Test coverage: extended TGT-211's own
+`t/211-cli-usage-checked-before-storage-resolution.t` (rather than a
+new file - same fixture/assertion shape, just 3 more scripts) with
+`reply.pl`/`send.pl`/`history.pl` entries in its `%scripts` hash.
+Confirmed genuinely red beforehand (`Tests=18, Failed=9` - all 9 from
+the 3 new scripts; the original 3 scripts' own 9 subtests were
+unaffected). Confirmed green after the fix (`Tests=18`, all passing).
+
+Full suite re-run surfaced one genuine, expected regression:
+`t/92-db-flag-uses-shared-extractor.t`'s own contrived-case test (a
+`--caption` value that looks like `--db`, deliberately exercising the
+TGT-124 flag-scanning quirk) asserted `Unknown --db/-d alias` as the
+refusal message - correct under the OLD (resolve-first) ordering, since
+that invocation also happens to leave both `chat_id`/`file_path`
+unfilled once `--caption` consumes the trailing arg as its own value,
+making it the exact same compound "bad alias + malformed positional
+args" case this ticket exists to fix the priority of. Updated that
+test's expectation to `Usage:` (with an inline comment explaining why),
+matching the new, correctly-prioritized argv-first behavior - the
+underlying guarantee that test protects (never sends anything on this
+invocation) is unchanged; only which of the two genuinely-true problems
+is reported first changed, which is the intended effect of this fix,
+not a regression in that test's own guarantee. Full suite green after
+(`Files=228, Tests=2863`).
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow reorder -
+two existing, already-reviewed code blocks (argv validation, storage
+resolution) swap execution order with no new logic. No new shell
+invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
