@@ -70,7 +70,17 @@ sub stored_summary {
 
     return undef unless $store && defined $chat_id && defined $message_id;
 
-    my $stored = $store->get_message( $chat_id, $message_id, bot_key => $bot_token );
+    # TGT-306 (found via a JOB-004 improvement-hunt pass that surfaced
+    # a genuine bug): this call ran unwrapped - the same raw-crash/
+    # db-path-leak risk TGT-183/186/195/293 already fixed for other
+    # call sites, missed here since TGT-293's own sweep scoped only to
+    # cli/*.pl scripts. A locked/busy database here degrades
+    # gracefully (returns undef, same as a legitimate "no row" result,
+    # letting reply_context_suffix's own existing no-lookup fallback
+    # take over) rather than dying and forcing the whole run_once
+    # batch to retry.
+    my $stored = eval { $store->get_message( $chat_id, $message_id, bot_key => $bot_token ) };
+    return undef if $@;
 
     return $stored ? $stored->{summary} : undef;
 }

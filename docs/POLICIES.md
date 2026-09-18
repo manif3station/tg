@@ -6470,6 +6470,53 @@ addition - no code change, no new shell invocation, no new file I/O,
 no new external-input handling, no system/exec/backtick/piped-open/
 eval-STRING patterns introduced.
 
+## TGT-306: stored_summary's unwrapped store call, missed by the TGT-293 sweep
+
+Found via a JOB-004 improvement-hunt pass, several hours after the
+14-ticket sweep below concluded - the pass was hunting for
+improvements, not bugs, but surfaced a genuine bug instead and was
+filed and handled as one. `D2TG::Poller::Format::stored_summary`
+(called by `reply_context_suffix`, called by
+`D2TG::Poller::Dispatch::handle_plain_update`/`handle_edited_message`,
+called by `D2TG::Poller::run_once`) called `$store->get_message(...)`
+completely unwrapped - the exact same bug class TGT-183/186/195/293
+already fixed, but TGT-293's own sweep scoped only to `cli/*.pl`
+scripts and never checked `lib/*.pm` internals, so this call site was
+missed.
+
+`D2TG::Poller::Safe::run_once_safe`'s own outer `eval` around the
+whole `run_once` call already prevented a full process crash, but this
+was coarser than the established per-call pattern: a locked/busy
+database here would (1) print the raw Perl/DBI exception text (which
+can embed the real db path) into the `POLL ERROR` line unless
+`D2TG::Config::is_transient_error` happened to classify it as
+transient, and (2) force the entire update batch to retry from an
+unchanged offset instead of this one reply-context lookup gracefully
+falling back to the no-lookup path that already exists two lines below
+it for a legitimate `undef` result.
+
+**Fix**: wrapped the `get_message` call in `eval`, returning `undef`
+on failure - identical to the existing "nothing stored" result, so
+`reply_context_suffix`'s own established fallback (raw text or
+`media_kind`) takes over with no new code path needed.
+
+Extended the existing `t/259-poller-format-module.t` (rather than a
+new file, since this module already has a comprehensive per-function
+test suite there) with a `Fake::Store::DiesOnGetMessage` package
+exercising both `stored_summary` directly and the full
+`reply_context_suffix` cluster. Confirmed genuinely red beforehand -
+the pre-fix test process exited 255 (an uncaught die) rather than
+reporting a normal test failure. Full Docker suite green after
+(`Files=227, Tests=2847`); 100% statement+subroutine coverage
+confirmed on the touched module.
+
+perlsec.pl-style vulnerability-scan audit: this is itself a security
+hardening fix, closing a path where a raw DBI exception (which can
+embed the real database filesystem path) could reach STDOUT/STDERR
+uncaught. No new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.
+
 ---
 
 This concludes the 14-ticket comprehensive bug/improvement sweep

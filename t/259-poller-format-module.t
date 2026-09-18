@@ -84,6 +84,33 @@ require D2TG::Poller::Format;
     is( D2TG::Poller::Format::stored_summary( undef, 111, 5, undef ), undef, 'no store returns undef' );
 }
 
+# TGT-306 (found via a JOB-004 improvement-hunt pass that surfaced a
+# genuine bug): stored_summary's own $store->get_message call ran
+# unwrapped - the same raw-crash/db-path-leak risk TGT-183/186/195/293
+# already fixed for other call sites, missed here because TGT-293's own
+# sweep scoped only to cli/*.pl scripts, never lib/*.pm internals. A
+# locked/busy database here must degrade gracefully (returning undef,
+# same as a legitimate "no row" result) rather than dying.
+{
+    package Fake::Store::DiesOnGetMessage;
+    sub new { return bless {}, shift }
+    sub get_message { die "database is locked\n" }
+}
+{
+    my $store = Fake::Store::DiesOnGetMessage->new;
+    is( D2TG::Poller::Format::stored_summary( $store, 111, 5, undef ), undef,
+        'stored_summary degrades gracefully (returns undef) when the store dies, instead of propagating the raw exception' );
+
+    # Exercise the full reply_context_suffix cluster too, confirming the
+    # graceful degradation reaches the existing no-lookup fallback path.
+    local $ENV{D2TG_CHAT_ID} = undef;
+    local $ENV{D2TG_OWNER}   = undef;
+    my $message = { reply_to_message => { from => { username => 'bob' }, message_id => 9, text => 'fallback text' } };
+    my $suffix = D2TG::Poller::Format::reply_context_suffix( $message, $store, 111, undef );
+    is( $suffix, ' (replying to bob [msg #9]: fallback text)',
+        'reply_context_suffix falls back to the raw message text when the store lookup dies, instead of dying itself' );
+}
+
 # --- reply_context_suffix (exercises the whole cluster together) ---
 {
     local $ENV{D2TG_CHAT_ID} = undef;

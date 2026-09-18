@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.42).** BUGFIX (TGT-306, found via a
+JOB-004 improvement-hunt pass that surfaced a genuine bug):
+`D2TG::Poller::Format::stored_summary`'s own store lookup ran
+unwrapped - the same raw-crash/db-path-leak risk TGT-293 already fixed
+for `cli/*.pl` scripts, missed here since that sweep never checked
+`lib/*.pm` internals. Eval-wrapped it to degrade gracefully instead of
+crashing the poll batch.
+
 **Status: early implementation (v2.41).** IMPROVEMENT (TGT-303, found
 via a user-requested comprehensive bug/improvement sweep - the final
 ticket of this sweep): `cli/tts.pl` also skips the mandatory

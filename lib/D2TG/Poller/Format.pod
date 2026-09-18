@@ -34,6 +34,15 @@ line, or an empty string if C<$message> isn't itself a reply.
 Reads a previously-stored message summary via C<$store-E<gt>get_message>,
 or C<undef> if no store/ids are given or nothing is stored.
 
+TGT-306 (found via a JOB-004 improvement-hunt pass that surfaced a
+genuine bug): the C<get_message> call itself is C<eval>-wrapped - a
+locked/busy database used to die raw here, the same
+raw-crash/db-path-leak risk TGT-183/186/195/293 already fixed
+elsewhere. A failure now returns C<undef>, identical to a legitimate
+"nothing stored" result, letting L</reply_context_suffix($message,
+$store, $chat_id, $bot_token)>'s own existing no-lookup fallback take
+over instead of propagating the exception.
+
 =head2 timestamp_prefix($message)
 
 Returns a bracketed C<[YYYY-MM-DD HH:MM:SS]> timestamp from
