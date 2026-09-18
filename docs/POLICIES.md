@@ -7038,3 +7038,28 @@ classify/print/exit statements every call site already had, taking
 only an already-raised `$@` and a literal op-label string as
 parameters; no string eval, no shell/exec/system/backtick/piped-open
 patterns, no change to what reaches storage, STDERR, or the network.
+
+## TGT-315: Tira upgrade-gate review (5.156 -> 5.159) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.156 to 5.159 mid-session. Ran `d2 tira.policy.undeclared`
+(empty result - no undeclared rules for this board to answer) and read
+all 3 Changes entries between 5.156 and 5.159: 5.157 (TKT-1028, wires
+up the previously-dead `--with-police`/`--with-policy-bridge` flags to
+show a small "running beside this board" indicator on a served
+dashboard page - a UI feature of Tira's own served-board display, not
+something this board's declared policy set governs); 5.158 (TKT-1029,
+exempts a pure release-bookkeeping commit from Tira's own
+`commit-msg` hook's card-naming requirement - a change to Tira's OWN
+repo's git conventions, unrelated to this project's own
+`no-attribution-trailers` rule or commit discipline); 5.159 (TKT-1125,
+adds `--stop`/`--restart` to `tira.dashboard`/`.sow`/`.epic`/`.ticket`
+for a served board's own lifecycle management, plus several
+adversarial-review hardening fixes to that same feature - this project
+never runs `tira.dashboard` as a served/Starman process, using the CLI
+directly instead, so this feature doesn't apply to our usage pattern).
+None of the three introduces a new event type, command, or
+board-visible concept this board's own policy set doesn't already
+cover, and none touches this skill's own code, dependencies, or
+documented behavior. Conclusion: no policy change needed for this
+upgrade.
