@@ -19,30 +19,39 @@ existing caller, zero behavior change.
 
 =head1 METHODS
 
-=head2 seed_admin($admin_chat_id, $bot_key)
+=head2 seed_admin($admin_chat_id, bot_key => $bot_key)
 
 Seeds C<$admin_chat_id> into the allow-list (C<INSERT OR IGNORE>, a
 no-op if already present). Called by D2TG::Store::new for each
 C<admin_chat_id> given to it.
 
-=head2 is_allowed($chat_id, $bot_key)
+=head2 is_allowed($chat_id, bot_key => $bot_key)
 
-Returns true if C<$chat_id> (scoped by C<$bot_key>, defaulting to the
+Returns true if C<$chat_id> (scoped by C<bot_key>, defaulting to the
 single-bot sentinel) is in the allow-list.
 
-=head2 add_pending($chat_id, $bot_key)
+=head2 add_pending($chat_id, bot_key => $bot_key)
 
 Records C<$chat_id> as pending approval (C<INSERT OR IGNORE>). Returns
 true only if a new row was actually inserted (false if it was already
 pending), so a caller can tell "first time seen" from "already
 queued".
 
-=head2 approve($chat_id, $bot_key)
+=head2 approve($chat_id, bot_key => $bot_key)
 
 Atomically moves C<$chat_id> from pending to the allow-list - deletes
 the pending row and inserts the allow-list row inside one transaction,
 rolling back cleanly on any failure. Returns false (no-op, transaction
 rolled back) if C<$chat_id> was never pending.
+
+TGT-297 (found via a user-requested comprehensive bug/improvement
+sweep): C<bot_key> on all 4 methods above is now passed C<%args>-style
+(C<bot_key =E<gt> $bot_key>), matching every sibling C<D2TG::Store::*>
+submodule's own established convention - it was the sole positional
+holdout in this whole file family. D2TG::Store's own public forwarding
+methods of the same names are unaffected and stay positional for every
+existing caller; only this module's own signature, and D2TG::Store's
+own direct calls into it, changed.
 
 =head2 pending_chat_ids(bot_key => $bot_key)
 

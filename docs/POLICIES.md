@@ -6202,3 +6202,50 @@ perlsec.pl-style vulnerability-scan audit: pure internal refactor, no
 new shell invocation, no new file I/O beyond the pre-existing
 `make_path` calls, no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-297: AccessControl.pm's positional bot_key convention aligned with its siblings
+
+Found via the same comprehensive sweep as TGT-290-296.
+`D2TG::Store::AccessControl.pm` used positional-argument `bot_key`
+scoping (`my ($self, $chat_id, $bot_key) = @_`) in
+`is_allowed`/`add_pending`/`approve`/`seed_admin`, while every sibling
+`Store::*` submodule extracted in the same TGT-278/279 pass (History,
+SentReplyAudit, RetryQueue) uses `%args`-style
+(`my (..., %args) = @_; my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY`).
+An inconsistent calling convention across otherwise-parallel modules
+built in the same decomposition.
+
+**Fix, and a deliberate scope decision**: converted all 4
+`AccessControl.pm` functions to `%args`-style, matching their siblings
+exactly. Rather than propagating this to `D2TG::Store`'s own public
+forwarding methods of the same names - which would have required
+updating roughly 15 existing test files and 3 other call sites
+(`cli/approve.pl`, `D2TG::Poller::Dispatch`) that all call
+`$store->is_allowed($chat_id, $bot_key)` positionally - `D2TG::Store`'s
+own 3 forwarding subs were rewritten to accept the *old* positional
+form from their own callers and translate it to the *new* `%args` form
+when calling into `AccessControl`:
+
+    sub is_allowed { my ( $self, $chat_id, $bot_key ) = @_;
+        return $self->{access}->is_allowed( $chat_id, bot_key => $bot_key ) }
+
+This closes the actual inconsistency the ticket found (AccessControl's
+own convention vs. its Store::* siblings) with zero blast radius onto
+`D2TG::Store`'s own public API - every existing caller of
+`$store->is_allowed`/`add_pending`/`approve`/`seed_admin` needed no
+change at all, confirmed by the full suite (all ~15 positional-call
+test files) passing unchanged.
+
+New test `t/297-accesscontrol-args-style.t` asserts (a) all 4
+`AccessControl.pm` functions now take `%args`, not a positional
+`$bot_key`, and (b) full behavioral coverage of the new `%args`-style
+call directly on `AccessControl`. Confirmed genuinely red beforehand
+(`Tests=12 Failed=6` against the pre-refactor file). Full Docker suite
+green after (`Files=221, Tests=2742`); 100% statement+subroutine
+coverage confirmed on both touched modules
+(`AccessControl.pm`, `Store.pm`).
+
+perlsec.pl-style vulnerability-scan audit: pure calling-convention
+change - no new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.

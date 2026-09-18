@@ -77,7 +77,7 @@ sub new {
         my @ids = ref $args{admin_chat_id} eq 'ARRAY' ? @{ $args{admin_chat_id} } : ( $args{admin_chat_id} );
         for my $id (@ids) {
             if ( ref $id eq 'HASH' ) {
-                $self->{access}->seed_admin( $id->{chat_id}, $id->{bot_key} );
+                $self->{access}->seed_admin( $id->{chat_id}, bot_key => $id->{bot_key} );
             }
             else {
                 $self->{access}->seed_admin($id);
@@ -101,9 +101,14 @@ sub new {
 # working unchanged via $store->method_name(...), mirroring TGT-257/278's
 # own retry_queue/history forwarders. See D2TG::Store::AccessControl's
 # own POD for the full behavior each one documents.
-sub is_allowed        { my $self = shift; return $self->{access}->is_allowed(@_) }
-sub add_pending       { my $self = shift; return $self->{access}->add_pending(@_) }
-sub approve           { my $self = shift; return $self->{access}->approve(@_) }
+# TGT-297: AccessControl.pm's own is_allowed/add_pending/approve now
+# take %args-style bot_key (matching its sibling modules), while this
+# public forwarder's own signature stays positional for every existing
+# caller (cli/approve.pl, D2TG::Poller::Dispatch, the whole test suite)
+# - translate here, not at every call site.
+sub is_allowed        { my ( $self, $chat_id, $bot_key ) = @_; return $self->{access}->is_allowed( $chat_id, bot_key => $bot_key ) }
+sub add_pending       { my ( $self, $chat_id, $bot_key ) = @_; return $self->{access}->add_pending( $chat_id, bot_key => $bot_key ) }
+sub approve           { my ( $self, $chat_id, $bot_key ) = @_; return $self->{access}->approve( $chat_id, bot_key => $bot_key ) }
 sub pending_chat_ids  { my $self = shift; return $self->{access}->pending_chat_ids(@_) }
 
 sub _offset_meta_key {

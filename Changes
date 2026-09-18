@@ -1,5 +1,18 @@
 Revision history for the tg skill
 
+2.35  2026-09-18
+      - MAINTENANCE (TGT-297, found via a user-requested comprehensive
+        bug/improvement sweep): D2TG::Store::AccessControl.pm's
+        is_allowed/add_pending/approve/seed_admin used positional-
+        argument bot_key scoping, unlike every sibling Store submodule
+        extracted in the same TGT-278/279 pass (History,
+        SentReplyAudit, RetryQueue), which use %args-style. Converted
+        AccessControl.pm's 4 functions to %args-style and updated
+        D2TG::Store.pm's own 5 direct call sites into it - D2TG::Store's
+        own public forwarding API (used by every existing caller)
+        stays positional and unchanged. 100% statement+subroutine
+        coverage confirmed on both touched modules.
+
 2.34  2026-09-18
       - MAINTENANCE (TGT-296, found via a user-requested comprehensive
         bug/improvement sweep): D2TG::Config::Paths.pm's 4 path

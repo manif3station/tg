@@ -19,9 +19,17 @@ sub new {
     return bless { dbh => $dbh }, $class;
 }
 
+# TGT-297 (found via a user-requested comprehensive bug/improvement
+# sweep): these 4 functions used positional-argument bot_key scoping
+# while every sibling Store submodule extracted in the same TGT-278/279
+# pass (History, SentReplyAudit, RetryQueue) uses %args-style. Now
+# matches that convention - D2TG::Store.pm's own public forwarding
+# methods (called by every existing test/cli caller) are unaffected;
+# only this module's own signature and Store.pm's own direct calls into
+# it changed.
 sub seed_admin {
-    my ( $self, $admin_chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
+    my ( $self, $admin_chat_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     $self->{dbh}->do(
         'INSERT OR IGNORE INTO allow_list (chat_id, bot_key) VALUES (?, ?)',
@@ -32,8 +40,8 @@ sub seed_admin {
 }
 
 sub is_allowed {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
+    my ( $self, $chat_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my ($found) = $self->{dbh}->selectrow_array(
         'SELECT 1 FROM allow_list WHERE chat_id = ? AND bot_key = ?', undef, $chat_id, $bot_key,
@@ -43,8 +51,8 @@ sub is_allowed {
 }
 
 sub add_pending {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
+    my ( $self, $chat_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my $inserted = $self->{dbh}->do(
         'INSERT OR IGNORE INTO pending (chat_id, bot_key) VALUES (?, ?)',
@@ -55,8 +63,8 @@ sub add_pending {
 }
 
 sub approve {
-    my ( $self, $chat_id, $bot_key ) = @_;
-    $bot_key = DEFAULT_BOT_KEY unless defined $bot_key;
+    my ( $self, $chat_id, %args ) = @_;
+    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my $dbh = $self->{dbh};
 

@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.35).** MAINTENANCE (TGT-297, found
+via a user-requested comprehensive bug/improvement sweep):
+`D2TG::Store::AccessControl.pm` used positional-argument `bot_key`
+scoping, unlike every sibling `Store::*` submodule from the same
+TGT-278/279 extraction pass, which use `%args`-style. Converted its 4
+functions to `%args`-style; `D2TG::Store`'s own public API (used by
+every existing caller) stays positional and unchanged. 100%
+statement+subroutine coverage confirmed.
+
 **Status: early implementation (v2.34).** MAINTENANCE (TGT-296, found
 via a user-requested comprehensive bug/improvement sweep):
 `D2TG::Config::Paths.pm`'s 4 path resolvers (`state_db_path`,
