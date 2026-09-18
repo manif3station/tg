@@ -6410,3 +6410,37 @@ perlsec.pl-style vulnerability-scan audit: removing an unused variable
 assignment - no new shell invocation, no new file I/O, no new
 external-input handling, no system/exec/backtick/piped-open/
 eval-STRING patterns introduced.
+
+## TGT-302: cli/history.pl accepted calendrically invalid dates
+
+Found via the same comprehensive sweep as TGT-290-301. The
+`--since`/`--until` shape regex
+`^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2})?$` accepts syntactically
+well-formed but calendrically invalid dates (e.g. `2026-13-45`), which
+then reach `messages_in_range`'s SQL comparison unvalidated - likely
+just an empty/wrong result set rather than a crash, but the shape check
+doesn't fully deliver on its own documented purpose of catching "a
+value that doesn't look like a date at all."
+
+**Fix**: added a round-trip validation using core `Time::Piece` after
+the existing shape check. A key discovery while implementing: naively
+wrapping `Time::Piece->strptime` in `eval` and checking `$@` does
+I<not> work - `strptime` silently rolls an out-of-range date forward
+(`2026-02-30` parses successfully as `2026-03-02`) rather than dying.
+The actual fix parses the date portion, then compares the parsed
+result's own `->ymd` back against the original string - a mismatch
+means the input wasn't a real calendar date.
+
+New test `t/302-history-calendar-invalid-date.t` asserts several
+invalid dates are refused (`2026-13-45`, `2026-02-30`,
+`2026-04-31T00:00:00`, a non-leap-year `2026-02-29`) while valid dates
+(including a genuine leap day, `2028-02-29`) are still accepted.
+Confirmed genuinely red beforehand (`Tests=11 Failed=7` against the
+pre-fix code, then `Failed=4` against a first attempt using bare
+`eval`+die-checking before discovering the rollover behavior). Full
+Docker suite green after (`Files=226, Tests=2843`).
+
+perlsec.pl-style vulnerability-scan audit: added validation using a
+core Perl module (`Time::Piece`, no new dependency) - no new shell
+invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

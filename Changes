@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+2.40  2026-09-18
+      - BUGFIX (TGT-302, found via a user-requested comprehensive
+        bug/improvement sweep): cli/history.pl's --since/--until shape
+        regex accepted syntactically well-formed but calendrically
+        invalid dates (e.g. 2026-13-45, 2026-02-30, a non-leap-year
+        2026-02-29) - the shape check never confirmed the value was a
+        real calendar date, only that it looked date-shaped. Added a
+        round-trip validation via core Time::Piece (which silently
+        rolls an out-of-range date forward rather than dying, so the
+        parsed value is compared back against the original) after the
+        existing shape check.
+
 2.39  2026-09-18
       - IMPROVEMENT (TGT-301, found via a user-requested comprehensive
         bug/improvement sweep): cli/send.pl's own --db validation

@@ -5,6 +5,7 @@ use warnings;
 use FindBin qw($Bin);
 use lib "$Bin/../lib";
 use File::Spec;
+use Time::Piece;
 
 use D2TG::Config;
 use D2TG::Config::Flags;
@@ -60,6 +61,27 @@ my ( $since, $until );
                   . "YYYY-MM-DDTHH:MM:SS)\n";
                 exit 2;
             }
+
+            # TGT-302 (found via a user-requested comprehensive
+            # bug/improvement sweep): the shape check above only
+            # confirms the value LOOKS like a date - it never confirmed
+            # the month/day combination is a real calendar date (e.g.
+            # 2026-13-45, or 2026-02-29 in a non-leap year), so a
+            # calendrically invalid value reached messages_in_range's
+            # SQL comparison unvalidated. Time::Piece->strptime does
+            # NOT reject an out-of-range day/month - it silently rolls
+            # it forward (e.g. 2026-02-30 becomes 2026-03-02), so
+            # round-trip the parsed value back to the same format and
+            # compare against the original instead of trusting
+            # strptime to die.
+            my ($date_part) = $value =~ /^(\d{4}-\d{2}-\d{2})/;
+            my $parsed = eval { Time::Piece->strptime( $date_part, '%Y-%m-%d' ) };
+            if ( !$parsed || $parsed->ymd ne $date_part ) {
+                print STDERR "d2 tg.history: $arg value '$value' is not a "
+                  . "valid calendar date\n";
+                exit 2;
+            }
+
             if ( $arg eq '--since' ) { $since = $value }
             else                     { $until = $value }
         }
@@ -177,6 +199,16 @@ where a value like C<not-a-date> sorts lexicographically after every
 real timestamp and silently excludes every message - the same
 misleading C<No messages found.> outcome TGT-070 fixed for a missing
 value, but for a wrong-shaped one.
+
+C<--since>/C<--until> also validate the value is a real *calendar*
+date, not merely date-shaped (TGT-302, found via a user-requested
+comprehensive bug/improvement sweep): the shape check above accepts a
+syntactically well-formed but nonexistent date like C<2026-13-45> or
+C<2026-02-30> (or a non-leap-year C<2026-02-29>) - round-tripping the
+value through core L<Time::Piece> (which silently rolls an
+out-of-range date forward rather than dying, so the parsed result is
+compared back against the original) and refusing on a mismatch closes
+that gap.
 
 Any other unrecognized flag or leftover positional argument also exits
 2 with a C<Usage:> message (TGT-122, found via a scheduled hourly

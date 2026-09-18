@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.40).** BUGFIX (TGT-302, found via a
+user-requested comprehensive bug/improvement sweep): `cli/history.pl`'s
+`--since`/`--until` shape regex accepted syntactically well-formed but
+calendrically invalid dates (e.g. `2026-13-45`, `2026-02-30`). Added a
+round-trip validation via core `Time::Piece` after the existing shape
+check.
+
 **Status: early implementation (v2.39).** IMPROVEMENT (TGT-301, found
 via a user-requested comprehensive bug/improvement sweep): `cli/send.pl`'s
 own `--db` validation computed `base_dir` but never used it. Removed
