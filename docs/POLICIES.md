@@ -6134,3 +6134,42 @@ perlsec.pl-style vulnerability-scan audit: pure documentation/POD/
 test-comment text changes - no new shell invocation, no new file I/O,
 no new external-input handling, no
 system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
+## TGT-295: RetryQueue.pm's download/transcription sides collapsed onto 5 shared helpers
+
+Found via the same comprehensive sweep as TGT-290-294. Every
+download-side function in `D2TG::Store::RetryQueue.pm` had a
+byte-for-byte transcription-side twin differing only by table name:
+`record_failed_download`/`record_failed_transcription`,
+`failed_downloads`/`failed_transcriptions`,
+`failed_downloads_due_for_retry`/`failed_transcriptions_due_for_retry`,
+`mark_failed_download_retried`/`mark_failed_transcription_retried`,
+`remove_failed_download`/`remove_failed_transcription`. The module's
+own POD literally said "mirrors ... exactly" for each pair.
+
+**Fix**: introduced 5 private, table-parameterized helpers
+(`_record_failed`, `_list_failed`, `_due_for_retry`, `_mark_retried`,
+`_remove_failed`) and rewrote all 10 public functions as thin wrappers
+delegating to them. `$table` is always one of two literal strings
+hardcoded in this module's own public subs, never external input.
+Zero observable behavior change: every public method's signature,
+defaults, and return shape are unchanged.
+
+New test `t/295-retryqueue-shared-helpers.t` asserts (a) each of the 5
+shared helpers is defined and called from at least 2 public wrappers,
+and (b) full behavioral coverage of both tables (record/list/
+due-for-retry/mark-retried/remove, plus bot_key scoping). Confirmed
+genuinely red beforehand (`Tests=23 Failed=10` - the structural
+helper-existence assertions failed against the pre-refactor file).
+Full Docker suite green after (`Files=219, Tests=2717`); 100%
+statement+subroutine coverage confirmed on the touched module via
+`Devel::Cover`.
+
+perlsec.pl-style vulnerability-scan audit: the refactor interpolates a
+table name into SQL text at 5 call sites, but `$table` is always one
+of exactly two hardcoded literal strings (`'failed_downloads'` /
+`'failed_transcriptions'`) passed by this module's own public methods -
+never derived from external input, so no SQL-injection surface is
+introduced. No new shell invocation, no new file I/O, no new
+external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.

@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+2.33  2026-09-18
+      - MAINTENANCE (TGT-295, found via a user-requested comprehensive
+        bug/improvement sweep): D2TG::Store::RetryQueue.pm's download
+        and transcription sides were byte-for-byte twins differing
+        only by table name - record_failed_download/
+        record_failed_transcription, failed_downloads/
+        failed_transcriptions, failed_downloads_due_for_retry/
+        failed_transcriptions_due_for_retry,
+        mark_failed_download_retried/mark_failed_transcription_retried,
+        remove_failed_download/remove_failed_transcription. Collapsed
+        each pair onto one table-parameterized private helper
+        (_record_failed, _list_failed, _due_for_retry, _mark_retried,
+        _remove_failed) - zero observable behavior change, 100%
+        statement+subroutine coverage confirmed.
+
 2.32  2026-09-18
       - BUGFIX (TGT-294, found via a user-requested comprehensive
         bug/improvement sweep): docs/commands.md and lib/D2TG/Poller.pod

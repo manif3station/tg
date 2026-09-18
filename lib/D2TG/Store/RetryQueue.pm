@@ -30,12 +30,25 @@ sub new {
     return bless { dbh => $dbh }, $class;
 }
 
-sub record_failed_download {
-    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
+# TGT-295 (found via a user-requested comprehensive bug/improvement
+# sweep): the download and transcription sides of this module were
+# byte-for-byte twins differing only by table name and a handful of
+# extra columns (media_kind/caption_note/local_path exist only on the
+# download side). These 5 private helpers are table-parameterized so
+# each public pair below can delegate to one shared implementation -
+# zero behavior change, only one copy of the logic. $table is always
+# one of the two literal strings passed by this module's own public
+# subs below, never external input.
+sub _record_failed {
+    my ( $self, $table, $chat_id, $message_id, $file_id, $extra_columns, $args ) = @_;
 
-    my ( $sender, $media_kind, $caption_note, $error ) =
-      @args{qw(sender media_kind caption_note error)};
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
+    my @extra_names = @$extra_columns;
+    my @extra_vals  = @{$args}{@extra_names};
+    my $bot_key     = $args->{bot_key} // DEFAULT_BOT_KEY;
+
+    my $columns_sql      = join( ', ', 'chat_id', 'bot_key', 'message_id', 'file_id', @extra_names );
+    my $placeholders_sql = join( ', ', ('?') x ( 4 + @extra_names ) );
+    my $update_sql       = join( ', ', map {"$_ = excluded.$_"} 'file_id', @extra_names ) . ', created_at = CURRENT_TIMESTAMP';
 
     # ON CONFLICT (chat_id, bot_key, message_id) - TGT-219 added bot_key
     # to this key so the same message_id failing under two different
@@ -46,13 +59,10 @@ sub record_failed_download {
     # that case still refreshes the existing row's file_id/error/
     # timestamp instead of inserting a second queue entry.
     $self->{dbh}->do(
-        'INSERT INTO failed_downloads (chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
-             file_id = excluded.file_id, sender = excluded.sender,
-             media_kind = excluded.media_kind, caption_note = excluded.caption_note,
-             error = excluded.error, created_at = CURRENT_TIMESTAMP',
-        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $media_kind, $caption_note, $error,
+        "INSERT INTO $table ($columns_sql)
+         VALUES ($placeholders_sql)
+         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET $update_sql",
+        undef, $chat_id, $bot_key, $message_id, $file_id, @extra_vals,
     );
 
     # TGT-225 (found via a scheduled JOB-003 hourly bug hunt): this
@@ -62,15 +72,15 @@ sub record_failed_download {
     # return either row's id at random (in practice, SQLite's own
     # insertion order), not necessarily the one just written here.
     my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT id FROM failed_downloads WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
+        "SELECT id FROM $table WHERE chat_id = ? AND bot_key = ? AND message_id = ?",
         undef, $chat_id, $bot_key, $message_id,
     );
 
     return $row->{id};
 }
 
-sub failed_downloads {
-    my ( $self, %args ) = @_;
+sub _list_failed {
+    my ( $self, $table, $select_columns, %args ) = @_;
 
     # TGT-219: optional bot_key filter, matching pending_chat_ids' own
     # established pattern - the unscoped case keeps its existing shape
@@ -78,17 +88,29 @@ sub failed_downloads {
     # which bot queued it even without filtering).
     if ( defined $args{bot_key} ) {
         return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-             FROM failed_downloads WHERE bot_key = ? ORDER BY id',
+            "SELECT $select_columns FROM $table WHERE bot_key = ? ORDER BY id",
             { Slice => {} }, $args{bot_key},
         );
     }
 
     return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-         FROM failed_downloads ORDER BY id',
+        "SELECT $select_columns FROM $table ORDER BY id",
         { Slice => {} }
     );
+}
+
+my $DOWNLOAD_COLUMNS      = 'id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at';
+my $TRANSCRIPTION_COLUMNS = 'id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at';
+
+sub record_failed_download {
+    my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
+    return $self->_record_failed( 'failed_downloads', $chat_id, $message_id, $file_id,
+        [qw(sender media_kind caption_note error)], \%args );
+}
+
+sub failed_downloads {
+    my ( $self, %args ) = @_;
+    return $self->_list_failed( 'failed_downloads', $DOWNLOAD_COLUMNS, %args );
 }
 
 # TGT-270 (a live report from Michael via the budget project): a
@@ -109,11 +131,11 @@ sub has_failed_download {
     return $row ? 1 : 0;
 }
 
-sub failed_downloads_due_for_retry {
-    my ( $self, %args ) = @_;
+sub _due_for_retry {
+    my ( $self, $table, $select_columns, %args ) = @_;
 
-    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at
-         FROM failed_downloads
+    my $sql = "SELECT $select_columns
+         FROM $table
          WHERE datetime(created_at) >= datetime('now', ?)
            AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
     my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
@@ -127,20 +149,35 @@ sub failed_downloads_due_for_retry {
     return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
 }
 
-sub mark_failed_download_retried {
-    my ( $self, $id ) = @_;
+sub _mark_retried {
+    my ( $self, $table, $id ) = @_;
 
-    $self->{dbh}->do( 'UPDATE failed_downloads SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
+    $self->{dbh}->do( "UPDATE $table SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?", undef, $id );
 
     return;
 }
 
-sub remove_failed_download {
-    my ( $self, $id ) = @_;
+sub _remove_failed {
+    my ( $self, $table, $id ) = @_;
 
-    $self->{dbh}->do( 'DELETE FROM failed_downloads WHERE id = ?', undef, $id );
+    $self->{dbh}->do( "DELETE FROM $table WHERE id = ?", undef, $id );
 
     return;
+}
+
+sub failed_downloads_due_for_retry {
+    my ( $self, %args ) = @_;
+    return $self->_due_for_retry( 'failed_downloads', $DOWNLOAD_COLUMNS, %args );
+}
+
+sub mark_failed_download_retried {
+    my ( $self, $id ) = @_;
+    return $self->_mark_retried( 'failed_downloads', $id );
+}
+
+sub remove_failed_download {
+    my ( $self, $id ) = @_;
+    return $self->_remove_failed( 'failed_downloads', $id );
 }
 
 # TGT-196: persists a queued row's own successfully-downloaded local
@@ -164,43 +201,13 @@ sub mark_failed_download_downloaded {
 # multi-bot-isolation rationale, unchanged here.
 sub record_failed_transcription {
     my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
-
-    my ( $sender, $error ) = @args{qw(sender error)};
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    $self->{dbh}->do(
-        'INSERT INTO failed_transcriptions (chat_id, bot_key, message_id, file_id, sender, error)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(chat_id, bot_key, message_id) DO UPDATE SET
-             file_id = excluded.file_id, sender = excluded.sender,
-             error = excluded.error, created_at = CURRENT_TIMESTAMP',
-        undef, $chat_id, $bot_key, $message_id, $file_id, $sender, $error,
-    );
-
-    my $row = $self->{dbh}->selectrow_hashref(
-        'SELECT id FROM failed_transcriptions WHERE chat_id = ? AND bot_key = ? AND message_id = ?',
-        undef, $chat_id, $bot_key, $message_id,
-    );
-
-    return $row->{id};
+    return $self->_record_failed( 'failed_transcriptions', $chat_id, $message_id, $file_id,
+        [qw(sender error)], \%args );
 }
 
 sub failed_transcriptions {
     my ( $self, %args ) = @_;
-
-    if ( defined $args{bot_key} ) {
-        return $self->{dbh}->selectall_arrayref(
-            'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-             FROM failed_transcriptions WHERE bot_key = ? ORDER BY id',
-            { Slice => {} }, $args{bot_key},
-        );
-    }
-
-    return $self->{dbh}->selectall_arrayref(
-        'SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-         FROM failed_transcriptions ORDER BY id',
-        { Slice => {} }
-    );
+    return $self->_list_failed( 'failed_transcriptions', $TRANSCRIPTION_COLUMNS, %args );
 }
 
 # TGT-270: has_failed_download's own analogue for transcriptions - used
@@ -218,42 +225,23 @@ sub has_failed_transcription {
 
 sub remove_failed_transcription {
     my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'DELETE FROM failed_transcriptions WHERE id = ?', undef, $id );
-
-    return;
+    return $self->_remove_failed( 'failed_transcriptions', $id );
 }
 
 # TGT-246 (found via a scheduled JOB-003 hourly bug hunt): mirrors
 # failed_downloads_due_for_retry/mark_failed_download_retried exactly
 # (TGT-221) - same AUTO_RETRY_INTERVAL_SECONDS/AUTO_RETRY_WINDOW_SECONDS
-# constants, same created_at/last_retry_at windowing logic. See that
-# pair's own comments above for the full rationale; unchanged here other
-# than the table name.
+# constants, same created_at/last_retry_at windowing logic, both now
+# delegating to the shared _due_for_retry/_mark_retried helpers
+# (TGT-295).
 sub failed_transcriptions_due_for_retry {
     my ( $self, %args ) = @_;
-
-    my $sql = "SELECT id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at
-         FROM failed_transcriptions
-         WHERE datetime(created_at) >= datetime('now', ?)
-           AND (last_retry_at IS NULL OR datetime(last_retry_at) <= datetime('now', ?))";
-    my @bind = ( '-' . AUTO_RETRY_WINDOW_SECONDS . ' seconds', '-' . AUTO_RETRY_INTERVAL_SECONDS . ' seconds' );
-
-    if ( defined $args{bot_key} ) {
-        $sql .= ' AND bot_key = ?';
-        push @bind, $args{bot_key};
-    }
-    $sql .= ' ORDER BY id';
-
-    return $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
+    return $self->_due_for_retry( 'failed_transcriptions', $TRANSCRIPTION_COLUMNS, %args );
 }
 
 sub mark_failed_transcription_retried {
     my ( $self, $id ) = @_;
-
-    $self->{dbh}->do( 'UPDATE failed_transcriptions SET last_retry_at = CURRENT_TIMESTAMP WHERE id = ?', undef, $id );
-
-    return;
+    return $self->_mark_retried( 'failed_transcriptions', $id );
 }
 
 1;
@@ -341,5 +329,17 @@ Mirrors L</mark_failed_download_retried>.
 =head2 remove_failed_transcription($id)
 
 Mirrors L</remove_failed_download>.
+
+=head1 IMPLEMENTATION NOTES
+
+TGT-295 (found via a user-requested comprehensive bug/improvement
+sweep): every method pair described above as "mirrors X exactly" now
+literally shares one implementation - 5 private, table-parameterized
+helpers (C<_record_failed>, C<_list_failed>, C<_due_for_retry>,
+C<_mark_retried>, C<_remove_failed>) that each public method above
+delegates to, rather than two independently-maintained copies of the
+same SQL differing only by table name. Zero behavior change; every
+public method's own signature, defaults, and return shape are
+unchanged.
 
 =cut

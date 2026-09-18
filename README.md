@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.33).** MAINTENANCE (TGT-295, found
+via a user-requested comprehensive bug/improvement sweep):
+`D2TG::Store::RetryQueue.pm`'s download and transcription sides were
+byte-for-byte twins differing only by table name. Collapsed 5
+duplicated function pairs onto one table-parameterized private helper
+each (`_record_failed`, `_list_failed`, `_due_for_retry`,
+`_mark_retried`, `_remove_failed`) - zero observable behavior change,
+100% statement+subroutine coverage confirmed.
+
 **Status: early implementation (v2.32).** BUGFIX (TGT-294, found via a
 user-requested comprehensive bug/improvement sweep): `docs/commands.md`
 and `lib/D2TG/Poller.pod` both referred to
