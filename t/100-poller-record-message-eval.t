@@ -55,6 +55,14 @@ sub capture_std {
 # change adds (offset capping + redelivery dedupe). This file's own
 # batch-not-abandoned/non-fatal-STDERR/no-path-leak assertions are
 # otherwise unchanged and still hold.
+#
+# TGT-311 (explicit user-requested architecture change): the poller no
+# longer prints a text message's OWN content inline - only its own
+# msg-id-bearing announce line and a FETCH WITH command (reply_ctx, a
+# different message's own context, is unaffected). The batch-not-
+# abandoned assertion below now checks for each update's own
+# "(msg #N)" note instead of its content, which no longer appears in
+# stdout at all.
 
 {
     my $tg = Fake::Telegram->new(
@@ -76,8 +84,8 @@ sub capture_std {
         ( $updates, $next_offset ) = D2TG::Poller::run_once( $tg, undef, $store );
     } );
 
-    like( $out, qr/first message/,  'the first update in the batch is still printed despite record_message dying' );
-    like( $out, qr/second message/, 'the second update in the batch is still printed too - the batch is not abandoned' );
+    like( $out, qr/\(msg #1\)/, 'the first update in the batch is still printed despite record_message dying' );
+    like( $out, qr/\(msg #2\)/, 'the second update in the batch is still printed too - the batch is not abandoned' );
     is( $next_offset, 500, 'run_once (TGT-178) caps the offset at the FAILING update_id (500 - the first update in this batch), not past it, so Telegram redelivers it next cycle' );
     like( $err, qr/record_message/i, 'the record_message failure is reported on stderr, non-fatally' );
     unlike( $err, qr{/secret/internal/path}, 'stderr never echoes the raw exception text - a DBI error can embed the DB file path, which must never leak' );

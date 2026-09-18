@@ -252,7 +252,9 @@ sub _run_and_capture {
     };
 
     my $line = _run_and_capture($update);
-    like( $line, qr/NEW TG \[999\] ordinary_sender: not a reaction/,
+    # TGT-311 (explicit user-requested architecture change): this
+    # message's own content is no longer printed inline.
+    like( $line, qr/NEW TG \[999\] ordinary_sender \(msg #43\)/,
         'an ordinary message update is completely unaffected by reaction handling' );
 }
 

@@ -136,6 +136,18 @@ sub print_attachment_template {
     return;
 }
 
+sub print_fetch_template {
+    my ( $chat_id, $message_id ) = @_;
+
+    # TGT-311 (explicit user-requested architecture change): a new
+    # text or successfully-transcribed-voice message's own content is
+    # never printed inline anymore - only this fetch command. Marks
+    # the message read as a side effect of a successful fetch (see
+    # cli/fetch.pl's own POD).
+    print "FETCH WITH: d2 tg.fetch $chat_id $message_id\n";
+    return;
+}
+
 sub reaction_key {
     my ($reaction) = @_;
 

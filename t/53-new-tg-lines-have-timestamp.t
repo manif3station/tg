@@ -42,7 +42,9 @@ my $expected_ts = strftime( '%Y-%m-%d %H:%M:%S', localtime($known_date) );
     my $store = Fake::Store->new( allowed => [111] );
     my $out = capture_stdout( sub { D2TG::Poller::run_once( $tg, undef, $store ) } );
 
-    like( $out, qr/^\Q[$expected_ts]\E NEW TG \[111\] ada: hello/m,
+    # TGT-311 (explicit user-requested architecture change): the
+    # message's own content ("hello") is no longer printed inline.
+    like( $out, qr/^\Q[$expected_ts]\E NEW TG \[111\] ada \(msg #1\)/m,
         'NEW TG line is prefixed with a timestamp matching message.date exactly' );
 }
 
@@ -67,7 +69,8 @@ my $expected_ts = strftime( '%Y-%m-%d %H:%M:%S', localtime($known_date) );
     my $out = capture_stdout(
         sub { D2TG::Poller::run_once( $tg, undef, $store, transcribe_voice => $transcribe_voice ) } );
 
-    like( $out, qr/^\Q[$expected_ts]\E NEW TG VOICE \[222\] bob: a transcript/m,
+    # TGT-311: the transcript itself is no longer printed inline.
+    like( $out, qr/^\Q[$expected_ts]\E NEW TG VOICE \[222\] bob \(msg #2\)/m,
         'NEW TG VOICE line is prefixed with a timestamp matching message.date' );
 }
 

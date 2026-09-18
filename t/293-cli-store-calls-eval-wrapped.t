@@ -48,6 +48,10 @@ my %expect = (
     ],
     'attachment.pl' => [
         qr/my \$local_path = eval \{ \$store->get_attachment_path\(/,
+        # TGT-311 (explicit user-requested architecture change):
+        # attachment.pl now also marks the message read on a
+        # successful fetch, the same eval-wrapped pattern.
+        qr/eval \{ \$store->mark_read\(/,
     ],
     'unread.pl' => [
         qr/my \@unread = eval \{ \$store->unread_messages\(/,
@@ -59,6 +63,13 @@ my %expect = (
     ],
     'text-only-replies.pl' => [
         qr/my \$flagged = eval \{ \$store->text_only_replies \}/,
+    ],
+    # TGT-311 (explicit user-requested architecture change): the new
+    # cli/fetch.pl has the exact same eval-wrap-classify-STORE ERROR
+    # obligation as every other script in this list.
+    'fetch.pl' => [
+        qr/my \$message = eval \{ \$store->get_message\(/,
+        qr/eval \{ \$store->mark_read\(/,
     ],
 );
 

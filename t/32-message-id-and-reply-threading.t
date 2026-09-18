@@ -51,7 +51,12 @@ sub capture_stdout {
 
     my $out = capture_stdout( sub { D2TG::Poller::run_once( $tg, undef, $store ) } );
 
-    like( $out, qr/NEW TG \[999\] ada: hello.*777/, 'the content line includes the message_id' );
+    # TGT-311 (explicit user-requested architecture change): the
+    # message's own content ("hello") is no longer printed inline -
+    # only the announce line (still carrying the message_id) and a
+    # FETCH WITH command.
+    like( $out, qr/NEW TG \[999\] ada \(msg #777\)/, 'the announce line includes the message_id' );
+    like( $out, qr/FETCH WITH: d2 tg\.fetch 999 777/, 'a FETCH WITH command names the same message_id' );
     like( $out, qr/REPLY WITH: d2 tg\.reply 999 "\.\.\." --reply-to-message-id 777/, 'the REPLY WITH template includes --reply-to-message-id' );
 }
 

@@ -6763,3 +6763,81 @@ handling). The one genuinely new construct, the `telegram_builder`
 lazy-coderef indirection, only changes *when* an already-reviewed
 `D2TG::Telegram->new(token => ...)` call happens, not what it does. No
 new vulnerability surface.
+
+## TGT-311: redesigned message intake - poller prints a fetch command instead of content, d2 tg.fetch marks read
+
+Explicit user-requested architecture change to the core message-intake
+flow (direct chat request, 2026-09-18, not a scheduled hunt finding).
+OLD design: the poller printed a new message's own content directly to
+stdout; the agent read it straight off the bridge; `send_reply` marked
+the message read as a side effect of replying (TGT-046) - there was no
+way to mark a message read without also sending a reply. NEW design:
+the poller prints only the message id and a fetch command; the agent
+runs that command, which shows the content AND marks the message read
+in the same action - fetching and marking read are deliberately one
+action, not two.
+
+Two clarifying questions were asked and answered directly before
+filing: (1) a new, separate `d2 tg.fetch` command handles text/voice
+content (mirroring `cli/attachment.pl`'s existing structure exactly) -
+`d2 tg.attachment` stays the media/photo/document fetch path, but also
+gained the same mark-read-on-fetch behavior for consistency; (2)
+`send_reply`'s existing TGT-046 mark_read-on-reply behavior is left in
+place as a harmless no-op safety net (a message already marked read by
+fetch simply gets re-confirmed, never contradicted) rather than
+removed.
+
+**Scope correction made during implementation**: an early draft also
+suppressed `reply_ctx` (the parent-message context shown when a
+message is itself a reply) from the announce line - never actually
+asked for, and reverted once it was found to cause unnecessary
+collateral rewrites across 4 dedicated reply-context test files (t/24,
+t/30, t/33, t/106) for a decision outside the actual request.
+`reply_ctx` names a *different*, already-existing message's own
+context, not this message's own content, and is left completely
+unchanged/still printed inline. Only THIS message's own content (the
+text or voice transcript itself) is suppressed from the text/voice
+announce lines.
+
+Implementation: a new `D2TG::Poller::Format::print_fetch_template`
+helper (mirrors `print_attachment_template`) prints `FETCH WITH: d2
+tg.fetch <chat_id> <message_id>`. `D2TG::Poller::Dispatch::
+handle_plain_update`'s text and successful-voice-transcription
+branches stop interpolating `$safe_text`/`$safe_transcript` into their
+own `NEW TG`/`NEW TG VOICE` announce lines - the message is still
+recorded into `D2TG::Store` exactly as before (`record_message_and_
+track_offset` unchanged); only the STDOUT announcement changes. New
+`cli/fetch.pl` (mirrors `cli/attachment.pl`'s structure/argv/`--bot`/
+`--db` handling closely) looks up `D2TG::Store::get_message`, prints
+the stored summary, then calls `D2TG::Store::mark_read` - in that
+order, so a message is only ever marked read once its content has
+actually been successfully shown, matching `send_reply`'s own "only
+after success" invariant. `cli/attachment.pl` gained the identical
+`mark_read` call after a successful attachment stream, same placement.
+
+Test strategy: a genuinely-red `t/311-cli-fetch.t` was written and
+confirmed failing before `cli/fetch.pl` existed at all (found+marks-
+read, not-found refusal, Usage refusal). After implementing, the full
+suite surfaced 19 pre-existing test files asserting on the poller's
+OLD inline-content stdout lines - each updated to check the new
+fetch-command-only contract instead (mostly regex changes: content
+assertions became `(msg #N)`/`FETCH WITH` assertions), matching this
+ticket's own anticipated "deliberate behavior change" test_step. Two
+genuine cross-references also needed updating: `t/240` (the
+`extract_bot_flag_or_die` POD caller count, now 9 with `fetch.pl` as
+the 9th) and `t/98-skills-md-cli-list-current.t` (SKILLS.md's own
+`cli/*.pl` list). `t/293-cli-store-calls-eval-wrapped.t` gained
+entries for `attachment.pl`'s new `mark_read` call and a full new
+`fetch.pl` entry. `t/54-lock-acquire-race.t`'s single observed failure
+during the regression sweep was confirmed a system-load flake (passes
+standalone and in every subsequent full run), unrelated to this
+change. Full suite green after (`Files=231, Tests=2949`).
+
+perlsec.pl-style vulnerability-scan audit: `cli/fetch.pl` follows the
+exact same eval-wrap/classify/`STORE ERROR` shape every sibling
+`cli/*.pl` script already uses - no string eval, no shell/exec/system/
+backtick/piped-open patterns, no untrusted input reaching a file/DB
+path beyond the already-validated numeric `chat_id`/`message_id`. The
+`Dispatch.pm`/`Format.pm` changes are pure control-flow (removing an
+interpolation, adding one new print call) - no new vulnerability
+surface.

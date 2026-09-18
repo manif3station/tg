@@ -80,7 +80,10 @@ package main;
     my ( $out, $next_offset );
     $out = capture_stdout( sub { ( undef, $next_offset ) = D2TG::Poller::run_once( $tg, undef, $store ) } );
 
-    like( $out, qr/NEW TG \[111\] ada: first/, 'the first (unaffected) update in the batch is still processed normally' );
+    # TGT-311 (explicit user-requested architecture change): message
+    # content is no longer printed inline - check the announce line
+    # (still carrying chat/sender) instead.
+    like( $out, qr/NEW TG \[111\] ada /, 'the first (unaffected) update in the batch is still processed normally' );
     unlike( $out, qr/second/, 'the second update, whose is_allowed died, is skipped rather than crashing the whole batch' );
     is( $next_offset, 902, 'the correct final offset is still returned - the batch is not silently truncated at the point of failure' );
 }

@@ -38,7 +38,10 @@ sub capture_stdout {
 
     like( $out, qr/999/,          'stdout names the chat id' );
     like( $out, qr/ada/,          'stdout names the sender' );
-    like( $out, qr/hello there/,  'stdout carries the message text' );
+    # TGT-311 (explicit user-requested architecture change): the
+    # message's own content is no longer printed inline - only a FETCH
+    # WITH command reveals it.
+    unlike( $out, qr/hello there/, 'the message text itself is not printed inline' );
     is( ( split /\n/, $out ), 2,  'exactly one content line plus one REPLY WITH template line was printed' );
     like( $out, qr/REPLY WITH: d2 tg\.reply 999/, 'the second line is the reply-command template' );
     is( $next_offset, 56,         'offset advances past the processed update' );
@@ -70,8 +73,9 @@ sub capture_stdout {
 
     is( ( split /\n/, $out ), 2,
         'a message containing a newline still produces exactly one content line plus one REPLY WITH line' );
-    like( $out, qr/line one.*line two/,
-        'the embedded newline is escaped/replaced rather than splitting the line' );
+    # TGT-311: the message's own content (with or without an embedded
+    # newline) is no longer printed inline at all.
+    unlike( $out, qr/line one/, 'the message text itself is not printed inline' );
 }
 
 {
@@ -97,7 +101,10 @@ sub capture_stdout {
 
     unlike( $out, qr/\e/, 'ESC control characters are stripped from message text before printing' );
     unlike( $out, qr/\x07/, 'other non-printable control characters are stripped too' );
-    like( $out, qr/hello.*RED.*world/, 'the printable content survives the sanitization' );
+    # TGT-311: the message's own content is no longer printed inline at
+    # all (sanitization still matters for the stored value, exercised
+    # elsewhere - e.g. t/31's own stored-summary assertion).
+    like( $out, qr/mallory/, 'the announce line still reaches stdout despite the hostile input' );
 }
 
 {
@@ -191,7 +198,9 @@ package main;
         D2TG::Poller::run_once( $tg, undef, $store );
     } );
 
-    like( $out, qr/allowed message/, 'a message from an allow-listed chat id reaches stdout' );
+    # TGT-311: the message's own content is no longer printed inline -
+    # check the announce line (still naming the sender) instead.
+    like( $out, qr/admin/, 'a message from an allow-listed chat id reaches stdout' );
     is_deeply( $store->{pending}, [], 'nothing was recorded pending for an allowed sender' );
 }
 
@@ -268,7 +277,8 @@ package main;
         D2TG::Poller::run_once( $tg, undef );
     } );
 
-    like( $out, qr/no gate here/, 'omitting the store argument entirely skips the access-control gate' );
+    # TGT-311: the message's own content is no longer printed inline.
+    like( $out, qr/NEW TG \[5\] x/, 'omitting the store argument entirely skips the access-control gate' );
 }
 
 done_testing();

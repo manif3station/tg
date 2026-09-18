@@ -77,10 +77,13 @@ sub make_batch {
         ( $updates, $next_offset ) = D2TG::Poller::run_once( $tg, undef, $store );
     } );
 
-    like( $out, qr/msg one/,   'update before the failure is still printed' );
-    like( $out, qr/msg two/,   'the failing update itself is still printed - it is not silently dropped this cycle' );
-    like( $out, qr/msg three/, 'updates after the failure are still printed this cycle too - the batch is not abandoned' );
-    like( $out, qr/msg four/,  '...all the way through the batch' );
+    # TGT-311 (explicit user-requested architecture change): message
+    # content is no longer printed inline - check each update's own
+    # "(msg #N)" note instead, which still uniquely identifies it.
+    like( $out, qr/\(msg #1\)/, 'update before the failure is still printed' );
+    like( $out, qr/\(msg #2\)/, 'the failing update itself is still printed - it is not silently dropped this cycle' );
+    like( $out, qr/\(msg #3\)/, 'updates after the failure are still printed this cycle too - the batch is not abandoned' );
+    like( $out, qr/\(msg #4\)/, '...all the way through the batch' );
     like( $err, qr/record_message failed/i, 'the record_message failure is still reported on stderr, non-fatally' );
 
     is( $next_offset, 501, 'run_once caps the offset at the FAILING update_id (501), not the batch-wide 504, so Telegram redelivers it and everything after it next cycle' );
@@ -116,10 +119,10 @@ sub make_batch {
         ( undef, $next_offset2 ) = D2TG::Poller::run_once( $tg, 501, $store );
     } );
 
-    unlike( $out2, qr/msg one/,   'update 500 (message_id 1) is never even part of the redelivered batch - Telegram itself does not resend it once the offset moved past it' );
-    like( $out2, qr/msg two/,     'message_id 2 (update 501), which failed to record last cycle, is announced now that it genuinely succeeds' );
-    unlike( $out2, qr/msg three/, 'message_id 3 (update 502), already successfully recorded in cycle 1, is NOT re-announced on redelivery - TGT-178 dedupe' );
-    unlike( $out2, qr/msg four/,  'message_id 4 (update 503), already successfully recorded in cycle 1, is NOT re-announced on redelivery either' );
+    unlike( $out2, qr/\(msg #1\)/, 'update 500 (message_id 1) is never even part of the redelivered batch - Telegram itself does not resend it once the offset moved past it' );
+    like( $out2, qr/\(msg #2\)/,   'message_id 2 (update 501), which failed to record last cycle, is announced now that it genuinely succeeds' );
+    unlike( $out2, qr/\(msg #3\)/, 'message_id 3 (update 502), already successfully recorded in cycle 1, is NOT re-announced on redelivery - TGT-178 dedupe' );
+    unlike( $out2, qr/\(msg #4\)/, 'message_id 4 (update 503), already successfully recorded in cycle 1, is NOT re-announced on redelivery either' );
     is( $err2, '', 'no record_message failure this cycle - nothing on stderr' );
     is( $next_offset2, 504, 'no failure this cycle, so the offset advances past the redelivered batch as normal' );
 }

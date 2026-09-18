@@ -1,6 +1,6 @@
 # tg — onboarding runbook
 
-**Status: early implementation (v2.46).** This file is a procedure to
+**Status: early implementation (v2.47).** This file is a procedure to
 follow, start to finish, when installing this skill for a new user - not
 a changelog. For the full command/event reference (once running), see
 `docs/commands.md`; for the operational rules it follows, see
@@ -11,18 +11,23 @@ board ("D2 TG Skill"), not markdown files in `tickets/`.
 
 `tg` is a Telegram bridge for a Developer Dashboard project. Once
 running, it long-polls a Telegram bot, gates every sender through an
-allow-list, and prints new messages (text, voice - transcribed, photo/
-document - downloaded) to stdout with a ready-to-run reply command
-alongside each one. A downloaded photo/document's actual bytes are
-never printed directly - each one is announced with its own
-`d2 tg.attachment <chat_id> <message_id>` command (TGT-133/TGT-134) to
-fetch them, the real on-disk path never exposed anywhere. Registered as
-a Tira monitor job, that stream reaches the project's
-`tira.policy.bridge`, so the agent watching that board sees new
-Telegram messages as board notifications and can reply via
-`d2 tg.reply <chat_id> "..."` - a real text message plus a spoken
-voice note, always both. The text is sent first, then the voice note is
-synthesized and sent (TGT-083); a synthesis/send failure after that point
+allow-list, and announces new messages (text, voice - transcribed,
+photo/document - downloaded) to stdout with a ready-to-run fetch
+command and a ready-to-run reply command alongside each one - never
+the message's own content directly (TGT-311). A new text message or
+successfully-transcribed voice note is announced with its own
+`d2 tg.fetch <chat_id> <message_id>` command; a downloaded photo/
+document with its own `d2 tg.attachment <chat_id> <message_id>`
+command (TGT-133/TGT-134) - the real on-disk path never exposed
+anywhere. Running either fetch command shows the content AND marks
+that message read in the same action (TGT-311) - there is no separate
+mark-read step. Registered as a Tira monitor job, that stream reaches
+the project's `tira.policy.bridge`, so the agent watching that board
+sees new Telegram messages as board notifications, fetches the content
+via the printed command, and can reply via `d2 tg.reply <chat_id>
+"..."` - a real text message plus a spoken voice note, always both. The
+text is sent first, then the voice note is synthesized and sent
+(TGT-083); a synthesis/send failure after that point
 is still reported loudly (non-zero exit) but can no longer un-send the
 text half. If just the voice half fails, `d2 tg.reply --voice-only
 <chat_id> "..."` (TGT-109) resends only the voice note - it never calls
@@ -174,10 +179,12 @@ names what to do and exactly what confirms it worked.
 2. **Ask the user to send a real Telegram message** to the bot from
    their own phone/account (the one matching `D2TG_CHAT_ID`) - plain
    text is enough for the first pass, e.g. "hello from onboarding test".
-3. **Confirm it arrives.** Expect two new stdout lines within the
-   poller's poll cycle:
+3. **Confirm it arrives.** Expect three new stdout lines within the
+   poller's poll cycle (TGT-311: the message's own content is never
+   printed inline - only a fetch command reveals it):
    ```
-   [<timestamp>] NEW TG [<chat_id>] <username>: hello from onboarding test (msg #<message_id>)
+   [<timestamp>] NEW TG [<chat_id>] <username> (msg #<message_id>)
+   FETCH WITH: d2 tg.fetch <chat_id> <message_id>
    REPLY WITH: d2 tg.reply <chat_id> "..." --reply-to-message-id <message_id>
    ```
    `[<timestamp>]` (TGT-061) is Telegram's own received-time, not local
@@ -187,7 +194,15 @@ names what to do and exactly what confirms it worked.
    nothing appears within ~30s, check `D2TG_TOKEN` is the right bot's
    token and that the user actually messaged that bot (not a different
    one).
-4. **Send a reply.** Compose real text and run (in a second terminal,
+4. **Fetch the message.** Run the printed `FETCH WITH` command:
+   ```
+   d2 tg.fetch <chat_id> <message_id>
+   ```
+   Expect: the message's own text (`hello from onboarding test`)
+   printed to stdout, and exit 0. This also marks the message read
+   (TGT-311) - fetching and marking read are one action, not two; there
+   is no separate mark-read step.
+5. **Send a reply.** Compose real text and run (in a second terminal,
    the poller keeps running) - copy the exact `REPLY WITH` line printed
    in step 3 and fill in your own text, or send a fresh unthreaded reply
    by omitting `--reply-to-message-id`:
@@ -195,23 +210,26 @@ names what to do and exactly what confirms it worked.
    d2 tg.reply <chat_id> "onboarding test received, reply is working" --reply-to-message-id <message_id>
    ```
    Expect: `Replied to <chat_id>` and exit 0.
-5. **Confirm the user received it.** Ask the user to check Telegram:
+6. **Confirm the user received it.** Ask the user to check Telegram:
    they should see BOTH a text message and a voice note reading the
    same text, in that order. If only text arrived, or nothing arrived,
    `d2 tg.reply` would have already exited non-zero with an error - this
    is not a silent-failure design (see `docs/POLICIES.md`).
-6. **Optional: exercise voice and media.** Ask the user to send a voice
-   note and a photo. Expect `NEW TG VOICE [...]: <transcript> (msg
-   #<message_id>)` (needs local `whisper`, step 2.5) and `NEW TG MEDIA
-   [...]: photo (msg #<message_id>)` respectively, each followed by its
-   own `GET ATTACHMENT WITH: d2 tg.attachment <chat_id> <message_id>`
-   line (TGT-133, run that to fetch the photo's actual bytes - the real
-   local path is never printed) and its own `REPLY WITH` line (with
-   `--reply-to-message-id` filled in).
-7. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-5 have
+7. **Optional: exercise voice and media.** Ask the user to send a voice
+   note and a photo. Expect `NEW TG VOICE [...] (msg #<message_id>)`
+   (needs local `whisper`, step 2.5) followed by its own `FETCH WITH:
+   d2 tg.fetch <chat_id> <message_id>` line (run that to see the
+   transcript and mark it read) and `NEW TG MEDIA [...]: photo (msg
+   #<message_id>)` (content still printed inline for media - out of
+   this ticket's scope), followed by its own `GET ATTACHMENT WITH: d2
+   tg.attachment <chat_id> <message_id>` line (TGT-133/TGT-311, run
+   that to fetch the photo's actual bytes AND mark it read - the real
+   local path is never printed). Both are followed by their own
+   `REPLY WITH` line (with `--reply-to-message-id` filled in).
+8. **Stop the test poller** (`Ctrl-C` / `SIGTERM`) once steps 3-6 have
    both been confirmed by the user. **Onboarding is successful once
-   this whole loop - real message in, real reply out, user confirms
-   both - has actually happened once, not merely been read.**
+   this whole loop - real message in, fetched, real reply out, user
+   confirms both - has actually happened once, not merely been read.**
 
 ## 6. Register as a Tira monitor job
 
@@ -232,9 +250,9 @@ Have the user note the printed `JOB-NNN` id - it's needed for
 - `dashboard tira.job.list -o json` shows that job with a `pid` and
   `last_output_at` once at least one message has been processed.
 - New Telegram messages appear as `monitor-output` events on
-  `dashboard tira.policy.bridge` - the same `NEW TG .../REPLY WITH`
-  lines from section 5, now flowing through the board instead of a
-  terminal.
+  `dashboard tira.policy.bridge` - the same `NEW TG .../FETCH WITH/
+  REPLY WITH` lines from section 5, now flowing through the board
+  instead of a terminal.
 - No systemd unit, no crontab entry is created or needed anywhere - this
   is deliberate (Q-003).
 - If the monitor job restarts `d2 tg.poller` while a previous instance is
@@ -271,14 +289,14 @@ resilient to an install renaming its own entrypoint file mid-run
 captured at launch.
 
 Every `cli/*` entrypoint file carries a `.pl` extension internally
-(`cli/approve.pl`, `cli/attachment.pl`, `cli/help.pl`, `cli/history.pl`,
-`cli/poller.pl`, `cli/reply.pl`, `cli/retry-download.pl`,
+(`cli/approve.pl`, `cli/attachment.pl`, `cli/fetch.pl`, `cli/help.pl`,
+`cli/history.pl`, `cli/poller.pl`, `cli/reply.pl`, `cli/retry-download.pl`,
 `cli/retry-transcription.pl`, `cli/send.pl`, `cli/status.pl`,
 `cli/text-only-replies.pl`, `cli/tts.pl`, `cli/unread.pl`,
 `cli/whoami.pl` - TGT-093; TGT-123 kept this list current after 5 later
 entrypoints were added, TGT-130 added the one that had shipped in
-between and been missed, TGT-133 added `attachment.pl`, and TGT-237
-added `retry-transcription.pl`;
+between and been missed, TGT-133 added `attachment.pl`, TGT-237
+added `retry-transcription.pl`, and TGT-311 added `fetch.pl`;
 `t/98-skills-md-cli-list-current.t` checks this list against the real
 `cli/*.pl` file list so a future drift fails the suite instead of
 silently accumulating again).

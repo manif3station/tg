@@ -135,7 +135,19 @@ sub handle_plain_update {
     if ( defined $text && length $text ) {
         my $safe_text = D2TG::Poller::Format::sanitize_for_stdout($text);
 
-        print "$ts NEW TG [$chat_id] $sender: $safe_text$msg_note$reply_ctx\n";
+        # TGT-311 (explicit user-requested architecture change): this
+        # message's OWN content is no longer printed inline here - only
+        # the announce line plus a FETCH WITH command. d2 tg.fetch
+        # reveals the content (already recorded below via
+        # record_message_and_track_offset, unchanged) and marks the
+        # message read as a side effect of a successful fetch.
+        # reply_ctx (a DIFFERENT, already-existing message's own
+        # context - what THIS message is replying to) is deliberately
+        # left unchanged/still printed - out of scope, never asked for,
+        # and it already goes through the same stored-summary/fetch-once
+        # discipline via stored_summary's own store lookup.
+        print "$ts NEW TG [$chat_id] $sender$msg_note$reply_ctx\n";
+        D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id ) if defined $message_id;
         D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
         if ( $store && defined $message_id ) {
             D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
@@ -152,7 +164,14 @@ sub handle_plain_update {
         if ($ok) {
             my $safe_transcript = D2TG::Poller::Format::sanitize_for_stdout($transcript);
 
-            print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$msg_note$reply_ctx\n";
+            # TGT-311 (explicit user-requested architecture change):
+            # the transcript is no longer printed inline here either -
+            # only the announce line plus a FETCH WITH command,
+            # matching the plain-text branch above exactly. reply_ctx
+            # (a different message's own context) is left unchanged,
+            # same reasoning as the text branch above.
+            print "$ts NEW TG VOICE [$chat_id] $sender$msg_note$reply_ctx\n";
+            D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id ) if defined $message_id;
             D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
             if ( $store && defined $message_id ) {
                 D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );

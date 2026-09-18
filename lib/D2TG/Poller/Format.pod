@@ -66,6 +66,13 @@ Prints the C<REPLY WITH: d2 tg.reply ...> stdout line.
 
 Prints the C<GET ATTACHMENT WITH: d2 tg.attachment ...> stdout line.
 
+=head2 print_fetch_template($chat_id, $message_id)
+
+TGT-311 (explicit user-requested architecture change): prints the
+C<FETCH WITH: d2 tg.fetch ...> stdout line - the command that reveals a
+new text or successfully-transcribed-voice message's own content
+(never printed inline anymore) and marks it read as a side effect.
+
 =head2 reaction_key($reaction) / reaction_label($reaction)
 
 Return a stable dedup key and a human-readable label for a Telegram

@@ -1,5 +1,21 @@
 # tg
 
+**Status: early implementation (v2.47).** FEATURE (TGT-311, explicit
+user-requested architecture change to the core message-intake flow):
+`d2 tg.poller` no longer prints a new text or successfully-
+transcribed-voice message's own content inline - it prints only
+chat_id/message_id/sender and a `FETCH WITH: d2 tg.fetch` command,
+alongside the existing `REPLY WITH` template. New command
+`d2 tg.fetch <chat_id> <message_id>` shows the stored content and
+marks the message read as a side effect of a successful fetch -
+fetching and marking read are one action, not two. `d2 tg.attachment`
+also gained the same mark-read-on-success behavior for media messages.
+`send_reply`'s own existing mark_read-on-reply (TGT-046) is left
+unchanged - a harmless redundant re-mark when fetch already ran first.
+`reply_ctx` (context shown when a message is itself a reply) is
+unaffected and still printed inline, since it names a different,
+already-existing message, not this message's own content.
+
 **Status: early implementation (v2.46).** IMPROVEMENT (TGT-310, found
 via a scheduled JOB-004 improvement hunt): `cli/retry-download.pl` and
 `cli/retry-transcription.pl` duplicated the identical argv-dispatch/

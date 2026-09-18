@@ -157,7 +157,11 @@ sub _run_and_capture {
     };
 
     my $line = _run_and_capture($update);
-    like( $line, qr/ordinary_sender:/, 'a non-forwarded message prints only the immediate sender, unchanged' );
+    # TGT-311 (explicit user-requested architecture change): the
+    # message's own content is no longer printed inline, so there's no
+    # trailing colon after the sender anymore either.
+    like( $line, qr/ordinary_sender/, 'a non-forwarded message prints only the immediate sender, unchanged' );
+    unlike( $line, qr/not forwarded/, 'the message\'s own text is not printed inline' );
     unlike( $line, qr/forwarded by/, 'no "(forwarded by ...)" suffix appears for a non-forwarded message' );
 }
 
@@ -237,7 +241,7 @@ sub _run_and_capture {
     };
 
     my $line = _run_and_capture($update);
-    like( $line, qr/forwarder_b:/, 'an unrecognized forward_origin type falls back to the immediate sender' );
+    like( $line, qr/forwarder_b/, 'an unrecognized forward_origin type falls back to the immediate sender' );
     unlike( $line, qr/forwarded by/, 'no "(forwarded by ...)" suffix appears for an unrecognized forward_origin type' );
 }
 

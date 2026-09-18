@@ -55,7 +55,12 @@ sub capture_stdout {
 
     my $out = capture_stdout( sub { D2TG::Poller::run_once( $tg, undef ) } );
 
-    like( $out, qr/NEW TG \[999\] ada: yes I can/, 'the main content line is unchanged' );
+    # TGT-311 (explicit user-requested architecture change): this
+    # message's own content ("yes I can") is no longer printed inline -
+    # only the announce line. reply_ctx (a different message's own
+    # context) is unaffected and still appears.
+    like( $out, qr/NEW TG \[999\] ada /, 'the announce line still names chat/sender' );
+    unlike( $out, qr/yes I can/, 'this message\'s own text is not printed inline' );
     like( $out, qr/replying to bob: can you hear me\?/, 'the suffix names the original sender and text' );
 }
 

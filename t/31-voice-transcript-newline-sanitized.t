@@ -42,9 +42,16 @@ sub capture_stdout {
         D2TG::Poller::run_once( $tg, undef, $store, transcribe_voice => $transcribe_voice );
     } );
 
+    # TGT-311 (explicit user-requested architecture change): the
+    # transcript itself is no longer printed inline, so there's now a
+    # 4th line (FETCH WITH) alongside the pre-transcription notice,
+    # NEW TG VOICE announce, and REPLY WITH lines - and no transcript
+    # text (with or without an embedded newline) ever reaches stdout at
+    # all anymore. The stored-summary sanitization assertion below is
+    # what actually protects the newline-escaping guarantee now.
     my @lines = split /\n/, $out;
-    is( scalar(@lines), 3, 'a transcript with an embedded newline produces exactly one pre-transcription notice, one NEW TG VOICE line, and one REPLY WITH line (TGT-100)' );
-    like( $lines[1], qr/first sentence\.\\nsecond sentence\./, 'the embedded newline is escaped to a literal backslash-n, not left as a real newline' );
+    is( scalar(@lines), 4, 'a transcript with an embedded newline produces exactly one pre-transcription notice, one NEW TG VOICE line, one FETCH WITH line, and one REPLY WITH line (TGT-100/TGT-311)' );
+    unlike( $out, qr/first sentence/, 'the transcript text itself never reaches stdout at all anymore' );
 
     my $stored = $store->get_message( 999, 900 );
     is( $stored->{summary}, 'first sentence.\nsecond sentence.', 'the stored summary is also sanitized (literal backslash-n), matching what was printed' );

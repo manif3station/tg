@@ -89,13 +89,21 @@ my $child_preamble = q{my $t = $ENV{TGT117_TEST_TEXT};};
 # nothing to prevent the warning (it relies entirely on the caller's
 # filehandle setup) - printing to a filehandle with no layer still warns
 # even though the message is still delivered correctly either way.
+#
+# TGT-311 (explicit user-requested architecture change): a plain NEW TG
+# text message no longer prints its own content inline at all (only a
+# FETCH WITH command), so it can no longer reproduce a wide-character
+# warning via non-ASCII message TEXT specifically - switched to an
+# EDITED message instead, whose announce line (NEW TG EDIT) is
+# unaffected by this ticket and still interpolates the text directly,
+# preserving this demonstration's own original point unchanged.
 {
     package Fake::Telegram::Cantonese;
     my $text = "\x{5ec9}\x{4ef7}\x{7269}\x{6599}";
     sub new { return bless {}, shift; }
     sub get_updates {
         my $updates = [ {
-            message => {
+            edited_message => {
                 message_id => 7,
                 chat       => { id => 999 },
                 from       => { username => 'owner' },
@@ -120,7 +128,7 @@ my $child_preamble = q{my $t = $ENV{TGT117_TEST_TEXT};};
 
     ok( ( grep { /Wide character in print/ } @warnings ),
         'D2TG::Poller::run_once itself does nothing to prevent the warning - it is the caller\'s job' );
-    like( $out, qr/NEW TG \[999\] owner:/, 'the message is still printed despite the warning' );
+    like( $out, qr/NEW TG EDIT \[999\] owner:/, 'the message is still printed despite the warning' );
 }
 
 done_testing();

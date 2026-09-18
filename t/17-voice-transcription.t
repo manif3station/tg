@@ -28,7 +28,7 @@ sub capture_std {
         [
             {
                 update_id => 200,
-                message   => { chat => { id => 999 }, from => { username => 'ada' }, voice => { file_id => 'ghi' } },
+                message   => { message_id => 1, chat => { id => 999 }, from => { username => 'ada' }, voice => { file_id => 'ghi' } },
             },
         ],
     );
@@ -42,7 +42,12 @@ sub capture_std {
 
     is_deeply( \@calls, ['ghi'], 'transcribe_voice was called with the voice message file_id' );
     like( $out, qr/999/,          'stdout names the chat id' );
-    like( $out, qr/hello there/,  'stdout carries the transcribed text' );
+
+    # TGT-311 (explicit user-requested architecture change): the
+    # transcript itself is no longer printed inline - only a FETCH
+    # WITH command. d2 tg.fetch is what reveals it.
+    unlike( $out, qr/hello there/, 'the transcribed text itself is no longer printed inline' );
+    like( $out, qr/FETCH WITH: d2 tg\.fetch 999/, 'a FETCH WITH command is printed instead' );
     is( $err, '', 'nothing is printed to stderr on success' );
 }
 
@@ -95,7 +100,7 @@ sub capture_std {
         [
             {
                 update_id => 203,
-                message   => { chat => { id => 999 }, from => { username => 'ada' }, voice => { file_id => 'pqr' } },
+                message   => { message_id => 3, chat => { id => 999 }, from => { username => 'ada' }, voice => { file_id => 'pqr' } },
             },
         ],
     );
@@ -108,10 +113,12 @@ sub capture_std {
 
     like( $out, qr/transcrib/i, 'a pre-transcription notice is printed to stdout' );
 
+    # TGT-311: the "final transcript line" is now a FETCH WITH command,
+    # not the transcript text itself (no longer printed inline at all).
     my $notice_pos = index( $out, 'transcrib' );
-    my $result_pos = index( $out, 'hello there' );
-    ok( $notice_pos >= 0 && $result_pos > $notice_pos,
-        'the pre-transcription notice appears BEFORE the final transcript line, proving it printed before the blocking call' );
+    my $fetch_pos  = index( $out, 'FETCH WITH' );
+    ok( $notice_pos >= 0 && $fetch_pos > $notice_pos,
+        'the pre-transcription notice appears BEFORE the final FETCH WITH line, proving it printed before the blocking call' );
 }
 
 done_testing();

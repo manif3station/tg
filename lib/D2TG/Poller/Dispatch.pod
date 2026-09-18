@@ -121,11 +121,18 @@ C<record_message> at all, so a Telegram redelivery of that update_id
 was previously invisible to a presence-only check against C<messages>).
 A lookup failure degrades to "not previously seen" (proceed as normal).
 
-Text messages print C<NEW TG [...]> immediately. Voice messages (when
-C<transcribe_voice> is given) print a "transcribing..." notice before
-the blocking transcription call (TGT-100), then either the transcript
-or a C<NEW TG VOICE FAILED> line naming the retry command once the
-failure is queued (TGT-237). Photo/document messages (when
+Text messages print C<NEW TG [...]> immediately - TGT-311 (explicit
+user-requested architecture change): the message's own text is never
+interpolated into this line anymore, only chat/sender/C<(msg #N)> and
+a C<FETCH WITH> template (L<D2TG::Poller::Format/print_fetch_template>)
+alongside the usual C<REPLY WITH> one; C<d2 tg.fetch> is what actually
+reveals the content, marking it read as a side effect. Voice messages
+(when C<transcribe_voice> is given) print a "transcribing..." notice
+before the blocking transcription call (TGT-100), then either the same
+content-free C<NEW TG VOICE [...]>/C<FETCH WITH> pair (TGT-311, same
+treatment as plain text) or a C<NEW TG VOICE FAILED> line naming the
+retry command once the failure is queued (TGT-237). Photo/document
+messages (when
 C<download_media> is given) are size-checked against
 C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, Telegram's Bot API C<getFile>
 limit, TGT-037) before attempting download, then either announce

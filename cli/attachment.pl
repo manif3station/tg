@@ -124,6 +124,19 @@ local $/;
 print scalar <$fh>;
 close $fh;
 
+# TGT-311: read is marked only now, after the attachment's bytes were
+# actually successfully streamed - mirroring cli/fetch.pl's own "only
+# after success" placement (itself matching D2TG::Reply::send_reply's
+# TGT-046 precedent). Fetching and marking read are one action, not
+# two - the agent never runs a separate mark-read step for a media
+# message either.
+eval { $store->mark_read( $chat_id, $message_id, bot_key => $bot_key ) };
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: mark_read failed - $reason\n";
+    exit 1;
+}
+
 exit 0;
 
 =head1 NAME
@@ -186,5 +199,13 @@ and classified via C<D2TG::Poller::Safe::classify_store_error> - a
 locked/busy database at that call used to die raw, printing a raw
 Perl/DBI exception (potentially embedding the real db_path) to STDERR
 instead of a clean C<STORE ERROR: ... failed - REASON> refusal.
+
+TGT-311 (explicit user-requested architecture change to the core
+message-intake flow): once the attachment's bytes have actually been
+successfully streamed to stdout, this command also marks the message
+read via L<D2TG::Store/mark_read> - matching C<cli/fetch.pl>'s own
+identical "only after success" placement (itself matching
+C<D2TG::Reply::send_reply>'s TGT-046 precedent). Fetching an attachment
+and marking its message read are one action, not two.
 
 =cut
