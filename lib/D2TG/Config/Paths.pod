@@ -85,4 +85,16 @@ scripts.
 
 Returns C<$bin_dir/$basename> if it exists, otherwise C<$fallback>.
 
+=head1 IMPLEMENTATION NOTES
+
+TGT-296 (found via a user-requested comprehensive bug/improvement
+sweep): C<state_db_path>, C<attachments_dir>, C<lock_path>, and
+C<heartbeat_path> each duplicated identical "resolve under
+C<base_dir>/C<.tira>, else fall back to
+C<DEVELOPER_DASHBOARD_SKILL_ROOT>/C<default_root>/. and a C<state>/
+C<files> dir, C<make_path> if missing" logic, differing only in the
+final directory segments and filename. All 4 now delegate to one
+shared private helper, C<_resolve_state_path> - zero behavior change,
+every public function's own signature and return shape unchanged.
+
 =cut

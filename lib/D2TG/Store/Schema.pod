@@ -48,4 +48,16 @@ can't be done via a plain C<ALTER TABLE> in SQLite) runs inside its own
 transaction, rolling back cleanly on any failure so a crash mid-
 migration can never orphan data in a half-renamed table.
 
+=head1 IMPLEMENTATION NOTES
+
+TGT-298 (found via a user-requested comprehensive bug/improvement
+sweep): added 2 additive, idempotent indexes -
+C<idx_messages_read_at> and C<idx_messages_created_at> - so
+C<D2TG::Store::History>'s C<unread_messages> (a C<read_at IS NULL>
+scan) and C<messages_in_range> (a C<created_at> range scan) don't
+require a full table scan across every chat/bot as message volume
+grows. C<CREATE INDEX IF NOT EXISTS> makes both migrations safe to run
+on every C<ensure_schema> call, including a database that has already
+been migrated by the C<messages>/C<bot_key> block above them.
+
 =cut

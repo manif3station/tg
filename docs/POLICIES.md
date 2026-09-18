@@ -6321,3 +6321,64 @@ perlsec.pl-style vulnerability-scan audit: pure POD documentation
 addition - no code change, no new shell invocation, no new file I/O,
 no new external-input handling, no system/exec/backtick/piped-open/
 eval-STRING patterns introduced.
+
+## TGT-300: extracted POD from 6 modules, plus a self-caught misplaced-POD correction
+
+Found via the same comprehensive sweep as TGT-290-299. 6 modules
+(`Download.pm`, `Lock.pm`, `Subprocess.pm`, `TTS.pm`,
+`Poller/Format.pm`, `Store/RetryQueue.pm`) never had their embedded POD
+extracted to a separate `.pod` file, breaking the pattern applied to
+every other module in the codebase (documented repeatedly across the
+TGT-273/278/279/280/287 write-ups above). None were over the 500-line
+cap - a documentation-consistency gap, not an urgent one, but a
+genuine, concrete, fixable inconsistency.
+
+**Fix**: extracted each module's own POD block into a matching sibling
+`.pod` file, leaving each `.pm` ending cleanly at its own `1;`.
+
+**A real consequence, and a real self-caught mistake, both surfaced by
+this ticket's own acceptance criterion that `t/277-podchecker-clean.t`
+stay green**:
+
+1. `t/277` scans every `.pod` file under `lib/` and requires zero
+   `Pod::Checker` errors. Moving `Lock.pm`, `Store/RetryQueue.pm`,
+   `Download.pm`, and `TTS.pm`'s own POD into `.pod` files exposed
+   several I<pre-existing> bare-name `L<>` links whose target anchor
+   actually carries a full signature (e.g. `L</acquire>` when the real
+   anchor is `=head2 acquire($lock_path)`) - the same class of drift
+   this project has fixed repeatedly elsewhere (TGT-292's own write-up
+   above). These had been silently invisible to `t/277` only because
+   they lived inside a `.pm` file's embedded POD, which that test never
+   scanned. Fixed all of them using this project's established
+   `L<name()|/exact anchor text>` pattern, including 2 links
+   (`AUTO_RETRY_WINDOW_SECONDS`/`AUTO_RETRY_INTERVAL_SECONDS`) that
+   named `use constant`s with no real anchor at all - converted to
+   plain `C<>` code formatting instead, since there was never a valid
+   link target for those.
+2. While doing this extraction, discovered that TGT-296 and TGT-298
+   (shipped earlier in this same sweep) had each added a I<new> embedded
+   `__END__` POD block directly into `Config/Paths.pm` and
+   `Store/Schema.pm` respectively - both incorrectly proofed at the
+   time as "the file had none before." In fact both modules already had
+   their own separate, pre-existing `.pod` file
+   (`Config/Paths.pod`, `Store/Schema.pod`) that was never checked for
+   before adding that content. Corrected here, within this ticket's own
+   POD-consistency scope: moved both `IMPLEMENTATION NOTES` sections
+   into their correct, pre-existing `.pod` files and removed the
+   wrongly-added embedded POD from the `.pm` files. No functional
+   change from this correction.
+
+New test `t/300-pod-extracted-to-pod-files.t` asserts each of the 6
+named modules has no embedded POD left and a matching `.pod` file
+exists. Confirmed genuinely red beforehand (`Tests=12 Failed=12`
+against the pre-fix files). `t/299-acquire-pid-reuse-documented.t`
+(shipped one ticket earlier in this sweep) was updated to read
+`Lock.pod` instead of `Lock.pm`, since its own POD moved. Full Docker
+suite green after (`Files=224, Tests=2829`); 100%
+statement+subroutine coverage confirmed on all 8 touched modules
+(the 6 named plus the 2 corrected).
+
+perlsec.pl-style vulnerability-scan audit: pure documentation
+reorganization - no code change, no new shell invocation, no new file
+I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.

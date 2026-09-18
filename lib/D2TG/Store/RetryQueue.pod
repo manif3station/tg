@@ -1,0 +1,96 @@
+
+=head1 NAME
+
+D2TG::Store::RetryQueue - failed-download/failed-transcription retry queue storage
+
+=head1 SYNOPSIS
+
+    my $rq = D2TG::Store::RetryQueue->new( dbh => $dbh );
+    my $id = $rq->record_failed_download( $chat_id, $message_id, $file_id, %opts );
+
+=head1 DESCRIPTION
+
+TGT-257: extracted out of D2TG::Store.pm (which had grown to 1528 lines)
+so its two retry-queue tables (C<failed_downloads>, C<failed_transcriptions>)
+and their ten subs live in their own focused module. D2TG::Store keeps
+thin forwarding methods with the same names for every existing caller
+(cli/retry-download.pl, cli/unread.pl, cli/poller.pl, D2TG::Download,
+D2TG::Transcribe and their tests) - this module has no behavior change
+from what D2TG::Store used to do inline, only a new home.
+
+This module does not create its own DBI handle or manage schema - it
+takes an already-connected C<$dbh> (with the C<failed_downloads>/
+C<failed_transcriptions> tables already present, per D2TG::Store's own
+C<_ensure_schema>) and operates on it directly, the same as
+D2TG::Store's other methods do via C<$self-E<gt>{dbh}>.
+
+=head1 METHODS
+
+=head2 new(dbh => $dbh)
+
+Wraps an existing DBI handle. Dies if C<dbh> is not given.
+
+=head2 record_failed_download($chat_id, $message_id, $file_id, %opts)
+
+Queues (or refreshes, on redelivery of the same message) a failed
+download. C<%opts>: C<sender>, C<media_kind>, C<caption_note>, C<error>,
+C<bot_key> (defaults to the unscoped sentinel). Returns the row's id.
+
+=head2 failed_downloads(%opts)
+
+Lists all queued failed downloads, optionally filtered by C<bot_key>.
+
+=head2 failed_downloads_due_for_retry(%opts)
+
+Lists failed downloads still within the automatic-retry window
+(C<AUTO_RETRY_WINDOW_SECONDS> since queued) and not retried in the last
+C<AUTO_RETRY_INTERVAL_SECONDS>, optionally filtered by C<bot_key>.
+
+=head2 mark_failed_download_retried($id)
+
+Stamps a row's C<last_retry_at> to now.
+
+=head2 remove_failed_download($id)
+
+Deletes a row from the queue.
+
+=head2 mark_failed_download_downloaded($id, $local_path)
+
+Persists a queued row's own successfully-downloaded local path (TGT-196),
+so a future retry can skip re-downloading and retry only the failing
+C<record_message> write.
+
+=head2 record_failed_transcription($chat_id, $message_id, $file_id, %opts)
+
+Mirrors L<record_failed_download()|/record_failed_download($chat_id, $message_id, $file_id, %opts)> exactly, for the C<failed_transcriptions>
+table. C<%opts>: C<sender>, C<error>, C<bot_key>.
+
+=head2 failed_transcriptions(%opts)
+
+Mirrors L<failed_downloads()|/failed_downloads(%opts)>.
+
+=head2 failed_transcriptions_due_for_retry(%opts)
+
+Mirrors L<failed_downloads_due_for_retry()|/failed_downloads_due_for_retry(%opts)>.
+
+=head2 mark_failed_transcription_retried($id)
+
+Mirrors L<mark_failed_download_retried()|/mark_failed_download_retried($id)>.
+
+=head2 remove_failed_transcription($id)
+
+Mirrors L<remove_failed_download()|/remove_failed_download($id)>.
+
+=head1 IMPLEMENTATION NOTES
+
+TGT-295 (found via a user-requested comprehensive bug/improvement
+sweep): every method pair described above as "mirrors X exactly" now
+literally shares one implementation - 5 private, table-parameterized
+helpers (C<_record_failed>, C<_list_failed>, C<_due_for_retry>,
+C<_mark_retried>, C<_remove_failed>) that each public method above
+delegates to, rather than two independently-maintained copies of the
+same SQL differing only by table name. Zero behavior change; every
+public method's own signature, defaults, and return shape are
+unchanged.
+
+=cut

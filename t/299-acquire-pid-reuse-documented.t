@@ -21,7 +21,10 @@ use File::Spec;
 # "confirm-then-kill" primitive exists) would not meaningfully reduce
 # the window, so this ticket documents it explicitly instead.
 
-my $module_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Lock.pm' );
+# TGT-300 moved this module's POD out into a separate lib/D2TG/Lock.pod
+# file - read that instead of the .pm now that the POD no longer lives
+# there.
+my $module_path = File::Spec->catfile( $Bin, '..', 'lib', 'D2TG', 'Lock.pod' );
 open my $fh, '<', $module_path or die "can't read $module_path: $!";
 local $/;
 my $source = <$fh>;

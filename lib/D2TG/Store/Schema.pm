@@ -377,23 +377,3 @@ sub ensure_schema {
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-D2TG::Store::Schema - database schema and migrations for the tg skill
-
-=head1 IMPLEMENTATION NOTES
-
-TGT-298 (found via a user-requested comprehensive bug/improvement
-sweep): added 2 additive, idempotent indexes -
-C<idx_messages_read_at> and C<idx_messages_created_at> - so
-C<D2TG::Store::History>'s C<unread_messages> (a C<read_at IS NULL>
-scan) and C<messages_in_range> (a C<created_at> range scan) don't
-require a full table scan across every chat/bot as message volume
-grows. C<CREATE INDEX IF NOT EXISTS> makes both migrations safe to run
-on every C<ensure_schema> call, including a database that has already
-been migrated by the C<messages>/C<bot_key> block above them.
-
-=cut

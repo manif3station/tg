@@ -1,5 +1,20 @@
 Revision history for the tg skill
 
+2.38  2026-09-18
+      - MAINTENANCE (TGT-300, found via a user-requested comprehensive
+        bug/improvement sweep): extracted embedded POD from 6 modules
+        (Download.pm, Lock.pm, Subprocess.pm, TTS.pm, Poller/Format.pm,
+        Store/RetryQueue.pm) into matching .pod files, matching the
+        rest of the codebase's established convention. Fixed 4 files'
+        worth of pre-existing bare-name L<> link errors this surfaced
+        once t/277-podchecker-clean.t started checking them. Also
+        self-caught and corrected a real mistake from TGT-296/298: both
+        had wrongly added new embedded POD to Config/Paths.pm and
+        Store/Schema.pm despite each already having its own separate
+        .pod file - moved that content to the correct existing files.
+        Zero functional code change; 100% coverage confirmed on all 8
+        touched modules.
+
 2.37  2026-09-18
       - IMPROVEMENT (TGT-299, found via a user-requested comprehensive
         bug/improvement sweep): D2TG::Lock::acquire's "last one wins"

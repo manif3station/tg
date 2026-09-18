@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.38).** MAINTENANCE (TGT-300, found
+via a user-requested comprehensive bug/improvement sweep): extracted
+embedded POD from 6 modules (`Download.pm`, `Lock.pm`, `Subprocess.pm`,
+`TTS.pm`, `Poller/Format.pm`, `Store/RetryQueue.pm`) into matching
+`.pod` files. Fixed 4 files' worth of pre-existing bare-name `L<>` link
+errors this surfaced. Also self-caught and corrected a real mistake
+from TGT-296/298 (both had wrongly added new embedded POD to modules
+that already had their own separate `.pod` file). Zero functional code
+change; 100% coverage confirmed on all 8 touched modules.
+
 **Status: early implementation (v2.37).** IMPROVEMENT (TGT-299, found
 via a user-requested comprehensive bug/improvement sweep):
 `D2TG::Lock::acquire`'s "last one wins" `SIGKILL` takeover path had an
