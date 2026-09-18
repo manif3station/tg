@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.43).** IMPROVEMENT (TGT-304, per
+Michael's own decision after a live incident investigation):
+`cli/poller.pl`'s version-change restart-announcement line now
+includes this process's own PID and a precise timestamp, so a future
+recurrence of a reported stale-error-output incident can be checked
+directly against process listings/timing. The report's root cause was
+traced to something outside this repo (most likely Tira's own
+monitor-job feeder) - every code path in this repo that can print the
+reported error text was ruled out.
+
 **Status: early implementation (v2.42).** BUGFIX (TGT-306, found via a
 JOB-004 improvement-hunt pass that surfaced a genuine bug):
 `D2TG::Poller::Format::stored_summary`'s own store lookup ran

@@ -6519,6 +6519,58 @@ eval-STRING patterns introduced.
 
 ---
 
+## TGT-304: poller version-restart stale-error-output report, root-caused outside this repo
+
+A live incident reported by Michael via the budget project
+(2026-09-16): a poller version-change self-update/restart emitted a
+`MEDIA DOWNLOAD ERROR` line in the same output block as its own
+"detected version change...restarting" announcement, which read as a
+brand-new live failure. Investigation at the time found no new
+messages, nothing queued for retry, and a healthy poller - the error
+line matched the shape of an already-resolved failure from days
+earlier.
+
+**Investigation (round 1)**: `cli/poller.pl`'s own restart path prints
+exactly one line and never re-emits any prior output itself; `$| = 1`
+rules out Perl-side stdout buffering as the mechanism.
+
+**Investigation (round 2, per Michael's explicit request to keep
+digging)**: traced every code path in this repo that can ever print
+the literal string `MEDIA DOWNLOAD ERROR` - exactly 2, both inside
+`D2TG::Poller::Dispatch::handle_plain_update`'s own first-attempt
+download path (never in `auto_retry_failed_downloads` or
+`cli/retry-download.pl`, which use distinct prefixes). A genuine
+first-attempt failure always also either leaves a real row in
+`failed_downloads` with a companion "queued for retry" line, or a
+distinguishable "failed to queue for retry too" line if even the
+queue-write failed. The original investigation found neither - a
+combination not possible from a genuine live failure in this codebase
+as written. Combined with round 1's findings and `exec()`'s own
+same-PID/same-fds property (no double-process window during
+self-restart), the conclusion: this text was printed by a real past
+invocation of this exact code, and re-surfaced through something
+outside this process's own control at restart time - most likely a
+Tira monitor-job feeder re-displaying/re-scanning captured output when
+it notices the underlying job process changed. No visibility into that
+feeder's own implementation exists from this repo.
+
+**Resolution**: per Michael's own decision (Q-018), this ticket ships
+a diagnostic rather than a fix for a root cause outside this repo's
+reach - the restart-announcement line now includes this process's own
+PID and a precise timestamp (`(pid $$, <localtime>)`), so a future
+recurrence can be checked directly against process listings/timing to
+confirm or finally overturn this conclusion.
+
+New test `t/304-restart-line-has-pid-and-timestamp.t` asserts the
+restart-announcement line includes both `$$` and a timestamp.
+Confirmed genuinely red beforehand. Full Docker suite green after
+(`Files=228, Tests=2850`).
+
+perlsec.pl-style vulnerability-scan audit: adds a PID and a
+human-readable local timestamp to a diagnostic print line - no new
+shell invocation, no new file I/O, no new external-input handling, no
+system/exec/backtick/piped-open/eval-STRING patterns introduced.
+
 This concludes the 14-ticket comprehensive bug/improvement sweep
 (TGT-290 through TGT-303) requested 2026-09-17: 6 bugfixes (TGT-290,
 291, 292, 293, 294, 302) and 8 improvements/maintenance items

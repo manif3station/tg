@@ -543,7 +543,16 @@ until ($shutting_down) {
                 default_root => $skill_root,
             );
             my $summary_note = defined $summary ? " - $summary" : '';
-            print "d2tg poller detected version change ($starting_version -> $current_version)$summary_note, restarting...\n";
+            # TGT-304 (a live incident report of a stale MEDIA DOWNLOAD
+            # ERROR line appearing alongside this exact restart
+            # announcement, root-caused to something outside this
+            # repo's own code - most likely a Tira monitor-job feeder
+            # re-surfacing captured output at restart time): PID and a
+            # precise timestamp are included here so a future
+            # occurrence can be checked directly against process
+            # listings/timing, per Michael's own decision on Q-018.
+            print "d2tg poller detected version change ($starting_version -> $current_version)$summary_note, restarting... (pid $$, "
+              . scalar(localtime) . ")\n";
             $store->disconnect;
 
             # TGT-094 (live production incident): $0 is the path this
@@ -777,6 +786,15 @@ disconnects L<D2TG::Store>'s DB handle, and re-execs itself in place
 C<.pm> files from disk, so an already-running poller picks up a new
 release on its own within one poll cycle, with no manual restart and no
 systemd/cron involved.
+
+TGT-304 (a live incident report of a stale C<MEDIA DOWNLOAD ERROR> line
+appearing alongside this exact restart announcement, investigated at
+length and root-caused to something outside this repo - most likely a
+Tira monitor-job feeder re-surfacing captured output at restart time;
+every code path in this repo that can print that text was traced and
+ruled out): the restart notice now also names this process's own PID
+and a precise timestamp, so any future occurrence of that report can be
+checked directly against process listings/timing.
 
 The SQLite handle is explicitly disconnected before C<exec> to avoid
 leaking that file descriptor; other open descriptors (e.g. a live LWP
