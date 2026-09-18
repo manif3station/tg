@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.37).** IMPROVEMENT (TGT-299, found
+via a user-requested comprehensive bug/improvement sweep):
+`D2TG::Lock::acquire`'s "last one wins" `SIGKILL` takeover path had an
+undocumented PID-reuse race between its liveness check and its kill.
+Explicitly documented this accepted risk in `acquire()`'s own POD,
+matching `find_other_pollers`' own established documented-risk
+precedent - no code behavior change.
+
 **Status: early implementation (v2.36).** IMPROVEMENT (TGT-298, found
 via a user-requested comprehensive bug/improvement sweep): added 2
 idempotent indexes (`idx_messages_read_at`, `idx_messages_created_at`)

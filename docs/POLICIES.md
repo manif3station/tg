@@ -6283,3 +6283,41 @@ perlsec.pl-style vulnerability-scan audit: 2 additive
 this module's own source - no external input, no new shell invocation,
 no new file I/O, no system/exec/backtick/piped-open/eval-STRING
 patterns introduced.
+
+## TGT-299: acquire()'s PID-reuse race documented, matching find_other_pollers' precedent
+
+Found via the same comprehensive sweep as TGT-290-298. The "last one
+wins" `SIGKILL` takeover path in `acquire()` reads a PID via
+`_read_pid`, confirms liveness with `kill(0, $pid)`, then issues
+`kill('KILL', $pid)`. In the narrow window between the liveness check
+and the kill, if the original process dies and the OS recycles that
+exact PID for an unrelated process, `acquire()` would `SIGKILL` an
+innocent process. This exact PID-reuse risk class is explicitly
+documented and accepted for `find_other_pollers` (a read-only
+reporting function), but was neither documented nor mitigated for
+`acquire()`'s own path - which is materially riskier since it actually
+kills, not just reports.
+
+**Resolution**: per this ticket's own acceptance criteria (either
+narrow the race window or document the accepted risk), documented it
+explicitly in `acquire()`'s own POD, matching `find_other_pollers`'
+established pattern - Perl has no atomic "confirm-then-kill" primitive
+to meaningfully narrow this window (a re-check immediately before the
+kill is itself not fully race-free either, just a smaller window), and
+PID recycling landing on this exact narrow window is not considered a
+realistic operational risk on a normally-behaved host, matching the
+same judgment already made for `find_other_pollers`.
+
+New test `t/299-acquire-pid-reuse-documented.t` asserts, specifically
+within `acquire()`'s own POD section (not a codebase-wide grep), that
+the PID-reuse risk is documented and anchored to the actual
+liveness-check-then-kill sequence. Confirmed genuinely red beforehand
+(`Tests=3 Failed=1` against the pre-fix POD). Full Docker suite green
+after (`Files=223, Tests=2751`); 100% statement+subroutine coverage
+confirmed on the touched module (unchanged from before, since this is
+a documentation-only change).
+
+perlsec.pl-style vulnerability-scan audit: pure POD documentation
+addition - no code change, no new shell invocation, no new file I/O,
+no new external-input handling, no system/exec/backtick/piped-open/
+eval-STRING patterns introduced.

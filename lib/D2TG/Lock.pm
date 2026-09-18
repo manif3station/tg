@@ -309,6 +309,21 @@ be rare, since C<SIGKILL> cannot be caught or blocked, but a genuinely
 pathological process (or a severely overloaded host where the kernel
 itself is slow to deliver and reap) could still exceed the bound.
 
+B<Documented, accepted risk> (TGT-299, found via a user-requested
+comprehensive bug/improvement sweep): in the narrow window between the
+C<kill(0, $pid)> liveness check above and the C<kill('KILL', $pid)>
+that follows it, if the original process dies and the OS recycles that
+exact PID for an unrelated process, this path would C<SIGKILL> an
+innocent process instead. Perl offers no atomic "confirm-then-kill"
+primitive to close this window further, and PID recycling that lands
+on this exact window, on a host that isn't churning through its PID
+space unusually fast, is not considered a realistic operational risk
+worth adding complexity (e.g. re-reading and re-comparing C<cmdline>
+immediately before the kill, itself not fully race-free either) to
+mitigate - the same judgment call already made and documented for
+L<find_other_pollers()|/find_other_pollers(own_pid =E<gt> $pid, proc_dir =E<gt> $dir, pattern =E<gt> $qr)>'s own PID-reuse risk, applied here to a path
+that acts on it rather than merely reports it.
+
 Because more than one live process can be trying this at once (each
 racer is entitled to take over from whoever it currently finds), more
 than one caller can transiently believe it has won before being
