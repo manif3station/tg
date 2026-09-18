@@ -6841,3 +6841,75 @@ path beyond the already-validated numeric `chat_id`/`message_id`. The
 `Dispatch.pm`/`Format.pm` changes are pure control-flow (removing an
 interpolation, adding one new print call) - no new vulnerability
 surface.
+
+## TGT-312: TGT-311 regression - a message with no message_id was silently and permanently lost
+
+Found via a scheduled JOB-003 hourly bug hunt, 2026-09-18, live-
+reproduced in the `perl-test` Docker container - the first genuine
+JOB-003 execution after this session was directly called out for
+several prior passes that had degraded into static re-reads with no
+code actually run (see `.claude/rules/service-jobs-immediately-and-
+live.md`). The hunt's first move, per that rule, was to stress-test
+the diff TGT-311 had just shipped rather than re-reading unrelated
+files.
+
+Root cause: TGT-311 gated both the new `FETCH WITH` print
+(`D2TG::Poller::Format::print_fetch_template`) and the store-write
+(`D2TG::Poller::Safe::record_message_and_track_offset`) on `defined
+$message_id`, but removed the old unconditional inline-content print
+entirely. A message genuinely missing `message_id` - a malformed or
+defensive payload shape; real Telegram Bot API traffic always sets it,
+but several existing test fixtures elsewhere in the suite (e.g.
+`t/04-poller-loop.t`, `t/19-reply-template.t`, `t/20-run-once-safe.t`,
+`t/24-reply-context.t`) already modeled its absence before this
+ticket - fell through both gates: never shown (TGT-311 removed that
+path), never stored, and no `FETCH WITH` command exists to name it by,
+since there is no id to reference. Live reproduction (`perl -Ilib
+-It/lib -e ...` against a `Fake::Telegram` fixture with `message_id`
+omitted) confirmed the message vanished from the process's output and
+storage entirely - not merely harder to fetch, genuinely unrecoverable.
+
+Fix: both the text and voice-success branches of
+`D2TG::Poller::Dispatch::handle_plain_update` now branch explicitly on
+`defined($message_id)` rather than only gating the new behavior on it.
+When defined, TGT-311's fetch-command-only treatment is unchanged.
+When undefined, the branch falls back to TGT-311's *pre-change*
+behavior - printing the content inline directly, matching the exact
+pre-TGT-311 line format - since neither the `FETCH WITH` template nor
+the store-write path can function without an id. This is a narrow
+regression fix, not a further redesign: the `defined(message_id)` case
+(the overwhelming majority of real Telegram traffic) is completely
+unaffected.
+
+A genuine own-process violation happened mid-investigation and was
+self-caught: the fix was written to `lib/D2TG/Poller/Dispatch.pm`
+before TGT-312's own ticket existed, violating `.claude/rules/file-
+ticket-before-resuming-work.md`. Caught before the ticket was filed;
+`git stash push -- lib/D2TG/Poller/Dispatch.pm` preserved the already-
+correct fix without it being "in" the working tree while ticketless,
+TGT-312 was filed properly through the full drafting/ready gate chain,
+and only then was the stash popped back inside the ticket's own
+`in-progress` column work, per that rule's own explicit escape hatch.
+
+Test strategy: `t/312-no-message-id-content-not-lost.t` (3 scenarios -
+text with no id, voice-success with no id, and a defined-id sanity
+check confirming TGT-311's own behavior is unaffected) was written and
+confirmed genuinely red (`Tests=6, Failed=2`) against the shipped,
+bug-present TGT-311 code before the fix was applied. After the fix,
+the full suite surfaced 3 further pre-existing fixtures (2 in
+`t/04-poller-loop.t`, 1 in `t/24-reply-context.t`) that had never set
+`message_id` at all and were asserting on TGT-311's fetch-command-only
+behavior - since real Telegram traffic always sets `message_id`, these
+were updated to include a realistic `message_id` in their fixtures
+(matching the same fixup pattern TGT-311 itself used on `t/17`),
+rather than treated as evidence the fallback should apply more widely
+than intended. Full suite green after (`Files=232, Tests=2956`); 100%
+statement + subroutine coverage confirmed on `lib/D2TG/Poller/
+Dispatch.pm`.
+
+perlsec.pl-style vulnerability-scan audit: the diff is pure
+control-flow (an added `defined()` branch and an `else` fallback
+reusing existing sanitized `$safe_text`/`$safe_transcript` values
+already computed by the pre-existing code) - no new input path, no
+string eval, no shell/exec/system/backtick/piped-open patterns, no
+change to what reaches storage or the network.

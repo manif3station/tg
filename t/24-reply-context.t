@@ -41,6 +41,7 @@ sub capture_stdout {
             {
                 update_id => 61,
                 message   => {
+                    message_id => 61,
                     chat    => { id => 999 },
                     from    => { username => 'ada' },
                     text    => 'yes I can',

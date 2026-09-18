@@ -231,7 +231,15 @@ content from it.
   an earlier one, a ` (replying to <sender> [msg #M]: <content>)`
   suffix still appears on this same announce line (unaffected by
   TGT-311 - it names a *different*, already-existing message's own
-  context, not this message's own content).
+  context, not this message's own content). TGT-312 (a TGT-311
+  regression fix): in the rare/malformed case where Telegram's own
+  payload omits `message_id` entirely (real Bot API traffic always
+  sets it, but a defensive payload shape can lack it), there is no id
+  to build a `FETCH WITH`/store-write around at all - the poller falls
+  back to printing the message's own content inline on this announce
+  line instead, exactly like every `NEW TG` line did before TGT-311,
+  so the content is never silently and permanently lost. This fallback
+  is the only case where content still appears inline after TGT-311.
 - `NEW TG MEDIA [chat_id] sender: <photo|document> [- caption: <text>]` —
   an allowed sender's photo/document message, downloaded to a local,
   content-addressed path (TGT-051, named by the file's own SHA256 hash)
@@ -252,7 +260,9 @@ content from it.
   downloaded audio itself is not kept, only its transcript). TGT-311:
   the transcript itself is never printed inline here either anymore -
   only the announce line, immediately followed by its own `FETCH WITH:
-  d2 tg.fetch <chat_id> <message_id>` line. The stored transcript
+  d2 tg.fetch <chat_id> <message_id>` line, unless `message_id` is
+  missing entirely, in which case TGT-312's same fallback applies and
+  the transcript is printed inline instead. The stored transcript
   (sanitized the same way inbound text is, TGT-039: any newline
   whisper's own multi-segment output may contain becomes a literal
   `\n`) is what `d2 tg.fetch` prints, always as exactly one stdout line
@@ -275,7 +285,9 @@ content from it.
   WITH` line and isn't in this ticket's scope; never after `PENDING` or
   an error line): a ready-to-run command that shows the message's own
   stored content and marks it read as a side effect - see `d2 tg.fetch`,
-  below.
+  below. TGT-312: also never printed when `message_id` is missing from
+  the update entirely - there is no id to build the command around, so
+  the content-inline fallback (above) applies instead.
 - `REPLY WITH: d2 tg.reply <chat_id> "..." [--bot <token>] --reply-to-message-id <id>` —
   printed immediately after every content line above (text/voice-
   transcript/media, never after the pending notification or an error

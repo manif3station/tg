@@ -131,7 +131,14 @@ reveals the content, marking it read as a side effect. Voice messages
 before the blocking transcription call (TGT-100), then either the same
 content-free C<NEW TG VOICE [...]>/C<FETCH WITH> pair (TGT-311, same
 treatment as plain text) or a C<NEW TG VOICE FAILED> line naming the
-retry command once the failure is queued (TGT-237). Photo/document
+retry command once the failure is queued (TGT-237). TGT-312 (a
+TGT-311 regression fix): both the text and voice-success paths above
+fall back to printing content inline - exactly like every C<NEW TG>
+line did before TGT-311 - only when C<message_id> is genuinely
+undefined (a malformed/defensive payload shape; real Telegram Bot API
+traffic always sets it), since neither C<FETCH WITH> nor the
+store-write below can function without an id to reference; the
+C<defined(message_id)> case is completely unaffected. Photo/document
 messages (when
 C<download_media> is given) are size-checked against
 C<TELEGRAM_GETFILE_MAX_BYTES> (20MB, Telegram's Bot API C<getFile>

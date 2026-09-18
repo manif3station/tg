@@ -1,5 +1,22 @@
 Revision history for the tg skill
 
+2.48  2026-09-18
+      - BUGFIX (TGT-312, a TGT-311 regression found via a JOB-003
+        hourly bug hunt, reproduced live in the perl-test Docker
+        container): a text or successfully-transcribed-voice message
+        genuinely missing message_id (a malformed/defensive payload
+        shape - real Telegram Bot API traffic always sets it, but
+        several existing test fixtures already model its absence) was
+        silently and permanently lost after TGT-311 - never printed
+        inline (TGT-311 removed that), never stored, and no FETCH WITH
+        command to name it by, since there is no id to reference.
+        D2TG::Poller::Dispatch::handle_plain_update's text and
+        voice-success branches now fall back to TGT-311's pre-change
+        behavior (printing content inline) only when message_id is
+        genuinely undefined; the defined(message_id) case (the
+        overwhelming majority of real traffic) is completely
+        unaffected, still gets TGT-311's fetch-command-only treatment.
+
 2.47  2026-09-18
       - FEATURE (TGT-311, explicit user-requested architecture change
         to the core message-intake flow): d2 tg.poller no longer

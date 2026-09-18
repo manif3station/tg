@@ -1,5 +1,17 @@
 # tg
 
+**Status: early implementation (v2.48).** BUGFIX (TGT-312, a TGT-311
+regression found via a JOB-003 hourly bug hunt, reproduced live in the
+perl-test Docker container): a text or successfully-transcribed-voice
+message genuinely missing `message_id` (a malformed/defensive payload
+shape - real Telegram Bot API traffic always sets it) was silently and
+permanently lost after TGT-311 - never printed inline, never stored,
+and no `FETCH WITH` command to name it by. `handle_plain_update`'s text
+and voice-success branches now fall back to printing content inline
+only when `message_id` is genuinely undefined; the `defined(message_id)`
+case (the overwhelming majority of real traffic) is completely
+unaffected.
+
 **Status: early implementation (v2.47).** FEATURE (TGT-311, explicit
 user-requested architecture change to the core message-intake flow):
 `d2 tg.poller` no longer prints a new text or successfully-

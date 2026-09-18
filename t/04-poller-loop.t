@@ -25,7 +25,7 @@ sub capture_stdout {
         [
             {
                 update_id => 55,
-                message   => { chat => { id => 999 }, from => { username => 'ada' }, text => 'hello there' },
+                message   => { message_id => 55, chat => { id => 999 }, from => { username => 'ada' }, text => 'hello there' },
             },
         ],
     );
@@ -42,8 +42,11 @@ sub capture_stdout {
     # message's own content is no longer printed inline - only a FETCH
     # WITH command reveals it.
     unlike( $out, qr/hello there/, 'the message text itself is not printed inline' );
-    is( ( split /\n/, $out ), 2,  'exactly one content line plus one REPLY WITH template line was printed' );
-    like( $out, qr/REPLY WITH: d2 tg\.reply 999/, 'the second line is the reply-command template' );
+    # TGT-312: with message_id present, the announce line is followed by
+    # both a FETCH WITH and a REPLY WITH template line.
+    is( ( split /\n/, $out ), 3,  'announce line plus FETCH WITH plus REPLY WITH template lines were printed' );
+    like( $out, qr/FETCH WITH: d2 tg\.fetch 999/, 'a FETCH WITH template line is printed' );
+    like( $out, qr/REPLY WITH: d2 tg\.reply 999/, 'a REPLY WITH template line is printed' );
     is( $next_offset, 56,         'offset advances past the processed update' );
 }
 
@@ -62,7 +65,7 @@ sub capture_stdout {
         [
             {
                 update_id => 60,
-                message   => { chat => { id => 1 }, from => { username => 'eve' }, text => "line one\nline two" },
+                message   => { message_id => 60, chat => { id => 1 }, from => { username => 'eve' }, text => "line one\nline two" },
             },
         ],
     );
@@ -71,8 +74,8 @@ sub capture_stdout {
         D2TG::Poller::run_once( $tg, undef );
     } );
 
-    is( ( split /\n/, $out ), 2,
-        'a message containing a newline still produces exactly one content line plus one REPLY WITH line' );
+    is( ( split /\n/, $out ), 3,
+        'a message containing a newline still produces announce plus FETCH WITH plus REPLY WITH lines' );
     # TGT-311: the message's own content (with or without an embedded
     # newline) is no longer printed inline at all.
     unlike( $out, qr/line one/, 'the message text itself is not printed inline' );

@@ -146,11 +146,29 @@ sub handle_plain_update {
         # left unchanged/still printed - out of scope, never asked for,
         # and it already goes through the same stored-summary/fetch-once
         # discipline via stored_summary's own store lookup.
-        print "$ts NEW TG [$chat_id] $sender$msg_note$reply_ctx\n";
-        D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id ) if defined $message_id;
-        D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-        if ( $store && defined $message_id ) {
-            D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
+        #
+        # TGT-312 (found via a JOB-003 hourly bug hunt, reproduced live
+        # in the perl-test container): without a message_id, neither
+        # print_fetch_template nor record_message_and_track_offset can
+        # run at all (both require it) - a message genuinely missing
+        # message_id (a malformed/defensive payload shape; Telegram's
+        # real Bot API always sets it, but several existing test
+        # fixtures already model its absence) would otherwise vanish
+        # completely: never shown inline (TGT-311 removed that), never
+        # stored, no FETCH WITH command to name it by. Falls back to
+        # printing the content inline in that one case - the only way
+        # left to avoid losing it outright.
+        if ( defined $message_id ) {
+            print "$ts NEW TG [$chat_id] $sender$msg_note$reply_ctx\n";
+            D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id );
+            D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
+            if ($store) {
+                D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_text, bot_key => $bot_token );
+            }
+        }
+        else {
+            print "$ts NEW TG [$chat_id] $sender: $safe_text$reply_ctx\n";
+            D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
         }
     }
     elsif ( $media_kind eq 'voice' && $transcribe_voice ) {
@@ -170,11 +188,24 @@ sub handle_plain_update {
             # matching the plain-text branch above exactly. reply_ctx
             # (a different message's own context) is left unchanged,
             # same reasoning as the text branch above.
-            print "$ts NEW TG VOICE [$chat_id] $sender$msg_note$reply_ctx\n";
-            D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id ) if defined $message_id;
-            D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-            if ( $store && defined $message_id ) {
-                D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
+            #
+            # TGT-312 (found via a JOB-003 hourly bug hunt, reproduced
+            # live): same fallback as the plain-text branch above -
+            # without message_id, print_fetch_template/record_message_
+            # and_track_offset can't run at all, so the transcript
+            # would vanish completely rather than merely go unfetchable
+            # by id. Falls back to inline printing in that one case.
+            if ( defined $message_id ) {
+                print "$ts NEW TG VOICE [$chat_id] $sender$msg_note$reply_ctx\n";
+                D2TG::Poller::Format::print_fetch_template( $chat_id, $message_id );
+                D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
+                if ($store) {
+                    D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, $safe_transcript, bot_key => $bot_token );
+                }
+            }
+            else {
+                print "$ts NEW TG VOICE [$chat_id] $sender: $safe_transcript$reply_ctx\n";
+                D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
             }
         }
         elsif ( $store && defined $message_id && defined $file_id ) {
