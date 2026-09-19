@@ -1,5 +1,19 @@
 Revision history for the tg skill
 
+2.52  2026-09-19
+      - REFACTOR (TGT-317, found via a JOB-004 improvement hunt
+        reviewing TGT-316's own freshly-shipped diff): D2TG::Store::
+        Schema's 6 "local $dbh->{PrintError} = 0;" blocks (each
+        wrapping an expected/handled ALTER TABLE schema-migration
+        call) became pure no-ops once TGT-316 made PrintError => 0 the
+        connection-level default in D2TG::Store::new - removed as dead
+        weight that could mislead a future reader into thinking
+        per-call suppression was still doing something, when the real
+        protection now lives entirely at the connection level. Pure
+        cleanup: byte-identical behavior before and after, zero test
+        file edits needed beyond the new structural regression test
+        confirming the pattern's absence.
+
 2.51  2026-09-19
       - BUGFIX (TGT-316, found via a JOB-003 hourly bug hunt, reproduced
         live in the perl-test Docker container): D2TG::Store::new's

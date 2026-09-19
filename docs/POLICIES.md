@@ -7137,3 +7137,46 @@ connection attribute, not new code - it makes STDERR strictly more
 scrubbed than before (removing a leak of internal file/line detail),
 never less; no new input path, no string eval, no shell/exec/system/
 backtick/piped-open patterns.
+
+## TGT-317: removed Schema.pm's 6 now-redundant local PrintError overrides (TGT-316 follow-up)
+
+Found via a scheduled JOB-004 improvement hunt, 2026-09-19, reviewing
+TGT-316's own freshly-shipped diff - matching this project's own rule
+that the next hunt after a ticket ships stress-tests/reviews that
+diff first. TGT-316 explicitly deferred this exact cleanup as a
+separate, out-of-scope follow-up ("Schema.pm's own existing 6 local
+overrides - safe to leave as harmless redundancy, or clean up
+separately"), so this ticket closes that deferred item rather than
+being a surprise finding.
+
+Root cause: TGT-316 made `PrintError => 0` the connection-level
+default for every `D2TG::Store` handle. `D2TG::Store::Schema`'s own 6
+call sites (each an expected/handled duplicate-column-tolerant
+`ALTER TABLE` migration) previously needed their own `local
+$dbh->{PrintError} = 0;` block, since the connection itself defaulted
+to `PrintError => 1` before TGT-316. After TGT-316, each of those 6
+blocks became a pure no-op - setting an already-`0` value to `0`, then
+restoring it to `0` again on scope exit - dead weight that could
+mislead a future reader into thinking per-call suppression was still
+doing something, when the real protection now lives entirely at the
+connection level.
+
+Fix: removed all 6 `local $dbh->{PrintError} = 0;` lines along with
+their now-pointless enclosing bare blocks (each block existed only to
+scope that one `local` statement), leaving the bare `eval { $dbh->
+do(...) }` call each one wrapped. Pure cleanup, byte-identical
+behavior before and after.
+
+Test strategy: a genuinely-red `t/317-schema-no-redundant-printerror.t`
+(a single source-inspection assertion - `unlike($source, qr/local
+\$dbh->\{PrintError\}/, ...)`) was written and confirmed failing
+before the cleanup, matching this project's own established precedent
+for a pure-cleanup ticket with no behavioral test to write. Full suite
+green after with zero other test file edits needed (`Files=236,
+Tests=2950`) - the strongest possible confirmation that this was a
+genuinely no-op change. 100% statement + subroutine coverage confirmed
+on `lib/D2TG/Store/Schema.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure deletion of 6 already
+-redundant lines - no new code, no new input path, no change to what
+reaches storage, STDERR, or the network.

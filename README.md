@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.52).** REFACTOR (TGT-317, found via
+a JOB-004 improvement hunt reviewing TGT-316's own freshly-shipped
+diff): `D2TG::Store::Schema`'s 6 `local $dbh->{PrintError} = 0;`
+blocks became pure no-ops once TGT-316 made `PrintError => 0` the
+connection-level default - removed as dead weight that could mislead a
+future reader into thinking per-call suppression was still needed.
+Pure cleanup, no behavior change.
+
 **Status: early implementation (v2.51).** BUGFIX (TGT-316, found via a
 JOB-003 hourly bug hunt, reproduced live in the perl-test Docker
 container): `D2TG::Store::new`'s `DBI->connect` set `RaiseError => 1`

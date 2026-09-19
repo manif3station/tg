@@ -44,10 +44,7 @@ sub ensure_schema {
     );
 
 
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-133: the real on-disk path of a downloaded attachment lives
@@ -55,10 +52,7 @@ sub ensure_schema {
     # cli/unread.pl print verbatim) - kept separate so the path can
     # never leak through display output, only through
     # get_attachment_path's own deliberate, narrow accessor.
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE messages ADD COLUMN local_path TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE messages ADD COLUMN local_path TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-232 (found via a scheduled JOB-004 improvement hunt): the
@@ -167,10 +161,7 @@ sub ensure_schema {
     # retry_failed_download persists the path here - a future retry
     # sees it, skips download_file entirely, and retries only the
     # record_message write against the already-downloaded file.
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN local_path TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN local_path TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-219 (found via a scheduled JOB-004 improvement hunt):
@@ -238,10 +229,7 @@ sub ensure_schema {
     # mark_failed_download_retried after each automatic retry attempt
     # (success or failure); read by failed_downloads_due_for_retry to
     # decide whether 60s have elapsed since the last attempt.
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN last_retry_at TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN last_retry_at TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-237: mirrors failed_downloads' own shape, but a fresh table
@@ -273,10 +261,7 @@ sub ensure_schema {
     # has no rename/create/copy/drop migration block of its own (unlike
     # failed_downloads' TGT-219 migration) to worry about ordering
     # against, so a plain trailing ALTER TABLE is safe here.
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
@@ -318,10 +303,7 @@ sub ensure_schema {
     # prior install of TGT-105 alone, without this column - the exact
     # same ALTER-with-duplicate-tolerance pattern messages.read_at
     # already uses above.
-    {
-        local $dbh->{PrintError} = 0;
-        eval { $dbh->do('ALTER TABLE sent_replies ADD COLUMN text TEXT') };
-    }
+    eval { $dbh->do('ALTER TABLE sent_replies ADD COLUMN text TEXT') };
     die $@ if $@ && $@ !~ /duplicate column name/;
 
     # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
