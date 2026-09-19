@@ -12,6 +12,18 @@ use warnings;
 # AccessControl/SentReplyAudit's own precedent).
 use constant DEFAULT_BOT_KEY => '';
 
+# TGT-318 (found via a scheduled JOB-004 improvement hunt, reviewing
+# this module after TGT-317's own cleanup of it): 6 call sites
+# duplicated the exact same shape - eval { $dbh->do($sql) }; die $@ if
+# $@ && $@ !~ /duplicate column name/; - differing only by the literal
+# ALTER TABLE SQL string. Collapsed into this one helper.
+sub _add_column_if_missing {
+    my ( $dbh, $sql ) = @_;
+    eval { $dbh->do($sql) };
+    die $@ if $@ && $@ !~ /duplicate column name/;
+    return;
+}
+
 sub ensure_schema {
     my ($dbh) = @_;
 
@@ -44,16 +56,14 @@ sub ensure_schema {
     );
 
 
-    eval { $dbh->do('ALTER TABLE messages ADD COLUMN read_at TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE messages ADD COLUMN read_at TEXT' );
 
     # TGT-133: the real on-disk path of a downloaded attachment lives
     # only here, never in `summary` (which is what cli/history.pl and
     # cli/unread.pl print verbatim) - kept separate so the path can
     # never leak through display output, only through
     # get_attachment_path's own deliberate, narrow accessor.
-    eval { $dbh->do('ALTER TABLE messages ADD COLUMN local_path TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE messages ADD COLUMN local_path TEXT' );
 
     # TGT-232 (found via a scheduled JOB-004 improvement hunt): the
     # messages table was the one remaining per-chat table never given
@@ -161,8 +171,7 @@ sub ensure_schema {
     # retry_failed_download persists the path here - a future retry
     # sees it, skips download_file entirely, and retries only the
     # record_message write against the already-downloaded file.
-    eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN local_path TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE failed_downloads ADD COLUMN local_path TEXT' );
 
     # TGT-219 (found via a scheduled JOB-004 improvement hunt):
     # failed_downloads was the sole per-chat table never given the
@@ -229,8 +238,7 @@ sub ensure_schema {
     # mark_failed_download_retried after each automatic retry attempt
     # (success or failure); read by failed_downloads_due_for_retry to
     # decide whether 60s have elapsed since the last attempt.
-    eval { $dbh->do('ALTER TABLE failed_downloads ADD COLUMN last_retry_at TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE failed_downloads ADD COLUMN last_retry_at TEXT' );
 
     # TGT-237: mirrors failed_downloads' own shape, but a fresh table
     # created with bot_key from the start (unlike failed_downloads,
@@ -261,8 +269,7 @@ sub ensure_schema {
     # has no rename/create/copy/drop migration block of its own (unlike
     # failed_downloads' TGT-219 migration) to worry about ordering
     # against, so a plain trailing ALTER TABLE is safe here.
-    eval { $dbh->do('ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT' );
 
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
@@ -303,8 +310,7 @@ sub ensure_schema {
     # prior install of TGT-105 alone, without this column - the exact
     # same ALTER-with-duplicate-tolerance pattern messages.read_at
     # already uses above.
-    eval { $dbh->do('ALTER TABLE sent_replies ADD COLUMN text TEXT') };
-    die $@ if $@ && $@ !~ /duplicate column name/;
+    _add_column_if_missing( $dbh, 'ALTER TABLE sent_replies ADD COLUMN text TEXT' );
 
     # TGT-098 (bug-hunt finding): allow_list/pending used to be keyed
     # only by chat_id (a single-column PRIMARY KEY), which silently let

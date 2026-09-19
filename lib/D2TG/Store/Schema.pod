@@ -32,6 +32,17 @@ order they appear in this file.
 
 =head1 FUNCTIONS
 
+=head2 _add_column_if_missing($dbh, $sql)
+
+TGT-318 (found via a scheduled JOB-004 improvement hunt, reviewing this
+module after TGT-317's own cleanup of it): 6 call sites duplicated the
+same shape - C<eval { $dbh-E<gt>do($sql) }; die $@ if $@ && $@ !~
+/duplicate column name/;> - differing only by the literal C<ALTER
+TABLE ... ADD COLUMN ...> SQL. Collapsed into this one helper: pass the
+SQL string, and it runs the C<ALTER TABLE>, silently tolerating a
+duplicate-column error (an already-migrated database being re-run
+through C<ensure_schema>) and re-raising anything else.
+
 =head2 ensure_schema($dbh)
 
 Creates every table this skill needs (C<allow_list>, C<pending>,

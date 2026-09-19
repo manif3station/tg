@@ -7180,3 +7180,43 @@ on `lib/D2TG/Store/Schema.pm`.
 perlsec.pl-style vulnerability-scan audit: pure deletion of 6 already
 -redundant lines - no new code, no new input path, no change to what
 reaches storage, STDERR, or the network.
+
+## TGT-318: extracted Schema.pm's 6 duplicate ALTER TABLE ADD COLUMN blocks into a helper
+
+Found via a scheduled JOB-004 improvement hunt, 2026-09-19, reviewing
+`D2TG::Store::Schema` a second time immediately after TGT-317's own
+cleanup of the same file - matching this project's own rule that the
+next hunt after a ticket ships stress-tests/reviews that diff first,
+and finding a second, independent duplication in the same
+already-reviewed file rather than assuming one pass was enough.
+
+Root cause: all 6 duplicate-column-tolerant migration call sites
+shared the identical shape `eval { $dbh->do($sql) }; die $@ if $@ &&
+$@ !~ /duplicate column name/;`, differing only by the literal
+`ALTER TABLE ... ADD COLUMN ...` SQL string - the same class of
+duplication this project's own established convention already
+extracts on sight (TGT-167/170/171/172/177/181/313/314 precedent).
+
+Fix: a new `_add_column_if_missing($dbh, $sql)` helper does the
+eval/do/die-unless-duplicate-column shape in one call. Every one of
+the 6 sites now calls it with just its own SQL string, shrinking from
+2 lines to 1. Pure refactor: byte-identical behavior (tolerates a
+duplicate-column re-run, re-raises any other error) for every existing
+scenario.
+
+Test strategy: matching TGT-279/313/314's own precedent for a
+pure-extraction refactor, a genuinely-red
+`t/318-schema-add-column-helper.t` (`D2TG::Store::Schema->can
+('_add_column_if_missing')`) was written and confirmed failing before
+the helper existed. Full suite green after with zero other test file
+edits needed (`Files=237, Tests=2951`) - the strongest possible
+confirmation that this was a genuinely behavior-preserving extraction.
+100% statement + subroutine coverage confirmed on
+`lib/D2TG/Store/Schema.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow
+extraction - the helper's own body is a verbatim reuse of the 6
+call sites' pre-existing eval/die statements, parameterized by `$sql`
+(a literal string constant at every call site, never user input); no
+string eval of untrusted data, no shell/exec/system/backtick/
+piped-open patterns, no change to what reaches storage.

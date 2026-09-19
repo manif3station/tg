@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.53).** REFACTOR (TGT-318, found via
+a JOB-004 improvement hunt reviewing `D2TG::Store::Schema` after
+TGT-317's own cleanup of the same file): 6 call sites duplicated the
+exact same `eval { $dbh->do($sql) }; die $@ if $@ && $@ !~ /duplicate
+column name/;` shape, differing only by the literal `ALTER TABLE`
+SQL. Extracted into one shared `_add_column_if_missing($dbh, $sql)`
+helper, called from all 6 sites. Pure refactor, byte-identical
+behavior.
+
 **Status: early implementation (v2.52).** REFACTOR (TGT-317, found via
 a JOB-004 improvement hunt reviewing TGT-316's own freshly-shipped
 diff): `D2TG::Store::Schema`'s 6 `local $dbh->{PrintError} = 0;`
