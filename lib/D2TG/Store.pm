@@ -31,9 +31,19 @@ sub new {
 
     my $db_path = $args{db_path} or die "D2TG::Store->new requires db_path\n";
 
+    # TGT-316 (found via a scheduled JOB-003 hourly bug hunt, reproduced
+    # live): RaiseError and PrintError are independent DBI attributes -
+    # RaiseError alone does not suppress PrintError's own STDERR warning
+    # before the exception is raised, and DBI's own documented default
+    # for PrintError is 1 (true). Without this, any DBI error not
+    # already inside one of D2TG::Store::Schema's own local
+    # "PrintError = 0" blocks leaks a raw, unclassified exception line
+    # to STDERR - exactly the class of leak TGT-133/183/186/195/293/311
+    # all exist to prevent, all of which assumed RaiseError alone was
+    # sufficient.
     my $dbh = DBI->connect(
         "dbi:SQLite:dbname=$db_path", '', '',
-        { RaiseError => 1, AutoCommit => 1, sqlite_use_immediate_transaction => 1 }
+        { RaiseError => 1, PrintError => 0, AutoCommit => 1, sqlite_use_immediate_transaction => 1 }
     );
 
     # TGT-129: without these, DBD::SQLite's default busy timeout is 0 -

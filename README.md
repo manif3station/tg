@@ -1,5 +1,19 @@
 # tg
 
+**Status: early implementation (v2.51).** BUGFIX (TGT-316, found via a
+JOB-003 hourly bug hunt, reproduced live in the perl-test Docker
+container): `D2TG::Store::new`'s `DBI->connect` set `RaiseError => 1`
+but never `PrintError => 0` - DBI's own documented default for
+`PrintError` is `1` (true), and `RaiseError`/`PrintError` are
+independent attributes, so a raw, unclassified DBI/SQLite exception
+line (e.g. `DBD::SQLite::db do failed: database is locked at
+.../AccessControl.pm line 35.`) leaked to STDERR before whatever
+classified refusal the calling code went on to print. Live-reproduced
+via a forked exclusive-lock holder plus a real `cli/approve.pl`
+subprocess. Fixed by adding `PrintError => 0` to the connect
+attributes, matching the suppression `D2TG::Store::Schema` already
+applies locally in 6 places.
+
 **Status: early implementation (v2.50).** REFACTOR (TGT-314, found via a
 JOB-004 improvement hunt): 12 direct call sites across 7 `cli/*.pl`
 scripts (`fetch.pl`, `attachment.pl`, `approve.pl`, `history.pl`,

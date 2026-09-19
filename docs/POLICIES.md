@@ -7063,3 +7063,77 @@ board-visible concept this board's own policy set doesn't already
 cover, and none touches this skill's own code, dependencies, or
 documented behavior. Conclusion: no policy change needed for this
 upgrade.
+
+## TGT-316: D2TG::Store's DBI connect never disabled PrintError - raw exceptions leaked to STDERR
+
+Found via a scheduled JOB-003 hourly bug hunt, 2026-09-19, reproduced
+live in the perl-test Docker container - the same session that had
+just shipped TGT-313/314/315, per this project's own rule that a fresh
+hunt stress-tests recent diffs first before looking elsewhere (this
+one instead surfaced a pre-existing gap unrelated to the freshly
+shipped tickets, found while exercising `cli/approve.pl`'s own
+locked-database refusal path as an adversarial input).
+
+Root cause: `D2TG::Store::new`'s `DBI->connect` (`Store.pm:34`) set
+`RaiseError => 1, AutoCommit => 1, sqlite_use_immediate_transaction =>
+1` but never `PrintError => 0`. DBI's own documentation is explicit
+that `RaiseError` and `PrintError` are independent attributes and that
+`PrintError`'s own default is `1` (true) - setting `RaiseError` alone
+does not suppress `PrintError`'s own STDERR warning printed just
+before the exception is raised. `D2TG::Store::Schema` already knew
+this half of the lesson: it locally sets `local $dbh->{PrintError} =
+0;` at 6 separate call sites for expected/handled schema-migration
+errors - but the connection-level default set at construction time was
+never itself changed, so every OTHER DBI call across every other Store
+submodule (`AccessControl`, `History`, `RetryQueue`, `SentReplyAudit`)
+not already inside one of those 6 explicit local blocks could leak a
+raw, unclassified exception line to STDERR - independent of, and in
+addition to, whatever classified refusal the calling code went on to
+print. This is exactly the raw-exception-leak class this project has
+fixed repeatedly and deliberately (TGT-133's own precedent: a raw
+DBI/SQLite exception can embed the real database file path;
+TGT-183/186/195/293/311 all exist specifically to prevent this class
+of leak) - every one of those fixes assumed `RaiseError` alone was
+sufficient to prevent any raw text reaching STDERR, which DBI's own
+documentation does not support.
+
+Live reproduction: held an `EXCLUSIVE` transaction on a fresh test
+database from a forked child process (via `Test::MandatoryDb`'s own
+env-setup helper plus a direct `D2TG::Store->new`/`add_pending` seed),
+then ran `perl -Ilib cli/approve.pl 12345` against the same database
+from the parent process. Before the fix, the raw line `DBD::SQLite::db
+do failed: database is locked at .../D2TG/Store/AccessControl.pm line
+35.` appeared on STDERR immediately before the intended clean refusal
+`Failed to open local storage (database is locked) - refusing to
+start.`; after the fix, only the clean refusal appears.
+
+Fix: added `PrintError => 0` to the `DBI->connect` attributes hash in
+`D2TG::Store::new` - a one-line change. `D2TG::Store::Schema`'s own 6
+local overrides become redundant-but-harmless (setting `PrintError =>
+0` on a handle that already defaults to `0` is a no-op) and were left
+in place rather than removed, matching this ticket's own declared
+scope.
+
+Test strategy: a genuinely-red `t/316-store-printerror-disabled.t` (3
+assertions - the connection's own `PrintError` attribute is falsy, a
+forced DBI error still raises via `RaiseError`, and no text reaches a
+captured `STDERR` during that forced error) was written and confirmed
+failing (2 of 3) before the fix, directly reproducing the live
+subprocess finding at unit-test speed rather than requiring the
+fork/subprocess dance for every future regression check. One test
+assertion needed a same-day self-correction: the initial `is($dbh->
+{PrintError}, 0, ...)` numeric-style check failed even after the fix,
+since DBI returns an empty string (not the string `'0'`) for a false
+boolean attribute - corrected to `ok(!$dbh->{PrintError}, ...)`, a
+falsy check, which is what the ticket's own acceptance criteria
+actually require. Full suite green after (`Files=235, Tests=2949`) -
+`t/54-lock-acquire-race.t` failed once under the coverage-instrumented
+run only, confirmed a system-load flake by passing cleanly standalone
+immediately after, unrelated to this change. 100% statement +
+subroutine coverage confirmed on `lib/D2TG/Store.pm`.
+
+perlsec.pl-style vulnerability-scan audit: the fix is a single DBI
+connection attribute, not new code - it makes STDERR strictly more
+scrubbed than before (removing a leak of internal file/line detail),
+never less; no new input path, no string eval, no shell/exec/system/
+backtick/piped-open patterns.

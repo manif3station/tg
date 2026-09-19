@@ -32,6 +32,17 @@ which is what C<cli/poller.pl>'s own real multi-bot startup now does
 under every bot it's actually configured to poll with, not only under
 the single-bot default.
 
+The C<DBI-E<gt>connect> call itself sets C<PrintError =E<gt> 0>
+alongside C<RaiseError =E<gt> 1> (TGT-316, found via a scheduled
+JOB-003 hourly bug hunt, reproduced live): C<RaiseError>/C<PrintError>
+are independent DBI attributes, and DBI's own documented default for
+C<PrintError> is C<1> (true) - without this, any DBI error not already
+inside one of L<D2TG::Store::Schema|D2TG::Store::Schema>'s own local
+C<PrintError = 0> blocks leaked a raw, unclassified exception line to
+STDERR (which can embed the real database file path) before whatever
+classified refusal the calling code went on to print - exactly the
+class of leak TGT-133/183/186/195/293/311 all exist to prevent.
+
 Every connection sets C<PRAGMA busy_timeout = 5000> and
 C<PRAGMA journal_mode = WAL> immediately after connecting (TGT-129,
 found via an ad-hoc bug-hunt): C<DBD::SQLite>'s default busy timeout is

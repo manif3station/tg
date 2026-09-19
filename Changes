@@ -1,5 +1,26 @@
 Revision history for the tg skill
 
+2.51  2026-09-19
+      - BUGFIX (TGT-316, found via a JOB-003 hourly bug hunt, reproduced
+        live in the perl-test Docker container): D2TG::Store::new's
+        DBI->connect set RaiseError => 1 but never PrintError => 0.
+        RaiseError and PrintError are independent DBI attributes, and
+        DBI's own documented default for PrintError is 1 (true) - so
+        any DBI error not already inside one of D2TG::Store::Schema's
+        6 local "PrintError = 0" blocks leaked a raw, unclassified
+        exception line (e.g. "DBD::SQLite::db do failed: database is
+        locked at .../AccessControl.pm line 35.") to STDERR, before
+        whatever classified "STORE ERROR"/"Failed to open local
+        storage" refusal the calling code went on to print. This is
+        exactly the raw-exception-leak class this project has fixed
+        repeatedly (TGT-133/183/186/195/293/311), all of which assumed
+        RaiseError alone was sufficient - it is not. Live-reproduced:
+        held an EXCLUSIVE transaction on a test DB from a forked child
+        process, then ran cli/approve.pl against it from the parent -
+        confirmed the raw line appeared before the fix and is gone
+        after. Fixed by adding PrintError => 0 to the connect
+        attributes.
+
 2.50  2026-09-18
       - REFACTOR (TGT-314, found via a JOB-004 improvement hunt): 12
         direct call sites across 7 cli/*.pl scripts (fetch.pl,
