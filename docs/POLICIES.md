@@ -7220,3 +7220,43 @@ call sites' pre-existing eval/die statements, parameterized by `$sql`
 (a literal string constant at every call site, never user input); no
 string eval of untrusted data, no shell/exec/system/backtick/
 piped-open patterns, no change to what reaches storage.
+
+## TGT-319: Tira upgrade-gate review (5.159 -> 5.163) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.159 to 5.163 mid-session. Ran `d2 tira.policy.undeclared`
+(empty result - no undeclared rules for this board to answer) and read
+all 4 Changes entries between 5.159 and 5.163:
+
+- 5.163 (TKT-1059): a POD-only documentation fix on Tira's own
+  `t/lib/Suite.pm` - not this project's code, no action.
+- 5.162 (TKT-1131): `tira.doctor`'s damage scan now also detects a
+  card's `evidence`/`attachments`/`gate_passing_log` field corrupted
+  into a scalar (the same shape TGT-312's own evidence-field incident
+  hit on this board). Ran `d2 tira.doctor` live against this real
+  board as part of this review - the only `damaged` hit was a false
+  positive on an unrelated SQLite `.db-shm` binary file
+  (`telegram.messages.db-shm`), not a card record. No real corruption
+  found on this board.
+- 5.161 (TKT-1130): `<type>.update --evidence`/the engine-level
+  `attachments`/`gate_passing_log` paths now refuse a non-array (or an
+  array of non-hash-ref entries) value outright, at the point of write,
+  instead of silently corrupting the card. This closes - upstream, in
+  Tira itself - the exact class of incident this board already hit and
+  fixed operationally with TGT-312 (see this board's own CLAUDE.md log
+  for that incident). No action needed here beyond noting the CLI-level
+  guardrail is now stronger going forward; this board's own established
+  practice (`tira.evidence.add`, never `ticket.update --evidence`)
+  already avoided the corrupted path.
+- 5.160 (TKT-1126): a served-dashboard police/policy-bridge running
+  indicator now renders "running"/"not running" instead of staying
+  silent for an explicitly-false state. This board never runs
+  `tira.dashboard` as a served page - the CLI is used directly - so
+  this UI change doesn't apply to our usage pattern.
+
+None of the four introduces a new event type, command, or
+board-visible concept this board's own policy set doesn't already
+cover, and none touches this skill's own code, dependencies, or
+documented behavior. Conclusion: no policy change needed for this
+upgrade.
+piped-open patterns, no change to what reaches storage.
