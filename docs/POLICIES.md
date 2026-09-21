@@ -7541,3 +7541,49 @@ a path that handles fully untrusted Telegram-sourced text before it
 reaches a shared stdout/monitor-bridge stream) - no new untrusted-input
 surface introduced, no shell/exec/eval touched, the change is a regex
 range extension only.
+
+## TGT-327: D2TG::Poller::Dispatch's failure-queuing branches duplicated the identical eval-wrap/report shape
+
+Found via a live JOB-004 improvement hunt, 2026-09-21. `handle_plain_
+update`'s voice-transcription-failure branch and photo/document-
+download-failure branch each independently implemented the identical
+shape: eval-wrap a call to `record_failed_X` (`record_failed_
+transcription` vs `record_failed_download`), then on `$@` print an
+error-prefixed "failed to queue for retry too" line to STDERR, else
+print a `NEW TG X FAILED` line naming the retry command. The two blocks
+differed only in which store method was called (and its kind-specific
+extra args - `media_kind`/`caption_note` for download only), the
+error-prefix label (`TRANSCRIBE ERROR` vs `MEDIA DOWNLOAD ERROR`), the
+success line's kind text (`transcription failed` vs
+`$media_kind$caption_note`), and the retry command name (`d2
+tg.retry-transcription --all` vs `d2 tg.retry-download --all`). The
+same "found it twice, extract it" convention this project has followed
+repeatedly (TGT-167/170/171/172/177/181/279/310/313/314/317/318/320/
+322/324).
+
+Fix: a new `_queue_failed_and_report(%args)` helper takes a
+`record_coderef` (wrapping the kind-specific record call, since the two
+store methods take different arguments) plus the kind-specific text
+values, and does the eval-wrap/report shape once. Both call sites now
+call it with just their own values. Pure refactor: byte-identical
+STDERR/stdout output for every existing scenario.
+
+Test strategy: matching TGT-313/318/320/324's own precedent for a
+pure-extraction refactor, a genuinely-red `t/327-dispatch-queue-failed-
+and-report-helper.t` (`D2TG::Poller::Dispatch->can('_queue_failed_and_
+report')`) was written and confirmed failing before the helper existed.
+Full suite green after with zero other test file edits needed
+(`Files=241, Tests=2968`) - the strongest possible confirmation that
+this was a genuinely behavior-preserving extraction. (One unrelated
+flaky failure, `t/66-lock-last-poller-wins.t`, was confirmed to pass in
+isolation - a known fork/timing-sensitive test, not a regression from
+this change.)
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow extraction
+- the helper's own body is a verbatim reuse of the 2 call sites'
+pre-existing eval/print statements, parameterized by a coderef and
+plain text values (no new string interpolation of untrusted input,
+`$sender`/`$media_kind`/etc. were already interpolated identically at
+both original call sites); no string eval, no shell/exec/system/
+backtick/piped-open patterns, no change to what reaches storage or the
+retry queue.

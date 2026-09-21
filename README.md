@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.58).** REFACTOR (TGT-327, found via a
+live JOB-004 improvement hunt): `D2TG::Poller::Dispatch`'s
+voice-transcription-failure and photo/document-download-failure branches
+both independently implemented the identical shape - eval-wrap a call to
+`record_failed_X`, then on `$@` print an error-prefixed "failed to queue
+for retry too" line to STDERR, else print a success line naming the
+retry command. Extracted into one shared `_queue_failed_and_report`
+helper, called from both branches. Pure refactor: byte-identical
+stdout/STDERR behavior for every existing scenario, zero other test file
+edits needed.
+
 **Status: early implementation (v2.57).** BUGFIX (TGT-326, found via a
 live JOB-003 hourly bug hunt): `D2TG::Poller::Format::sanitize_for_stdout`
 stripped the 7-bit control ranges (`0x00-0x08`, `0x0B-0x1F` including ESC

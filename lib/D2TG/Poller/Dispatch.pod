@@ -121,6 +121,22 @@ treatment. Pure extraction - byte-identical output and store-write
 behavior to the pre-TGT-313 duplicated code for every existing
 scenario.
 
+=head2 _queue_failed_and_report(%args)
+
+TGT-327 (found via a live JOB-004 improvement hunt): private helper
+shared by C<handle_plain_update>'s voice-transcription-failure branch
+and photo/document-download-failure branch, both of which used to
+duplicate an identical shape - eval-wrap a call to C<record_failed_X>,
+then on C<$@> print an error-prefixed "failed to queue for retry too"
+line to STDERR, else print a success line naming the retry command.
+Takes C<record_coderef> (a coderef wrapping the kind-specific
+C<record_failed_transcription>/C<record_failed_download> call, since
+the two store methods take different arguments), C<error_prefix>,
+C<ts>, C<chat_id>, C<sender>, C<success_label>, C<success_note>,
+C<retry_command>, C<bot_token>. Pure extraction - byte-identical
+STDERR/stdout output to the pre-TGT-327 duplicated code for every
+existing scenario.
+
 =head2 handle_plain_update($update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, $transcribe_voice, $download_media)
 
 The fallback branch for every update that is neither a

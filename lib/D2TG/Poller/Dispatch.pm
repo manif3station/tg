@@ -34,6 +34,35 @@ sub _announce_and_record {
     return;
 }
 
+# TGT-327 (found via a live JOB-004 improvement hunt): handle_plain_update's
+# voice-transcription-failure branch and photo/document-download-failure
+# branch used to duplicate this exact shape - eval-wrap a call to
+# record_failed_X, then on $@ print an ERROR-PREFIX "failed to queue for
+# retry too" line to STDERR, else print a success line naming the retry
+# command. Both branches now call this one helper instead, differing only
+# in which record call they pass (via a coderef, since the two store
+# methods take different arguments) and their own kind-specific text.
+sub _queue_failed_and_report {
+    my (%args) = @_;
+    my ( $record_coderef, $error_prefix, $ts, $chat_id, $sender, $success_label, $success_note, $retry_command, $bot_token )
+      = @args{qw(record_coderef error_prefix ts chat_id sender success_label success_note retry_command bot_token)};
+
+    eval { $record_coderef->() };
+    if ($@) {
+        my $queue_error = $@;
+        $queue_error =~ s/\n\z//;
+        print STDERR "$error_prefix [$chat_id] $sender: "
+          . "failed to queue for retry too: $queue_error\n";
+    }
+    else {
+        print "$ts $success_label [$chat_id] $sender: "
+          . "$success_note - queued for retry, "
+          . "RETRY WITH: $retry_command"
+          . D2TG::Poller::Format::bot_flag($bot_token) . "\n";
+    }
+    return;
+}
+
 sub handle_message_reaction {
     my ( $reaction, $store, $bot_token ) = @_;
     my $chat_id = $reaction->{chat}{id};
@@ -245,26 +274,24 @@ sub handle_plain_update {
             );
         }
         elsif ( $store && defined $message_id && defined $file_id ) {
-            eval {
-                $store->record_failed_transcription(
-                    $chat_id, $message_id, $file_id,
-                    sender  => $sender,
-                    error   => $transcript,
-                    bot_key => $bot_token,
-                );
-            };
-            if ($@) {
-                my $queue_error = $@;
-                $queue_error =~ s/\n\z//;
-                print STDERR "TRANSCRIBE ERROR [$chat_id] $sender: "
-                  . "failed to queue for retry too: $queue_error\n";
-            }
-            else {
-                print "$ts NEW TG VOICE FAILED [$chat_id] $sender: "
-                  . "transcription failed - queued for retry, "
-                  . "RETRY WITH: d2 tg.retry-transcription --all"
-                  . D2TG::Poller::Format::bot_flag($bot_token) . "\n";
-            }
+            _queue_failed_and_report(
+                record_coderef => sub {
+                    $store->record_failed_transcription(
+                        $chat_id, $message_id, $file_id,
+                        sender  => $sender,
+                        error   => $transcript,
+                        bot_key => $bot_token,
+                    );
+                },
+                error_prefix  => 'TRANSCRIBE ERROR',
+                ts            => $ts,
+                chat_id       => $chat_id,
+                sender        => $sender,
+                success_label => 'NEW TG VOICE FAILED',
+                success_note  => 'transcription failed',
+                retry_command => 'd2 tg.retry-transcription --all',
+                bot_token     => $bot_token,
+            );
         }
     }
     elsif ( ( $media_kind eq 'photo' || $media_kind eq 'document' ) && $download_media ) {
@@ -290,28 +317,26 @@ sub handle_plain_update {
                 }
             }
             elsif ( $store && defined $message_id && defined $file_id ) {
-                eval {
-                    $store->record_failed_download(
-                        $chat_id, $message_id, $file_id,
-                        sender       => $sender,
-                        media_kind   => $media_kind,
-                        caption_note => $caption_note,
-                        error        => $result_or_error,
-                        bot_key      => $bot_token,
-                    );
-                };
-                if ($@) {
-                    my $queue_error = $@;
-                    $queue_error =~ s/\n\z//;
-                    print STDERR "MEDIA DOWNLOAD ERROR [$chat_id] $sender: "
-                      . "failed to queue for retry too: $queue_error\n";
-                }
-                else {
-                    print "$ts NEW TG MEDIA FAILED [$chat_id] $sender: "
-                      . "$media_kind$caption_note - queued for retry, "
-                      . "RETRY WITH: d2 tg.retry-download --all"
-                      . D2TG::Poller::Format::bot_flag($bot_token) . "\n";
-                }
+                _queue_failed_and_report(
+                    record_coderef => sub {
+                        $store->record_failed_download(
+                            $chat_id, $message_id, $file_id,
+                            sender       => $sender,
+                            media_kind   => $media_kind,
+                            caption_note => $caption_note,
+                            error        => $result_or_error,
+                            bot_key      => $bot_token,
+                        );
+                    },
+                    error_prefix  => 'MEDIA DOWNLOAD ERROR',
+                    ts            => $ts,
+                    chat_id       => $chat_id,
+                    sender        => $sender,
+                    success_label => 'NEW TG MEDIA FAILED',
+                    success_note  => "$media_kind$caption_note",
+                    retry_command => 'd2 tg.retry-download --all',
+                    bot_token     => $bot_token,
+                );
             }
         }
     }
