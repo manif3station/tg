@@ -7311,4 +7311,21 @@ externally-influenced value reaching either regex is `_probe_duration`'s
 own `ffprobe` stdout capture, already read via a fixed-argument
 `fork_in_own_process_group` call (no shell interpolation of the audio
 path or any other value) - unchanged by this fix.
-piped-open patterns, no change to what reaches storage.
+
+## TGT-321: Transcribe.pod/docs/commands.md drifted after TGT-320's fix
+
+Found via a live JOB-005 doc-accuracy hunt, 2026-09-21, the same day
+TGT-320 shipped. Two real drift issues: (1) `lib/D2TG/Transcribe.pod`'s
+`select_model()` section still described the old character-class-only
+regex behavior and never mentioned the new `_looks_like_duration`
+helper. (2) `docs/commands.md`'s `D2TG::Transcribe` row still said "now
+301 lines" - the module is now 311 lines after TGT-320's addition. Also
+self-corrected an error on TGT-320's own card: its REQ-028/REQ-035
+required-action proofs incorrectly claimed `Transcribe.pm` has no
+separate `.pod` file - it does (`Transcribe.pod`), simply missed during
+that ticket's own documentation-column pass. Fixed both docs; while
+editing this file, also found and fixed a stray leftover duplicate
+sentence fragment ("piped-open patterns, no change to what reaches
+storage.") left at the very end of the file from an earlier same-day
+edit - removed as unrelated dangling text with no surrounding context.
+Documentation-only ticket, no code change.

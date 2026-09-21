@@ -36,6 +36,20 @@ inside this function's own 300-second "stays on medium" boundary) - see
 L<transcribe()|/transcribe($audio_path, model =E<gt> $name, runner =E<gt> \&coderef, duration_fn =E<gt> \&coderef)>'s automatic retry-on-timeout for what actually guarantees
 a long/slow clip doesn't get lost.
 
+"Parsed"/"unparsed" above is decided by a shared C<_looks_like_duration($str)>
+helper (TGT-320, found via a live JOB-003 hourly bug hunt) - also used
+by L<_probe_duration()|/_probe_duration($audio_path)> below - validating a real single decimal
+number (C<< /^\s*\d+(?:\.\d+)?\s*$/ >>), not merely a string built from
+the digits-and-dots character class. The earlier, looser check accepted
+a structurally invalid value like C<"1.2.3"> or C<"...">, which then
+still reached a numeric comparison and raised a bare Perl C<"isn't
+numeric"> warning straight to STDERR before falling back to C<medium>
+anyway - the same unclassified-raw-output-leak class this project has
+fixed repeatedly elsewhere (TGT-181/183/186/195/293/306/316). A
+malformed value is now rejected by the validation itself, so no numeric
+comparison or coercion is ever attempted against it and no warning can
+be raised.
+
 =head2 _scaled_timeout($duration_seconds)
 
 TGT-140 (external review finding, confirmed live by Michael): C<$TIMEOUT>
