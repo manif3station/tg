@@ -60,6 +60,16 @@ sub _scaled_timeout {
     return $t;
 }
 
+# TGT-320: shared by select_model and _probe_duration - both need to
+# know whether a string is a genuine single decimal number (not just
+# built from the digits-and-dots character class, which also matches
+# malformed values like '1.2.3' or '...' and would silently numify with
+# a Perl "isn't numeric" warning under the old per-site regex).
+sub _looks_like_duration {
+    my ($str) = @_;
+    return defined $str && $str =~ /^\s*\d+(?:\.\d+)?\s*$/;
+}
+
 sub select_model {
     my ($duration) = @_;
 
@@ -74,7 +84,7 @@ sub select_model {
     # one, and must keep falling back to 'medium' exactly as before
     # (t/74's own documented invariant - a probe failure never behaves
     # worse than pre-TGT-100 code did).
-    my $parsed = defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+    my $parsed = _looks_like_duration($duration);
     $duration = $parsed ? $duration : 0;
 
     return 'base'   if $parsed && $duration > 0 && $duration <= 60;
@@ -163,7 +173,7 @@ sub _probe_duration {
     # to 0 seconds, i.e. select_model's 'medium' tier - the same model
     # transcribe() always used before this feature existed, so a probe
     # failure never behaves worse than pre-TGT-100 code did.
-    return 0 unless defined $duration && $duration =~ /^\s*[\d.]+\s*$/;
+    return 0 unless _looks_like_duration($duration);
     return $duration + 0;
 }
 

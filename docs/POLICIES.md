@@ -7259,4 +7259,56 @@ board-visible concept this board's own policy set doesn't already
 cover, and none touches this skill's own code, dependencies, or
 documented behavior. Conclusion: no policy change needed for this
 upgrade.
+
+## TGT-320: select_model/_probe_duration's regex accepted malformed multi-dot numbers, leaking a Perl numeric warning
+
+Found via a live JOB-003 hourly bug hunt, 2026-09-21, reproduced in the
+`perl-test` Docker container. `D2TG::Transcribe::select_model` and
+`D2TG::Transcribe::_probe_duration` both validated a duration string
+with the same regex, `/^\s*[\d.]+\s*$/` - this only checks the
+character class (digits and dots), not that the string is a
+structurally valid single decimal number. A string like `'1.2.3'`
+(two decimal points) or `'...'` (no digits at all) passes this check,
+and is then used in a numeric comparison (`select_model`'s `$duration
+> 0`/`<=`) or numeric coercion (`_probe_duration`'s `$duration + 0`).
+Perl numifies these leniently (stopping at the first invalid
+character) but raises a bare `"Argument ... isn't numeric in numeric
+gt (>)"` runtime warning straight to STDERR - the same
+unclassified-raw-output-leak class this project has fixed repeatedly
+(TGT-181/183/186/195/293/306/316), just via a different code path.
+Live-reproduced: `select_model('1.2.3')` and `select_model('...')`
+both printed the warning and returned a tier derived from an implicit
+partial-numeric coercion rather than a real validated duration.
+
+Fix: both call sites now share a single `_looks_like_duration($str)`
+helper validating `/^\s*\d+(?:\.\d+)?\s*$/` - a real single decimal
+number, with at most one decimal point followed by more digits. A
+string that fails this check is treated exactly like any other
+unparseable duration (falls back to 0/`medium` tier), with no numeric
+coercion or comparison ever attempted against it, so no warning can
+ever be raised.
+
+Test strategy: a genuinely red `t/320-select-model-malformed-numeric-
+string.t` asserted `select_model('1.2.3')`/`select_model('...')` both
+return `medium` with zero captured Perl warnings - confirmed failing
+(`Failed 2/3 subtests`, captured the exact "isn't numeric" warnings)
+against the pre-fix regex before the fix landed. The existing
+`t/74`/`t/179`/`t/251`/`t/263` suites (genuinely valid durations and
+the fully-non-numeric `'garbage'` case, which has zero digit/dot
+characters and was already correctly rejected) all pass unchanged.
+Since both call sites shared the identical flawed regex, the fix also
+extracted a single `_looks_like_duration` helper (matching this
+project's own TGT-279/313/314/318 "found it twice, extract it"
+precedent) - a `can()`-based structural assertion confirms the helper
+exists. Full suite green after (`Files=238, Tests=2955`). 100%
+statement + subroutine coverage confirmed on `lib/D2TG/Transcribe.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure input-validation
+tightening plus a same-behavior extraction - the new regex is a
+literal pattern, never built from untrusted input; no string eval, no
+shell/exec/system/backtick/piped-open pattern touched; the only
+externally-influenced value reaching either regex is `_probe_duration`'s
+own `ffprobe` stdout capture, already read via a fixed-argument
+`fork_in_own_process_group` call (no shell interpolation of the audio
+path or any other value) - unchanged by this fix.
 piped-open patterns, no change to what reaches storage.

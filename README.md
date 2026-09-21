@@ -1,5 +1,19 @@
 # tg
 
+**Status: early implementation (v2.54).** BUGFIX (TGT-320, found via a
+live JOB-003 hourly bug hunt): `D2TG::Transcribe::select_model` and
+`_probe_duration` both validated a duration string with a
+character-class-only regex (`/^\s*[\d.]+\s*$/`) that accepted
+structurally invalid numbers like `"1.2.3"` or `"..."` - Perl then
+numified these leniently while raising a bare `"Argument ... isn't
+numeric"` warning straight to STDERR, the same unclassified-raw-
+output-leak class this project has fixed repeatedly (TGT-181/183/186/
+195/293/306/316) via a different code path. Both call sites now share
+a single `_looks_like_duration($str)` helper validating a real single
+decimal number shape (`/^\s*\d+(?:\.\d+)?\s*$/`); a malformed value
+falls back to the same unparseable-duration behavior (0/medium tier)
+with zero warnings.
+
 **Status: early implementation (v2.53).** REFACTOR (TGT-318, found via
 a JOB-004 improvement hunt reviewing `D2TG::Store::Schema` after
 TGT-317's own cleanup of the same file): 6 call sites duplicated the
