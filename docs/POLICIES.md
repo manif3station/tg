@@ -7403,3 +7403,21 @@ system/backtick/piped-open pattern, no string eval, no change to what
 reaches storage or the network. The flag value itself
 (`$reply_to_message_id`) is still separately validated numeric by
 `cli/reply.pl` before use, unchanged by this fix.
+
+## TGT-323: Tira upgrade-gate review (5.163 -> 5.174) - no board policy change needed
+
+Auto-raised by Tira's own upgrade gate when the host's Tira install
+moved from 5.163 to 5.174. Ran `d2 tira.policy.undeclared` (empty
+result - no undeclared rules for this board to answer) and read all 11
+Changes entries between 5.163 and 5.174 (TKT-1117, TKT-1115, TKT-1096,
+TKT-1090, TKT-1094, TKT-1082, TKT-1081, and others across 5.164-5.174) -
+internal Tira engine performance work (a 4x-faster `record_list
+(refs_only=>1)` fast path), CLI dispatch-completeness fixes (a
+regex-alternation dispatch route t/410's own command inventory had
+missed), confirmation-stamping consistency for `record_discard`/
+`record_restore`, a `comment.add --key-detail` convenience flag, and a
+clock-vs-stored-stamp error-message accuracy fix. None introduces a new
+event type, command, or board-visible concept this board's own policy
+set doesn't already cover, and none touches this skill's own code,
+dependencies, or documented behavior. Conclusion: no policy change
+needed for this upgrade.
