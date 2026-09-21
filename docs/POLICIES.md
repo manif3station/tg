@@ -7329,3 +7329,77 @@ sentence fragment ("piped-open patterns, no change to what reaches
 storage.") left at the very end of the file from an earlier same-day
 edit - removed as unrelated dangling text with no surrounding context.
 Documentation-only ticket, no code change.
+
+## TGT-322: --reply-to-message-id moved from trailing-only to leading-only recognition
+
+Found via a live JOB-003 hourly bug hunt, 2026-09-21. TGT-040/042
+originally recognized `--reply-to-message-id` only in the trailing
+position (the last two elements of `cli/reply.pl`'s own argument list),
+deliberately, to avoid a whole-list scan colliding with free reply
+text. That trailing-only design still left a real, reachable gap: a
+reply message that legitimately ENDS with the literal words
+`--reply-to-message-id <word>` (e.g. a question about the flag itself)
+was silently corrupted - live-reproduced:
+`D2TG::Reply::Args::parse_cli_args('12345','how','do','I','use','--reply-to-message-id','5')`
+returned `$text = 'how do I use'` (the operator's real message
+truncated) and `$reply_to_message_id = '5'` (fabricated from unrelated
+content), instead of preserving the full text. `docs/POLICIES.md`'s
+own earlier TGT-042 section (above) claimed "there is no longer any
+ambiguity between this is reply text and this is the flag" - that
+claim was an overstatement of what TGT-042 actually closed (the
+ambiguity was narrowed from "any position" to "trailing position",
+not eliminated).
+
+Since TGT-042's trailing-only choice was itself a deliberate, reasoned
+design decision (documented in `cli/reply.pl`'s own POD), reversing it
+unilaterally would have been a real product/UX tradeoff, not a pure
+bugfix judgment call - raised as Q-019 (with a voice note and 3
+options) rather than decided alone. Michael chose the structural fix:
+recognize `--reply-to-message-id` only in the LEADING position instead
+(immediately before `chat_id`), the same principle TGT-227 already
+proved for `--bot` - a leading flag never scans into the free-text
+region at all, so it can never collide with reply text no matter what
+that text contains, fully eliminating the ambiguity rather than merely
+narrowing it further.
+
+Fix: `D2TG::Reply::Args::parse_cli_args` now recognizes
+`--reply-to-message-id` only when it's the very first argument;
+`D2TG::Poller::Format::print_reply_template`'s `REPLY WITH` output
+moved `--reply-to-message-id` before `chat_id` to match, mirroring its
+own existing `--bot`-before-`chat_id` convention (TGT-227);
+`cli/reply.pl`'s own Usage line and POD were updated to document the
+new leading position. A bare leading `--reply-to-message-id` with no
+value, or immediately followed by another flag, now dies
+`--reply-to-message-id requires a value` (matching `--bot`/`--db`'s
+own convention) instead of the old trailing-only code's silent
+fall-through into ordinary text.
+
+Self-caught during the same diff (per this project's own "found it
+twice, extract it" convention, matching TGT-320's own precedent
+earlier the same day): the new leading-flag-recognition block in
+`parse_cli_args` duplicated `extract_bot_flag`'s own identical shape -
+collapsed into a new shared `_extract_leading_flag_value($args,
+$flag)` helper, now backing both.
+
+Test strategy: `t/34-reply-arg-parsing-trailing-flag.t` (kept its
+original filename/number despite the subject moving from trailing to
+leading - the historical arc is documented inline) was rewritten to
+assert the new leading-only contract, including TGT-322's own headline
+collision case (a message ending in the former-collision words is now
+preserved verbatim) and the new bare-flag-dies case - confirmed
+genuinely red against the pre-fix code. `t/21`/`t/32`/`t/51`/`t/217`
+(REPLY WITH format / CLI-level validation assertions) and `t/04`
+(a looser `REPLY WITH` prefix regex) were updated to the new leading
+format; `t/227`/`t/79` needed no change. Full suite green after
+(`Files=238, Tests=2961`) - `t/66-lock-last-poller-wins.t`'s own
+already-known `-j4` parallel-load flake reproduced once during this
+run and passed cleanly standalone immediately after, unrelated to this
+diff. 100% statement + subroutine coverage confirmed on
+`lib/D2TG/Reply/Args.pm` and `lib/D2TG/Poller/Format.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure CLI-argument-parsing
+position change plus a same-behavior extraction - no new shell/exec/
+system/backtick/piped-open pattern, no string eval, no change to what
+reaches storage or the network. The flag value itself
+(`$reply_to_message_id`) is still separately validated numeric by
+`cli/reply.pl` before use, unchanged by this fix.

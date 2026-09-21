@@ -46,7 +46,7 @@ sub capture_stdout {
     # both a FETCH WITH and a REPLY WITH template line.
     is( ( split /\n/, $out ), 3,  'announce line plus FETCH WITH plus REPLY WITH template lines were printed' );
     like( $out, qr/FETCH WITH: d2 tg\.fetch 999/, 'a FETCH WITH template line is printed' );
-    like( $out, qr/REPLY WITH: d2 tg\.reply 999/, 'a REPLY WITH template line is printed' );
+    like( $out, qr/REPLY WITH: d2 tg\.reply .*999/, 'a REPLY WITH template line is printed' );
     is( $next_offset, 56,         'offset advances past the processed update' );
 }
 

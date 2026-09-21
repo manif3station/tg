@@ -57,7 +57,7 @@ sub capture_stdout {
     # FETCH WITH command.
     like( $out, qr/NEW TG \[999\] ada \(msg #777\)/, 'the announce line includes the message_id' );
     like( $out, qr/FETCH WITH: d2 tg\.fetch 999 777/, 'a FETCH WITH command names the same message_id' );
-    like( $out, qr/REPLY WITH: d2 tg\.reply 999 "\.\.\." --reply-to-message-id 777/, 'the REPLY WITH template includes --reply-to-message-id' );
+    like( $out, qr/REPLY WITH: d2 tg\.reply --reply-to-message-id 777 999 "\.\.\."/, 'the REPLY WITH template includes --reply-to-message-id (leading, TGT-322)' );
 }
 
 # --- D2TG::Telegram: send_message/send_voice accept an optional reply_to_message_id ---

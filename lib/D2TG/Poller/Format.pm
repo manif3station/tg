@@ -122,9 +122,15 @@ sub print_reply_template {
 
     # TGT-227: --bot must be printed BEFORE $chat_id, not after - see
     # D2TG::Poller's own forwarder POD for the full incident history.
+    #
+    # TGT-322: --reply-to-message-id moved from AFTER the free-text
+    # placeholder to BEFORE $chat_id too, for the identical reason -
+    # D2TG::Reply::Args::parse_cli_args now only recognizes it in the
+    # leading position (a trailing flag could collide with reply text
+    # that legitimately ends with those same two literal words).
     my $bot_flag   = bot_flag($bot_token);
     my $reply_flag = defined $message_id ? " --reply-to-message-id $message_id" : '';
-    print qq{REPLY WITH: d2 tg.reply$bot_flag $chat_id "..."$reply_flag\n};
+    print qq{REPLY WITH: d2 tg.reply$bot_flag$reply_flag $chat_id "..."\n};
     return;
 }
 

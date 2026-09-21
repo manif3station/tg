@@ -43,7 +43,7 @@ setup_mandatory_db_env( $Bin, tempdir( CLEANUP => 1 ) );
 }
 
 {
-    my $out = `$reply_cli 123456 hello --reply-to-message-id abc 2>/tmp/d2tg-reply-stderr4.$$`;
+    my $out = `$reply_cli --reply-to-message-id abc 123456 hello 2>/tmp/d2tg-reply-stderr4.$$`;
     my $rc  = $? >> 8;
     my $err = do { open my $fh, '<', "/tmp/d2tg-reply-stderr4.$$" or die $!; local $/; <$fh> };
     unlink "/tmp/d2tg-reply-stderr4.$$";

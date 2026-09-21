@@ -1,5 +1,20 @@
 # tg
 
+**Status: early implementation (v2.55).** BUGFIX (TGT-322, found via a
+live JOB-003 hourly bug hunt): a reply message that legitimately ended
+with the literal words `--reply-to-message-id <word>` was silently
+corrupted - TGT-040/042's own trailing-only recognition still let those
+two trailing tokens collide with ordinary reply text. Raised as a
+question (Q-019) rather than reversed unilaterally, since the
+trailing-only design was itself a deliberate, reasoned choice - Michael
+chose the structural fix: `--reply-to-message-id` now recognized only
+in a LEADING flag position (before `chat_id`), matching TGT-227's own
+`--bot` precedent, which eliminates the ambiguity entirely rather than
+merely narrowing it. The poller's own `REPLY WITH` template output
+moved `--reply-to-message-id` before `chat_id` to match. A new shared
+`_extract_leading_flag_value` helper collapses this with
+`extract_bot_flag`'s own identical leading-flag shape.
+
 **Status: early implementation (v2.54).** BUGFIX (TGT-320, found via a
 live JOB-003 hourly bug hunt): `D2TG::Transcribe::select_model` and
 `_probe_duration` both validated a duration string with a

@@ -50,7 +50,7 @@ sub capture_stdout {
 
     like( $out, qr/NEW TG EDIT \[444\] ada: corrected text \(msg #88, edited\)/,
         'a text edit still prints its NEW TG EDIT line' );
-    like( $out, qr/REPLY WITH: d2 tg\.reply 444 "\.\.\." --reply-to-message-id 88/,
+    like( $out, qr/REPLY WITH: d2 tg\.reply --reply-to-message-id 88 444 "\.\.\."/,
         'a text edit ALSO prints a REPLY WITH template, matching every other actionable branch' );
 }
 
@@ -78,7 +78,7 @@ sub capture_stdout {
 
     like( $out, qr/NEW TG EDIT \[666\] carl: \(no text\) \(msg #99, edited\)/,
         'a caption/media-only edit still prints its NEW TG EDIT line' );
-    like( $out, qr/REPLY WITH: d2 tg\.reply 666 "\.\.\." --reply-to-message-id 99/,
+    like( $out, qr/REPLY WITH: d2 tg\.reply --reply-to-message-id 99 666 "\.\.\."/,
         'a caption/media-only edit ALSO prints a REPLY WITH template' );
 }
 

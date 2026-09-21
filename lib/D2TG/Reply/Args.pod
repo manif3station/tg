@@ -9,6 +9,7 @@ D2TG::Reply::Args - CLI argv-parsing helpers shared by cli/reply.pl and other cl
     my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag(@ARGV);
     my ( $bot_token, @rest ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
     my ( $chat_id, $text, $reply_to_message_id ) = D2TG::Reply::Args::parse_cli_args(@ARGV);
+    my $value = D2TG::Reply::Args::_extract_leading_flag_value( \@args, '--some-flag' );
 
 =head1 DESCRIPTION
 
@@ -23,15 +24,35 @@ L<D2TG::Store::RetryQueue>/L<D2TG::Config::Paths>'s own precedent.
 
 =head1 FUNCTIONS
 
+=head2 _extract_leading_flag_value($args, $flag)
+
+TGT-322 (found via a live JOB-003 hourly bug hunt, extracted in the
+same ticket that introduced its second call site - the same "found it
+twice, extract it" convention this project has followed since
+TGT-167/170/171/172/177/181/279/310/313/314/317/318/320): both
+L<extract_bot_flag()|/extract_bot_flag(@args)> and
+L<parse_cli_args()|/parse_cli_args(@ARGV)> independently implemented
+the identical shape - if the flag is the very first element of the
+array, shift it off and shift-and-validate the following value via
+L<D2TG::Config::Flags/shift_flag_value>; otherwise return C<undef> and
+leave the array untouched. Takes C<$args> by array reference (mutating
+it in place on a match, matching L<D2TG::Config::Flags/shift_flag_value>'s
+own by-reference convention) and the flag's own literal string. Pure
+extraction - both callers are byte-identical in behavior to their
+pre-extraction selves.
+
 =head2 extract_bot_flag(@args)
 
 Parses a leading C<--bot <token>> pair off the front of C<@args> (TGT-057),
-returning C<($bot_token, @remaining_args)>. C<$bot_token> is C<undef> when
+returning C<($bot_token, @remaining_args)> - via
+L<_extract_leading_flag_value()|/_extract_leading_flag_value($args, $flag)> (TGT-322).
+C<$bot_token> is C<undef> when
 C<--bot> isn't the first argument - C<cli/reply.pl> falls back to C<D2TG::Config::token>
 (C<D2TG_TOKEN>) in that case, unchanged from before this ticket. Leading,
 not whole-list, for the same collision-avoidance reason as
 C<D2TG::Config::Flags::extract_db_flag> and C<--reply-to-message-id>'s
-trailing-only recognition (TGT-042): free reply text passed as multiple
+own leading-only recognition (TGT-042, moved from trailing-only by
+TGT-322): free reply text passed as multiple
 unquoted shell words could otherwise contain the literal token C<--bot>
 and be misread as the flag.
 
@@ -81,16 +102,38 @@ itself). L<extract_bot_flag()|/extract_bot_flag(@args)> itself is unchanged.
 
 Parses C<cli/reply.pl>'s raw argument list into C<($chat_id, $text,
 $reply_to_message_id)> (TGT-042). C<--reply-to-message-id <id>> is
-recognized I<only> in the trailing position - the last two elements of
-the argument list, matching exactly how the poller's own C<REPLY WITH>
-template (TGT-040) always appends it. This is deliberately narrower than
-scanning the whole argument list for that token: reply text passed as
-multiple unquoted shell words could otherwise legitimately contain the
-literal string C<--reply-to-message-id> (e.g. discussing the flag
-itself), which a whole-list scan would misinterpret as the flag and
-silently corrupt the text. C<$reply_to_message_id> is C<undef> when the
-flag isn't given (or isn't trailing) - unchanged from before this
-ticket. Does not validate that C<$chat_id> or C<$reply_to_message_id>
+recognized I<only> in the leading position - immediately before
+C<chat_id> - via L<_extract_leading_flag_value()|/_extract_leading_flag_value($args, $flag)>, matching
+exactly how the poller's own C<REPLY WITH> template (TGT-040) now
+prints it (TGT-322 moved both).
+
+TGT-042 originally made this trailing-only (the last two elements of
+the argument list) specifically to avoid a whole-list scan colliding
+with free reply text. TGT-322 (found via a live JOB-003 hourly bug
+hunt) found that trailing-only recognition still left a real gap: a
+reply message that legitimately I<ends> with the literal words
+C<--reply-to-message-id <word>> (e.g. a question about the flag
+itself) was silently corrupted - those two trailing tokens were
+stripped and misread as the flag, discarding the operator's real
+message and fabricating a bogus C<reply_to_message_id> from unrelated
+content. Reproduced live:
+C<parse_cli_args('12345','how','do','I','use','--reply-to-message-id','5')>
+returned C<$text = 'how do I use'> and
+C<$reply_to_message_id = '5'> instead of preserving the full text.
+Since TGT-042's trailing-only design was itself a deliberate, reasoned
+choice (not an oversight), this was raised as a question (Q-019) rather
+than reversed unilaterally - Michael's answer chose the structural fix:
+recognize the flag only in the leading position instead, the same
+principle L<extract_bot_flag()|/extract_bot_flag(@args)>'s own TGT-227
+fix already established for C<--bot> - a leading flag never scans into
+the free-text region at all, so it can never collide with reply text no
+matter what that text contains. A bare leading C<--reply-to-message-id>
+with no value, or immediately followed by another flag-like token, now
+dies C<--reply-to-message-id requires a value> (matching
+C<--bot>/C<--db>'s own existing convention) instead of the old
+trailing-only code's silent fall-through into ordinary text.
+C<$reply_to_message_id> is C<undef> when the flag isn't given (or isn't
+leading). Does not validate that C<$chat_id> or C<$reply_to_message_id>
 are numeric; C<cli/reply.pl> does that itself before using the parsed
 result.
 

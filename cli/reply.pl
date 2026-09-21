@@ -83,7 +83,7 @@ if ( !defined $chat_id
     || !length $text
     || ( defined $reply_to_message_id && $reply_to_message_id !~ /^\d+$/ ) )
 {
-    print STDERR "Usage: d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]\n";
+    print STDERR "Usage: d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] [--reply-to-message-id <id>] <chat_id> <text...>\n";
     exit 2;
 }
 
@@ -173,7 +173,7 @@ reply - send a text + voice-note reply to a chat, dispatched as C<d2 tg.reply>
 
 =head1 SYNOPSIS
 
-    d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]
+    d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] [--reply-to-message-id <id>] <chat_id> <text...>
 
 =head1 DESCRIPTION
 
@@ -194,10 +194,10 @@ fallback) is recognized only in the I<leading> position - the very
 first one or two arguments, before C<chat_id> - unlike
 L<D2TG::Config::Flags/extract_db_flag>'s whole-list scan used by the other
 C<cli/tg.*> entrypoints. This is deliberate, for the same reason
-C<--reply-to-message-id> is trailing-only (TGT-042): a whole-list scan
-here could misinterpret reply text that happens to contain the literal
-token C<--db> as multiple unquoted shell words. Resolution otherwise
-matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>. The
+C<--reply-to-message-id> is now leading-only too (TGT-322, see below): a
+whole-list scan here could misinterpret reply text that happens to
+contain the literal token C<--db> as multiple unquoted shell words.
+Resolution otherwise matches C<d2 tg.poller>'s - see L<D2TG::Config/resolve_alias_dir>. The
 resolved directory (or a C<TIRA_HOME> fallback) must already exist -
 refuses to start otherwise rather than creating it (TGT-090, see
 L<D2TG::Config/require_existing_base_dir>). C<--bot
@@ -254,17 +254,29 @@ argument prints the same C<Usage> message and exits 2, without
 constructing L<D2TG::Telegram> or attempting any network call.
 
 C<--reply-to-message-id <id>> (TGT-040) is optional and is recognized
-only in the I<trailing> position - the very last two arguments, matching
+only in the I<leading> position - immediately before C<chat_id>, matching
 exactly how the poller's own C<REPLY WITH> template always prints it
-(TGT-042: recognizing it anywhere in the argument list would make free
-reply text ambiguous with the flag itself whenever that text is passed
-as multiple unquoted shell words containing the literal token
-C<--reply-to-message-id>). When given, both the voice and text sends
-carry Telegram's own C<reply_to_message_id>, so the reply threads
-natively under the original message in Telegram's UI instead of arriving
-as a fresh, unthreaded message. See L<parse_cli_args()|D2TG::Reply::Args/parse_cli_args(@ARGV)>.
+(TGT-042 originally made it trailing-only instead, to avoid a whole-list
+scan colliding with free reply text passed as multiple unquoted shell
+words - TGT-322, found via a live JOB-003 hourly bug hunt, found that
+trailing-only still left a real gap: a reply message legitimately ENDING
+with the literal words C<--reply-to-message-id <word>> was silently
+corrupted, the same ambiguity class TGT-042 meant to close. Raised as a
+question rather than reversed unilaterally, since TGT-042's trailing-only
+design was itself a deliberate, reasoned choice - Michael's answer moved
+it to leading-only instead, the same structural fix TGT-227 already
+proved for C<--bot>: a leading flag never scans into the free-text region
+at all, so it can never collide with reply text no matter what that text
+contains). When given, both the voice and text sends carry Telegram's own
+C<reply_to_message_id>, so the reply threads natively under the original
+message in Telegram's UI instead of arriving as a fresh, unthreaded
+message. See L<parse_cli_args()|D2TG::Reply::Args/parse_cli_args(@ARGV)>.
 Omitting it is unchanged from before TGT-040 - no C<reply_to_message_id>
-is sent.
+is sent. A bare C<--reply-to-message-id> with no value following it, or
+immediately followed by another flag, now dies C<--reply-to-message-id
+requires a value> (matching C<--bot>/C<--db>'s own existing convention),
+rather than the old trailing-only code's silent fall-through into
+ordinary reply text.
 
 When C<--reply-to-message-id> is given, that message is also marked read
 in L<D2TG::Store> (TGT-046) once the reply has actually been sent
