@@ -5240,6 +5240,13 @@ original `_ensure_schema` body; `D2TG::Store::new` now calls it
 directly instead of via a `$self->` instance method.
 `D2TG::Store.pm` is now 232 lines - comfortably under the cap, closing
 out its own decomposition chain after 4 tickets (TGT-278/279/280).
+(Update, TGT-325, found via a scheduled JOB-005 doc-accuracy hunt: this
+was the state at TGT-280's own time; later tickets, e.g. TGT-316's
+`PrintError` fix and TGT-234's `admin_chat_id` seeding, grew the module
+further - it is 247 lines as of TGT-325, still comfortably under the
+cap. `docs/commands.md`'s own module-reference table is the
+live-current-state figure to trust; this section is a historical
+record of TGT-280's own point in time.)
 
 **D2TG::Telegram.pm** (547 lines) was surveyed by TGT-279 but not
 extracted, since its 16 functions are all tightly coupled to the
@@ -7454,3 +7461,41 @@ parameterized by `$sql`/`@bind` (already-parameterized DBI bind
 values at every call site, never raw string interpolation of
 untrusted input); no string eval, no shell/exec/system/backtick/
 piped-open patterns, no change to what reaches storage.
+
+## TGT-325: docs/commands.md's D2TG::Store and D2TG::Telegram line-count claims were stale
+
+Found via a live JOB-005 doc-accuracy hunt, 2026-09-21. `docs/commands.md`'s
+own module-reference table makes present-tense line-count claims for each
+`lib/D2TG/*.pm` module, used to judge closeness to the board's 500-line-
+per-module cap. Two of them had drifted: `D2TG::Store.pm`'s row said
+"is now 232 lines" (real: 247, `wc -l`); `D2TG::Telegram.pm`'s row said
+"the actual code is only 338 lines" (real: 354). Neither module has had
+any POD re-embedded (`grep -c '^=' lib/D2TG/Store.pm lib/D2TG/Telegram.pm`
+returns 0/0) - the drift is real code growth landing in later tickets
+(TGT-316's `PrintError` fix and TGT-234's `admin_chat_id` multi-seed
+support for Store.pm; TGT-143/TGT-169's `allowed_updates` work and
+TGT-162's caption-boundary stripping for Telegram.pm) without the doc's
+own line-count figure being corrected in the same commit.
+
+Not a functional bug - both modules remain comfortably under the 500-line
+cap even at their real, current sizes. Pure documentation-accuracy fix,
+no code touched, matching the TGT-319/321/323 precedent (doc/review-only
+tickets, no version bump).
+
+Fix: `docs/commands.md`'s two table rows corrected to 247/354, each with
+a short note naming which later tickets caused the drift. `docs/
+POLICIES.md`'s own repeated 232-line claim (TGT-280's historical section
+above) was left as the accurate historical record of TGT-280's own point
+in time, with an appended note pointing to `docs/commands.md` as the
+live-current-state source of truth and giving the corrected 247-line
+figure.
+
+Test strategy: no automated test applies - a pure prose correction has no
+code behavior to assert against TDD/BDD-style. Verification is the manual
+`wc -l lib/D2TG/Store.pm lib/D2TG/Telegram.pm` comparison itself, run
+before (confirming the docs were genuinely wrong: 232/338 stated vs
+247/354 real) and after (confirming the corrected figures match).
+
+perlsec.pl-style vulnerability-scan audit: no code touched at all -
+documentation text only. No untrusted-input surface, no shell/exec/eval,
+nothing to scan.
