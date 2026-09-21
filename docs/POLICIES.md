@@ -7421,3 +7421,36 @@ event type, command, or board-visible concept this board's own policy
 set doesn't already cover, and none touches this skill's own code,
 dependencies, or documented behavior. Conclusion: no policy change
 needed for this upgrade.
+
+## TGT-324: D2TG::Store::History's 3 query methods duplicated the identical selectall_arrayref+return shape
+
+Found via a live JOB-004 improvement hunt, 2026-09-21. `unread_messages`,
+`recent_messages`, and `messages_in_range` each independently build
+their own `$sql`/`@bind`, but all three ended with the exact same 2
+lines - `my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice =>
+{} }, @bind ); return @$rows;` - byte-identical in all 3, differing
+only in the SQL/bind construction that precedes it. The same "found it
+twice/three times, extract it" convention this project has followed
+repeatedly (TGT-167/170/171/172/177/181/279/310/313/314/317/318/320/322).
+
+Fix: a new `_select_all_rows($self, $sql, @bind)` helper does the
+selectall_arrayref/return-list shape in one call. All 3 sites now call
+it with just their own `$sql`/`@bind`, shrinking from 2 lines to 1.
+Pure refactor: byte-identical behavior for every existing scenario.
+
+Test strategy: matching TGT-279/313/314/318/320's own precedent for a
+pure-extraction refactor, a genuinely-red `t/324-history-select-all-
+rows-helper.t` (`D2TG::Store::History->can('_select_all_rows')`) was
+written and confirmed failing before the helper existed. Full suite
+green after with zero other test file edits needed (`Files=239,
+Tests=2962`) - the strongest possible confirmation that this was a
+genuinely behavior-preserving extraction. 100% statement + subroutine
+coverage confirmed on `lib/D2TG/Store/History.pm`.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow
+extraction - the helper's own body is a verbatim reuse of the 3 call
+sites' pre-existing `selectall_arrayref`/`return @$rows` statements,
+parameterized by `$sql`/`@bind` (already-parameterized DBI bind
+values at every call site, never raw string interpolation of
+untrusted input); no string eval, no shell/exec/system/backtick/
+piped-open patterns, no change to what reaches storage.

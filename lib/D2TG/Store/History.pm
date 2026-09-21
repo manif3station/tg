@@ -18,6 +18,18 @@ sub new {
     return bless { dbh => $dbh }, $class;
 }
 
+# TGT-324 (found via a live JOB-004 improvement hunt): unread_messages,
+# recent_messages, and messages_in_range each independently build their
+# own $sql/@bind, but all three ended with the exact same 2 lines -
+# running selectall_arrayref and returning the dereferenced list.
+# Collapsed here; each call site now passes its own $sql/@bind and
+# gets back the same list it always did.
+sub _select_all_rows {
+    my ( $self, $sql, @bind ) = @_;
+    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
+    return @$rows;
+}
+
 sub record_message {
     my ( $self, $chat_id, $message_id, $sender, $summary, %args ) = @_;
     my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
@@ -90,9 +102,7 @@ sub unread_messages {
     }
     $sql .= ' ORDER BY created_at, message_id';
 
-    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
-
-    return @$rows;
+    return $self->_select_all_rows( $sql, @bind );
 }
 
 sub recent_messages {
@@ -108,9 +118,7 @@ sub recent_messages {
     $sql .= ' ORDER BY created_at DESC, message_id DESC LIMIT ?';
     push @bind, $limit;
 
-    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
-
-    return @$rows;
+    return $self->_select_all_rows( $sql, @bind );
 }
 
 sub messages_in_range {
@@ -154,9 +162,7 @@ sub messages_in_range {
     $sql .= ' WHERE ' . join( ' AND ', @where ) if @where;
     $sql .= ' ORDER BY created_at, message_id';
 
-    my $rows = $self->{dbh}->selectall_arrayref( $sql, { Slice => {} }, @bind );
-
-    return @$rows;
+    return $self->_select_all_rows( $sql, @bind );
 }
 
 1;

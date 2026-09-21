@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.56).** REFACTOR (TGT-324, found via
+a JOB-004 improvement hunt): `D2TG::Store::History`'s
+`unread_messages`/`recent_messages`/`messages_in_range` each
+independently built their own `$sql`/`@bind`, but all three ended with
+the exact same 2 lines - running `selectall_arrayref` and returning
+the dereferenced list. Extracted into one shared
+`_select_all_rows($self, $sql, @bind)` helper, called from all 3
+sites, collapsing each from 2 lines to 1. Pure refactor:
+byte-identical behavior for every existing scenario, zero other test
+file edits needed.
+
 **Status: early implementation (v2.55).** BUGFIX (TGT-322, found via a
 live JOB-003 hourly bug hunt): a reply message that legitimately ended
 with the literal words `--reply-to-message-id <word>` was silently

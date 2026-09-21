@@ -23,6 +23,18 @@ D2TG::Store itself keeps, no behavior change for any existing caller.
 
 =head1 METHODS
 
+=head2 _select_all_rows($self, $sql, @bind)
+
+TGT-324 (found via a live JOB-004 improvement hunt):
+L<unread_messages()|/unread_messages(bot_key =E<gt> $optional_bot_key)>,
+L<recent_messages()|/recent_messages($limit = 10, bot_key =E<gt> $optional_bot_key)>,
+and L<messages_in_range()|/messages_in_range(since =E<gt> $iso8601, until =E<gt> $iso8601, bot_key =E<gt> $optional_bot_key)>
+each independently built their own C<$sql>/C<@bind>, but all three
+ended with the identical 2 lines - running C<selectall_arrayref> and
+returning the dereferenced list. Collapsed into this one private
+helper; each caller now passes its own C<$sql>/C<@bind> and gets back
+the same list it always did. Pure extraction, no behavior change.
+
 =head2 record_message($chat_id, $message_id, $sender, $summary, local_path => $optional_path, bot_key => $optional_bot_key)
 
 Records a short summary of a processed message (TGT-038) against its own
