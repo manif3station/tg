@@ -1,9 +1,11 @@
 use strict;
 use warnings;
+use utf8;
 use Test::More;
 use FindBin qw($Bin);
 use lib "$Bin/../lib", "$Bin/lib";
 use JSON::PP qw(decode_json);
+use Encode qw(decode);
 use HTTP::Response;
 
 require D2TG::Telegram;
@@ -47,10 +49,10 @@ sub _run_and_capture {
     my @lines;
     {
         local *STDOUT;
-        open STDOUT, '>', \my $captured or die $!;
+        open STDOUT, '>:encoding(UTF-8)', \my $captured or die $!;
         D2TG::Poller::run_once( $telegram, 0, undef );
         close STDOUT;
-        @lines = split /\n/, $captured;
+        @lines = split /\n/, decode( 'UTF-8', $captured );
     }
     return $lines[0] // '';
 }
@@ -112,10 +114,10 @@ sub _run_and_capture {
     my @lines;
     {
         local *STDOUT;
-        open STDOUT, '>', \my $captured or die $!;
+        open STDOUT, '>:encoding(UTF-8)', \my $captured or die $!;
         D2TG::Poller::run_once( $telegram, 0, undef );
         close STDOUT;
-        @lines = grep { length } split /\n/, $captured;
+        @lines = grep { length } split /\n/, decode( 'UTF-8', $captured );
     }
 
     is( scalar(@lines), 2, 'swapping one reaction for another produces exactly 2 lines (one add, one remove)' );
@@ -164,10 +166,10 @@ sub _run_and_capture {
     my @lines;
     {
         local *STDOUT;
-        open STDOUT, '>', \my $captured or die $!;
+        open STDOUT, '>:encoding(UTF-8)', \my $captured or die $!;
         D2TG::Poller::run_once( $telegram, 0, undef );
         close STDOUT;
-        @lines = grep { length } split /\n/, $captured;
+        @lines = grep { length } split /\n/, decode( 'UTF-8', $captured );
     }
 
     is( scalar(@lines), 2,
@@ -193,7 +195,7 @@ sub _run_and_capture {
     my $captured;
     {
         local *STDOUT;
-        open STDOUT, '>', \$captured or die $!;
+        open STDOUT, '>:encoding(UTF-8)', \$captured or die $!;
         D2TG::Poller::run_once( $telegram, 0, undef );
         close STDOUT;
     }

@@ -1,5 +1,16 @@
 # tg
 
+**Status: early implementation (v2.57).** BUGFIX (TGT-326, found via a
+live JOB-003 hourly bug hunt): `D2TG::Poller::Format::sanitize_for_stdout`
+stripped the 7-bit control ranges (`0x00-0x08`, `0x0B-0x1F` including ESC
+`0x1B`, and DEL `0x7F`) but not the C1 control range (`0x80-0x9F`) -
+live-reproduced: `0x9B` (the 8-bit CSI, the same terminal-escape-sequence
+introducer as ESC+`[` in 7-bit form) passed through unstripped, reachable
+via arbitrary Telegram message text feeding the Tira monitor-job bridge's
+stdout stream. Extended the strip regex to cover `0x7F-0x9F`, closing the
+same ANSI-injection class its existing ESC-stripping already defends
+against.
+
 **Status: early implementation (v2.56).** REFACTOR (TGT-324, found via
 a JOB-004 improvement hunt): `D2TG::Store::History`'s
 `unread_messages`/`recent_messages`/`messages_in_range` each

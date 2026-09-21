@@ -97,7 +97,15 @@ sub sanitize_for_stdout {
     my ($text) = @_;
 
     ( my $safe = $text ) =~ s/\r?\n/\\n/g;
-    $safe =~ s/[\x00-\x08\x0B-\x1F\x7F]//g;
+
+    # TGT-326 (found via a live JOB-003 hourly bug hunt): the C1 control
+    # range (\x80-\x9F) is the 8-bit form of the same control functions
+    # the 7-bit ranges below already strip - \x9B specifically is the
+    # 8-bit CSI (Control Sequence Introducer), the same terminal-escape-
+    # sequence trigger as ESC (\x1B) + '[' in 7-bit form. Left unstripped,
+    # it reopens the exact ANSI-injection class this function exists to
+    # close, just via a different byte.
+    $safe =~ s/[\x00-\x08\x0B-\x1F\x7F-\x9F]//g;
 
     return $safe;
 }

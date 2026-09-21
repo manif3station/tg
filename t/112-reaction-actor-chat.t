@@ -1,9 +1,11 @@
 use strict;
 use warnings;
+use utf8;
 use Test::More;
 use FindBin qw($Bin);
 use lib "$Bin/../lib", "$Bin/lib";
 use Fake::Telegram;
+use Encode qw(decode);
 
 require D2TG::Poller;
 
@@ -24,11 +26,11 @@ sub _run_and_capture {
     my $captured;
     {
         local *STDOUT;
-        open STDOUT, '>', \$captured or die $!;
+        open STDOUT, '>:encoding(UTF-8)', \$captured or die $!;
         D2TG::Poller::run_once( $telegram, 0, undef );
         close STDOUT;
     }
-    return $captured // '';
+    return defined $captured ? decode( 'UTF-8', $captured ) : '';
 }
 
 {

@@ -51,7 +51,13 @@ C<$message-E<gt>{date}> (or now, if absent).
 =head2 sanitize_for_stdout($text)
 
 Collapses newlines to a literal C<\n> and strips control characters, so
-a single stdout line stays single-line.
+a single stdout line stays single-line. Strips both the 7-bit control
+ranges (C<\x00-\x08>, C<\x0B-\x1F> including ESC C<\x1B>, and DEL
+C<\x7F>) and the C1 control range (C<\x80-\x9F>, TGT-326 - found via a
+live JOB-003 hourly bug hunt) - C<\x9B>, the 8-bit form of CSI (Control
+Sequence Introducer), triggers the identical terminal-escape-sequence
+class as ESC+C<[> in 7-bit form, and was reachable via arbitrary
+Telegram message text before this fix.
 
 =head2 bot_flag($bot_token)
 

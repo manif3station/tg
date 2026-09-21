@@ -7499,3 +7499,45 @@ before (confirming the docs were genuinely wrong: 232/338 stated vs
 perlsec.pl-style vulnerability-scan audit: no code touched at all -
 documentation text only. No untrusted-input surface, no shell/exec/eval,
 nothing to scan.
+
+## TGT-326: sanitize_for_stdout didn't strip C1 control characters (0x80-0x9F)
+
+Found via a live JOB-003 hourly bug hunt, 2026-09-21. `D2TG::Poller::
+Format::sanitize_for_stdout` stripped the 7-bit control ranges (`\x00-
+\x08`, `\x0B-\x1F` including ESC `\x1B`, and DEL `\x7F`) but not the C1
+control range (`\x80-\x9F`). Live-reproduced in the perl-test container:
+`sanitize_for_stdout("hello\x{9b}31mRED\x{9b}0m world")` returned the
+`\x9B` bytes unstripped. `\x9B` is the 8-bit form of CSI (Control
+Sequence Introducer) - on a terminal configured to interpret 8-bit
+control codes (common on Linux xterm-compatible terminals), it triggers
+the identical class of ANSI escape sequence injection that this
+function's own 7-bit ESC (`\x1B`) stripping already exists to prevent,
+just reached via a different byte.
+
+Reachable: this function's callers (`D2TG::Poller::Dispatch`,
+`D2TG::Poller::Format::forward_origin_name`) sanitize Telegram message
+text/captions/transcripts/edit-diffs before printing `NEW TG` stdout
+lines that feed the target project's `tira.policy.bridge` monitor-output
+stream - fully attacker-controlled Unicode text from any Telegram
+sender, since sanitization happens before/regardless of the allow-list
+authorization check in the dispatch code path. Searched the board first
+(`tira.ticket.list -o json`) - TGT-039/125/142/143/154/169/170/259/275/
+312 all touch `sanitize_for_stdout`'s history but none mention the C1
+range; no duplicate.
+
+Fix: extended the strip regex from `[\x00-\x08\x0B-\x1F\x7F]` to
+`[\x00-\x08\x0B-\x1F\x7F-\x9F]` (merging DEL and the C1 range into one
+contiguous span).
+
+Test strategy: TDD - `t/326-sanitize-c1-control-chars.t` written first,
+confirmed red (3/5 subtests failing) against the pre-fix code, asserting
+`\x9B` specifically, the full `\x80-\x9F` range, and that existing 7-bit
+behavior (ESC stripping, newline collapsing) is unchanged. Green after
+the fix, full suite green.
+
+perlsec.pl-style vulnerability-scan audit: the fix itself closes an
+input-sanitization gap (an under-broad control-character strip regex on
+a path that handles fully untrusted Telegram-sourced text before it
+reaches a shared stdout/monitor-bridge stream) - no new untrusted-input
+surface introduced, no shell/exec/eval touched, the change is a regex
+range extension only.
