@@ -7762,3 +7762,55 @@ unaffected by allowing a leading `--`, since `--` has no special meaning
 in that context. No path traversal, no shell interpolation, no SQL bind
 anywhere on this value's path. Widening `--caption`'s accepted value set
 introduces no new attack surface.
+
+## TGT-333: retry_failed_transcription redoes the full download+transcribe on every retry
+
+Found via a live JOB-004 improvement hunt, 2026-09-22, while stress-
+testing TGT-332's own fresh diff. Root cause:
+`D2TG::Transcribe::Retry::retry_failed_transcription` always re-downloaded
+and re-transcribed the audio from scratch on every retry attempt, even
+when the download and transcription had both already succeeded on a
+prior attempt and only the final `record_message` store write kept
+failing (a locked/busy database). `D2TG::Download::retry_failed_download`
+got exactly this optimization in TGT-196 (Q-013 answered by Michael): a
+row whose `local_path` is already persisted skips `download_file`
+entirely. `retry_failed_transcription` had no equivalent - a
+persistently-failing `record_message` meant whisper re-transcribed the
+same audio from scratch on every retry cycle, wasting real wall-clock
+time (transcription is the single most expensive step in this whole
+pipeline, up to 3600s per TGT-140's own scaled timeout) for no benefit.
+
+Fix: added a `transcript` column to `failed_transcriptions` (a
+duplicate-tolerant `ALTER TABLE`, mirroring `local_path`'s own
+migration) and a new `D2TG::Store::RetryQueue::mark_failed_transcription_transcribed($id,
+$transcript)` accessor, mirroring `mark_failed_download_downloaded`
+exactly. `retry_failed_transcription` now checks `$row->{transcript}`
+first and skips `download_file`/`transcribe` entirely when already
+present, retrying only the still-failing `record_message` write; on a
+`record_message` failure it now also persists the transcript (a no-op
+if already persisted) before leaving the row queued.
+
+Test strategy: `t/333-skip-retranscribe-when-already-transcribed.t` (9
+assertions) - a row with a persisted transcript never re-invokes
+`D2TG::Download::download_file`/`D2TG::Transcribe::transcribe`, still
+reports success with the persisted transcript, and the transcript
+survives another failed retry unchanged; a freshly-queued row (no
+transcript yet) is confirmed to have none. Two pre-existing test files
+(`t/257-store-retry-queue-module.t`, `t/295-retryqueue-shared-helpers.t`)
+hand-roll their own `failed_transcriptions` schema (bypassing
+`D2TG::Store::Schema`) and needed the new `transcript` column added to
+stay in sync - fixed in the same pass. Full suite verified green across
+5 batches (all 244 files, matching the full 2975-test count) rather than
+a single `prove -lr t` pass, since concurrent host-wide memory pressure
+from unrelated tenant containers (other Claude sessions' own
+`perl-test` runs, `ollama`, `zenandi`, etc. - confirmed via `ps aux`/
+`docker ps`, none touched) was killing full-suite runs regardless of
+batch size at points during this ticket; every batch reported a clean
+`Result: PASS`.
+
+Perlsec: no new input reaches `system`/`exec`/`eval`/backticks/SQL
+interpolation - `$transcript` was already user-influenced data (spoken
+audio transcribed by whisper) flowing into `record_message`/SQL bind
+parameters before this ticket; persisting it one column earlier via a
+parameterized `UPDATE ... SET transcript = ? WHERE id = ?` introduces no
+new injection surface.

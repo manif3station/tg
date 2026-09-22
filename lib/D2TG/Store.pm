@@ -184,6 +184,7 @@ sub remove_failed_transcription         { my $self = shift; return $self->{retry
 sub failed_transcriptions_due_for_retry { my $self = shift; return $self->{retry_queue}->failed_transcriptions_due_for_retry(@_) }
 sub mark_failed_transcription_retried   { my $self = shift; return $self->{retry_queue}->mark_failed_transcription_retried(@_) }
 sub has_failed_transcription            { my $self = shift; return $self->{retry_queue}->has_failed_transcription(@_) }
+sub mark_failed_transcription_transcribed { my $self = shift; return $self->{retry_queue}->mark_failed_transcription_transcribed(@_) }
 
 # TGT-279: sent-reply audit-trail storage moved into
 # D2TG::Store::SentReplyAudit (built once in new() above, sharing this

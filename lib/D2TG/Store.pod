@@ -276,6 +276,17 @@ every automatic retry attempt that leaves the row still queued
 (success removes the row instead, via L<remove_failed_transcription()|/remove_failed_transcription($id)>,
 and never needs this stamped at all).
 
+=head2 mark_failed_transcription_transcribed($id, $transcript)
+
+TGT-333 (found via a live JOB-004 improvement hunt): mirrors
+L<mark_failed_download_downloaded()|/mark_failed_download_downloaded($id, $local_path)>
+exactly (TGT-196), applied to C<failed_transcriptions> - persists a
+queued row's own successfully-produced transcript, so a future retry
+(L<retry_failed_transcription()|D2TG::Transcribe::Retry/retry_failed_transcription($telegram, $store, $row, ua =E<gt> $optional_client)>)
+can skip re-downloading and re-transcribing entirely and retry only the
+still-failing C<record_message> write, instead of re-running whisper
+(the single most expensive step in this pipeline) on every retry cycle.
+
 =head2 Sent-reply audit trail
 
 record_sent_text/record_sent_voice/text_only_replies/

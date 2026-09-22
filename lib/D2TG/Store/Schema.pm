@@ -271,6 +271,17 @@ sub ensure_schema {
     # against, so a plain trailing ALTER TABLE is safe here.
     _add_column_if_missing( $dbh, 'ALTER TABLE failed_transcriptions ADD COLUMN last_retry_at TEXT' );
 
+    # TGT-333 (found via a live JOB-004 improvement hunt): mirrors
+    # failed_downloads' own local_path column (TGT-196) - NULL means
+    # "not yet transcribed" (today's ordinary queued state); once
+    # transcribe() succeeds but the bookkeeping record_message write
+    # then fails, retry_failed_transcription persists the transcript
+    # here so a future retry sees it, skips download_file+transcribe
+    # entirely, and retries only the record_message write - the same
+    # escape hatch TGT-196 gave failed_downloads, now given to
+    # failed_transcriptions too.
+    _add_column_if_missing( $dbh, 'ALTER TABLE failed_transcriptions ADD COLUMN transcript TEXT' );
+
     # TGT-105: TGT-083 deliberately reordered D2TG::Reply::send_reply to
     # send text first, then synthesize+send voice - a synthesis/
     # send_voice failure after that point can leave a reply text-only,

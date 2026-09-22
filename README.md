@@ -1,5 +1,18 @@
 # tg
 
+**Status: early implementation (v2.61).** IMPROVEMENT (TGT-333, found via a
+live JOB-004 improvement hunt): `D2TG::Transcribe::Retry::retry_failed_transcription`
+used to re-download and re-transcribe the same audio from scratch on
+every retry attempt, even when a prior attempt already transcribed it
+successfully and only the bookkeeping `record_message` write kept
+failing. `D2TG::Download::retry_failed_download` already got the
+equivalent fix in TGT-196 - this mirrors it for transcription, the
+single most expensive step in this pipeline. Added a `transcript`
+column to `failed_transcriptions` and a new
+`mark_failed_transcription_transcribed($id, $transcript)` accessor;
+`retry_failed_transcription` now checks `$row->{transcript}` first and
+skips `download_file`/`transcribe` entirely when already present.
+
 **Status: early implementation (v2.60).** FIX (TGT-332, found via a live
 JOB-003 hourly bug hunt; Q-020 answered by Michael): `cli/send.pl`'s
 `--caption` misread a value starting with a dash-letter pattern (e.g.

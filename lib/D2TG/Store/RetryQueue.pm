@@ -100,7 +100,7 @@ sub _list_failed {
 }
 
 my $DOWNLOAD_COLUMNS      = 'id, chat_id, bot_key, message_id, file_id, sender, media_kind, caption_note, error, created_at, local_path, last_retry_at';
-my $TRANSCRIPTION_COLUMNS = 'id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at';
+my $TRANSCRIPTION_COLUMNS = 'id, chat_id, bot_key, message_id, file_id, sender, error, created_at, last_retry_at, transcript';
 
 sub record_failed_download {
     my ( $self, $chat_id, $message_id, $file_id, %args ) = @_;
@@ -247,6 +247,23 @@ sub failed_transcriptions_due_for_retry {
 sub mark_failed_transcription_retried {
     my ( $self, $id ) = @_;
     return $self->_mark_retried( 'failed_transcriptions', $id );
+}
+
+# TGT-333 (found via a live JOB-004 improvement hunt): mirrors
+# mark_failed_download_downloaded's own shape and rationale exactly -
+# persists a queued row's own successfully-produced transcript once
+# transcribe() has already succeeded, so a future retry
+# (D2TG::Transcribe::Retry::retry_failed_transcription) can see it via
+# failed_transcriptions and skip download_file+transcribe entirely,
+# retrying only the record_message write that's actually still failing,
+# instead of re-transcribing the same audio (the single most expensive
+# step in this pipeline) on every pass.
+sub mark_failed_transcription_transcribed {
+    my ( $self, $id, $transcript ) = @_;
+
+    $self->{dbh}->do( 'UPDATE failed_transcriptions SET transcript = ? WHERE id = ?', undef, $transcript, $id );
+
+    return;
 }
 
 1;

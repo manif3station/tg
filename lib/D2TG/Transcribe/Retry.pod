@@ -27,7 +27,16 @@ C<file_id>, C<sender>, C<error>). Returns C<(1, $transcript)> on
 success or C<(0, $error)> on failure, the same shape convention as
 L<D2TG::Download/retry_failed_download>.
 
-Re-downloads the voice file via L<D2TG::Download/download_file> with no C<dir>
+If C<< $row->{transcript} >> is already defined (TGT-333, found via a
+live JOB-004 improvement hunt: a prior retry already succeeded at
+transcribing but C<record_message> then failed, so
+L<D2TG::Store::RetryQueue/mark_failed_transcription_transcribed> persisted
+it) that transcript is reused directly - C<download_file>/C<transcribe>
+are never re-invoked, mirroring L<D2TG::Download/retry_failed_download>'s
+own C<< $row->{local_path} >> check (TGT-196) exactly, so the single
+most expensive step in this pipeline is never repeated once it has
+already genuinely succeeded once. Otherwise: re-downloads the voice
+file via L<D2TG::Download/download_file> with no C<dir>
 argument (transient, matching C<cli/poller.pl>'s own
 C<$transcribe_voice> coderef exactly - this download must never land
 in the shared, deduplicated attachments vault) and re-attempts
@@ -43,11 +52,14 @@ before removing the queue row via
 L<D2TG::Store/remove_failed_transcription> - both calls go through
 L<D2TG::Poller/store_write_safe>, matching L<D2TG::Download/retry_failed_download>'s
 own established non-fatal store-write pattern; a C<record_message>
-failure leaves the row queued (logged as C<STORE ERROR [chat_id]:
-queue row not removed - ...>) rather than losing the transcript a
-second time. On a download or transcription failure, the row is left
-completely untouched - never removed - so the caller (C<cli/retry-transcription.pl>)
-can retry again later.
+failure now also persists the transcript via
+L<D2TG::Store::RetryQueue/mark_failed_transcription_transcribed> (TGT-333,
+a no-op if it was already persisted) before leaving the row queued
+(logged as C<STORE ERROR [chat_id]: queue row not removed - ...>)
+rather than losing the transcript a second time. On a download or
+transcription failure, the row is left completely untouched - never
+removed - so the caller (C<cli/retry-transcription.pl>) can retry again
+later.
 
 The third return value (C<$still_queued>, TGT-248) mirrors
 L<D2TG::Download/retry_failed_download>'s own C<$still_queued> value

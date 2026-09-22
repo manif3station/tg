@@ -45,6 +45,7 @@ CREATE TABLE failed_transcriptions (
     sender TEXT,
     error TEXT,
     last_retry_at TEXT,
+    transcript TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(chat_id, bot_key, message_id)
 )

@@ -30,7 +30,7 @@ $dbh->do(
     'CREATE TABLE failed_transcriptions (
         id INTEGER PRIMARY KEY AUTOINCREMENT, chat_id INTEGER, bot_key TEXT DEFAULT "",
         message_id INTEGER, file_id TEXT, sender TEXT, error TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_retry_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP, last_retry_at TEXT, transcript TEXT,
         UNIQUE(chat_id, bot_key, message_id)
     )'
 );

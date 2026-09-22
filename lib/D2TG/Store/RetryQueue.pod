@@ -81,6 +81,17 @@ Mirrors L<mark_failed_download_retried()|/mark_failed_download_retried($id)>.
 
 Mirrors L<remove_failed_download()|/remove_failed_download($id)>.
 
+=head2 mark_failed_transcription_transcribed($id, $transcript)
+
+TGT-333 (found via a live JOB-004 improvement hunt): mirrors
+L<mark_failed_download_downloaded()|/mark_failed_download_downloaded($id, $local_path)>
+exactly (TGT-196) - persists a queued row's own successfully-produced
+transcript, so a future retry
+(C<D2TG::Transcribe::Retry::retry_failed_transcription>) can skip
+re-downloading and re-transcribing entirely and retry only the failing
+C<record_message> write, instead of re-running whisper (the single most
+expensive step in this pipeline) on every retry cycle.
+
 =head1 IMPLEMENTATION NOTES
 
 TGT-295 (found via a user-requested comprehensive bug/improvement
@@ -98,5 +109,13 @@ download>/C<has_failed_transcription> (TGT-270) joined this same
 pattern - both now delegate to a sixth private, table-parameterized
 helper, C<_has_failed($table, $chat_id, $message_id, %args)>. Pure
 extraction, no behavior change.
+
+TGT-333 (found via a live JOB-004 improvement hunt): the C<failed_
+transcriptions> table gained its own C<transcript> column, and
+C<mark_failed_transcription_transcribed> was added to give it the same
+skip-already-done escape hatch C<local_path>/
+C<mark_failed_download_downloaded> already gave C<failed_downloads>
+(TGT-196) - this was the one asymmetry left between the two otherwise
+fully-mirrored queues.
 
 =cut
