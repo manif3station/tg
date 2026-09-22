@@ -120,15 +120,26 @@ sub failed_downloads {
 # before re-announcing/re-attempting, and a failed download never
 # calls record_message. Used by run_once's own redelivery-dedup guard
 # alongside get_message.
-sub has_failed_download {
-    my ( $self, $chat_id, $message_id, %args ) = @_;
+# TGT-330 (found via a live JOB-004 improvement hunt): has_failed_download
+# and has_failed_transcription duplicated the identical existence-check
+# shape, differing only by table name - extracted here, matching this
+# module's own established $table-parameterized private-helper pattern
+# (_due_for_retry/_mark_retried/_remove_failed above). Pure extraction,
+# no behavior change.
+sub _has_failed {
+    my ( $self, $table, $chat_id, $message_id, %args ) = @_;
     my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
 
     my $row = $self->{dbh}->selectrow_arrayref(
-        'SELECT 1 FROM failed_downloads WHERE chat_id = ? AND bot_key = ? AND message_id = ? LIMIT 1',
+        "SELECT 1 FROM $table WHERE chat_id = ? AND bot_key = ? AND message_id = ? LIMIT 1",
         undef, $chat_id, $bot_key, $message_id,
     );
     return $row ? 1 : 0;
+}
+
+sub has_failed_download {
+    my ( $self, $chat_id, $message_id, %args ) = @_;
+    return $self->_has_failed( 'failed_downloads', $chat_id, $message_id, %args );
 }
 
 sub _due_for_retry {
@@ -214,13 +225,7 @@ sub failed_transcriptions {
 # by run_once's redelivery-dedup guard alongside get_message.
 sub has_failed_transcription {
     my ( $self, $chat_id, $message_id, %args ) = @_;
-    my $bot_key = $args{bot_key} // DEFAULT_BOT_KEY;
-
-    my $row = $self->{dbh}->selectrow_arrayref(
-        'SELECT 1 FROM failed_transcriptions WHERE chat_id = ? AND bot_key = ? AND message_id = ? LIMIT 1',
-        undef, $chat_id, $bot_key, $message_id,
-    );
-    return $row ? 1 : 0;
+    return $self->_has_failed( 'failed_transcriptions', $chat_id, $message_id, %args );
 }
 
 sub remove_failed_transcription {

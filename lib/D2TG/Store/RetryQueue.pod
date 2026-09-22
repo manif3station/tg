@@ -93,4 +93,10 @@ same SQL differing only by table name. Zero behavior change; every
 public method's own signature, defaults, and return shape are
 unchanged.
 
+TGT-330 (found via a live JOB-004 improvement hunt): C<has_failed_
+download>/C<has_failed_transcription> (TGT-270) joined this same
+pattern - both now delegate to a sixth private, table-parameterized
+helper, C<_has_failed($table, $chat_id, $message_id, %args)>. Pure
+extraction, no behavior change.
+
 =cut

@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.59).** REFACTOR (TGT-330, found via a
+live JOB-004 improvement hunt): `D2TG::Store::RetryQueue`'s
+`has_failed_download` and `has_failed_transcription` duplicated the
+identical existence-check shape, differing only by table name. Both now
+delegate to a shared private `_has_failed($table, $chat_id, $message_id,
+%args)` helper, matching this module's own established
+table-parameterized private-helper pattern (`_due_for_retry`/
+`_mark_retried`/`_remove_failed`). Pure refactor: byte-identical behavior
+for every existing scenario, zero other test file edits needed.
+
 **Status: early implementation (v2.58).** REFACTOR (TGT-327, found via a
 live JOB-004 improvement hunt): `D2TG::Poller::Dispatch`'s
 voice-transcription-failure and photo/document-download-failure branches

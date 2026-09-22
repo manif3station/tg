@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.59  2026-09-22
+      - REFACTOR (TGT-330, found via a live JOB-004 improvement hunt):
+        D2TG::Store::RetryQueue's has_failed_download and
+        has_failed_transcription duplicated the identical existence-
+        check shape, differing only by table name. Both now delegate
+        to a shared private _has_failed($table, $chat_id, $message_id,
+        %args) helper, matching this module's own established
+        table-parameterized private-helper pattern. Pure refactor:
+        byte-identical behavior for every existing scenario, zero
+        other test file edits needed.
+
 2.58  2026-09-21
       - REFACTOR (TGT-327, found via a live JOB-004 improvement hunt):
         D2TG::Poller::Dispatch's voice-transcription-failure and

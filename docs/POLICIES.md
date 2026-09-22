@@ -7654,3 +7654,39 @@ dependencies, or documented behavior.
 
 Conclusion: no new policy needed, no existing declaration needs
 updating. Pure review ticket, no code touched, no version bump.
+
+## TGT-330: D2TG::Store::RetryQueue's has_failed_download and has_failed_transcription duplicated the same existence-check shape
+
+Found via a live JOB-004 improvement hunt, 2026-09-22. `has_failed_
+download` and `has_failed_transcription` (TGT-270) were byte-for-byte
+identical in shape: both ran `SELECT 1 FROM <table> WHERE chat_id = ?
+AND bot_key = ? AND message_id = ? LIMIT 1` and returned a boolean,
+differing only in the table name (`failed_downloads` vs
+`failed_transcriptions`). The same "found it twice, extract it"
+convention this project has followed repeatedly (TGT-167/170/171/172/
+177/181/279/310/313/314/317/318/320/322/324/327), and matches this
+exact module's own established precedent (TGT-295, which extracted 5
+sibling table-parameterized private helpers - `_record_failed`,
+`_list_failed`, `_due_for_retry`, `_mark_retried`, `_remove_failed` -
+for the same class of duplication across its other method pairs).
+
+Fix: a sixth private, table-parameterized helper, `_has_failed($table,
+$chat_id, $message_id, %args)`, joins the same pattern. Both public
+methods now delegate to it with just their own table name. Pure
+refactor: byte-identical behavior for every existing scenario.
+
+Test strategy: matching TGT-313/318/320/324/327's own precedent for a
+pure-extraction refactor, a genuinely-red `t/330-retryqueue-has-failed-
+helper.t` (`D2TG::Store::RetryQueue->can('_has_failed')`) was written
+and confirmed failing before the helper existed. Full suite green after
+with zero other test file edits needed (`Files=242, Tests=2969`) - the
+strongest possible confirmation that this was a genuinely
+behavior-preserving extraction.
+
+perlsec.pl-style vulnerability-scan audit: pure control-flow extraction
+- the helper's own body is a verbatim reuse of the 2 call sites'
+pre-existing `selectrow_arrayref` statements, parameterized by table
+name (a fixed set of 2 literal strings, never derived from untrusted
+input) and already-parameterized DBI bind values; no string eval, no
+shell/exec/system/backtick/piped-open patterns, no change to what
+reaches storage.
