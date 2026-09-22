@@ -7746,9 +7746,19 @@ Test strategy: `t/332-caption-permissive-value.t` (6 assertions) - a
 dash-leading caption is now accepted; undef/empty still refuses; a
 negative-number-shaped value still passes (parity with the strict
 helper); the strict `shift_flag_value` is unchanged (regression guard).
-Full suite (243 files, 2975 tests) reran green after the fix. Perlsec:
-no new input reaches `system`/`exec`/SQL/shell interpolation - the
-relaxed value only ever reaches Telegram's `sendPhoto`/`sendDocument`
-`caption` parameter via `D2TG::Telegram`'s existing JSON-encoded HTTP
-body, exactly as any other caption already did; no new injection
-surface.
+Full suite (243 files, 2975 tests) reran green (both a serial and a
+`prove -j4` parallel pass) after the fix.
+
+Perlsec audit (https://perldoc.perl.org/perlsec), TGT-332: no new input
+reaches `system`/`exec`/`eval`/backticks/SQL - relaxing which strings
+`--caption` accepts does not change where the value goes. It reaches
+`D2TG::Telegram::send_photo`/`send_document`'s own multipart form-data
+body construction (`lib/D2TG/Telegram.pm` lines 314-338), unchanged by
+this ticket: the caption is placed in body content (not a quoted header
+attribute), and the existing TGT-162 boundary-stripping
+(`s/\Q$boundary\E//g`) already neutralizes the one real injection risk
+for that position (prematurely terminating the multipart body) -
+unaffected by allowing a leading `--`, since `--` has no special meaning
+in that context. No path traversal, no shell interpolation, no SQL bind
+anywhere on this value's path. Widening `--caption`'s accepted value set
+introduces no new attack surface.
