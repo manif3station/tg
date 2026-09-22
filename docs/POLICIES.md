@@ -7814,3 +7814,16 @@ audio transcribed by whisper) flowing into `record_message`/SQL bind
 parameters before this ticket; persisting it one column earlier via a
 parameterized `UPDATE ... SET transcript = ? WHERE id = ?` introduces no
 new injection surface.
+
+## TGT-334: docs/commands.md's D2TG::Store line count drifted stale again after TGT-333
+
+Found via a live JOB-005 doc-accuracy hunt, 2026-09-22, while checking
+this session's own fresh TGT-333 diff for drift. Same class as TGT-325
+(itself filed to fix the identical drift after an earlier ticket):
+TGT-333 added one line to `lib/D2TG/Store.pm` (the new
+`mark_failed_transcription_transcribed` forwarder), growing it from 247
+to 248 lines, and the `docs/commands.md` prose citing that figure
+wasn't updated in the same commit. Fixed: the `D2TG::Store` row's "now
+247 lines" corrected to "now 248 lines". No code touched, no version
+bump (matching TGT-315/319/321/323/325's own precedent for a
+same-version doc-only correction).
