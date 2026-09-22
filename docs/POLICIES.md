@@ -7633,3 +7633,24 @@ before this ticket since no code was touched).
 perlsec.pl-style vulnerability-scan audit: no code touched at all -
 documentation/POD structure only. No untrusted-input surface, no
 shell/exec/eval, nothing to scan.
+
+## TGT-329: Tira upgrade-gate review (5.174 -> 5.181)
+
+Auto-raised by Tira's own upgrade gate, 2026-09-22, when this board's own
+Tira install upgraded from 5.174 to 5.181. Reviewed per this project's
+own established upgrade-gate precedent (TGT-137/274/283/323): ran `d2
+tira.policy.undeclared` (returned empty - nothing newly undeclared) and
+read all 7 Changes entries between 5.174 and 5.181 (5.175 TKT-1118,
+5.176 TKT-1127, 5.177 TKT-664, 5.178 TKT-1104, 5.179 TKT-1093, 5.180
+TKT-1138, 5.181 TKT-1009). Every entry is an internal Tira engine
+robustness fix - enforcement.json read-modify-write locking races,
+duplicated-code cleanup between two byte-identical helper methods,
+`--dry-run` refusal timing, singleton-claim release ordering under a
+concurrent claim, a job-command `$PATH`-resolution warning, and a
+`discover_project()` alias-resolution fallback gap. None introduce a new
+event type, command, or board-visible concept this board's own 53-policy
+set doesn't already cover, and none touch this skill's own code,
+dependencies, or documented behavior.
+
+Conclusion: no new policy needed, no existing declaration needs
+updating. Pure review ticket, no code touched, no version bump.
