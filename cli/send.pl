@@ -74,7 +74,12 @@ while (@ARGV) {
     }
     elsif ( $ARGV[0] eq '--caption' ) {
         shift @ARGV;
-        $caption = eval { D2TG::Config::Flags::shift_flag_value( \@ARGV, '--caption' ) };
+
+        # TGT-332: --caption is free text, not a token/id - a caption
+        # that legitimately starts with "--" must not be misread as a
+        # missing flag value. Uses the permissive sibling helper;
+        # --bot/--db/--reply-to-message-id keep the stricter one.
+        $caption = eval { D2TG::Config::Flags::shift_flag_value_free_text( \@ARGV, '--caption' ) };
         if ($@) {
             print STDERR $@;
             exit 1;
@@ -193,7 +198,11 @@ a bogus Usage error instead of resolving C<--db> from its trailing
 position - now matches every other C<d2 tg.*> command's own behavior).
 C<--bot>, C<--caption>, and C<--reply-to-message-id> may still appear in
 any order before C<chat_id>/C<file_path> (unchanged). C<--caption> is
-optional free text attached to the sent photo/document.
+optional free text attached to the sent photo/document - validated via
+L<D2TG::Config::Flags/shift_flag_value_free_text> (TGT-332: only rejects
+a missing/empty value, unlike C<--bot>/C<--db>/C<--reply-to-message-id>,
+so a caption that legitimately starts with C<--> is never misread as a
+missing flag value).
 C<--reply-to-message-id> (numeric) threads the send under an existing
 Telegram message, matching C<d2 tg.reply>'s own flag. C<--bot> matches
 C<d2 tg.reply>'s own leading-flag shape and validation

@@ -15,9 +15,28 @@ use D2TG::OrDie;
 sub shift_flag_value {
     my ( $args, $flag_label ) = @_;
 
+    my $value = shift_flag_value_free_text( $args, $flag_label );
+    die "$flag_label requires a value\n"
+      unless $value !~ /^--?[A-Za-z]/;
+
+    return $value;
+}
+
+# TGT-332 (found via a live JOB-003 hourly bug hunt; Q-020 answered by
+# Michael 2026-09-22): shift_flag_value's own flag-shape guard is correct
+# for --bot/--db/--reply-to-message-id (a token/id that happens to look
+# like a flag is far more likely a mistake than a real value), but wrong
+# for --caption - a caption is free text and can legitimately start with
+# "--" (e.g. "--dry-run flag explained"). This sibling helper is the
+# undef/empty guard alone, with no flag-shape check; shift_flag_value
+# above now delegates to it rather than duplicating that guard (same
+# JOB-004 improvement-hunt pass that added this ticket's own fix).
+sub shift_flag_value_free_text {
+    my ( $args, $flag_label ) = @_;
+
     my $value = shift @$args;
     die "$flag_label requires a value\n"
-      unless defined $value && $value ne '' && $value !~ /^--?[A-Za-z]/;
+      unless defined $value && $value ne '';
 
     return $value;
 }

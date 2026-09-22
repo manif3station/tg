@@ -1,5 +1,18 @@
 # tg
 
+**Status: early implementation (v2.60).** FIX (TGT-332, found via a live
+JOB-003 hourly bug hunt; Q-020 answered by Michael): `cli/send.pl`'s
+`--caption` misread a value starting with a dash-letter pattern (e.g.
+`--hello world`) as a missing flag value and died, because it shared
+`D2TG::Config::Flags::shift_flag_value`'s strict validation with
+`--bot`/`--db`/`--reply-to-message-id`. A caption is free text, not a
+token/id, so a caption that legitimately starts with `--` must be
+accepted. Added a new sibling helper, `shift_flag_value_free_text`
+(undef/empty guard only, no flag-shape check), used for `--caption`;
+the other three flags are unchanged. `shift_flag_value` itself now
+delegates to the new helper for its own undef/empty guard, removing the
+duplication (same pass, per the JOB-004 improvement hunt).
+
 **Status: early implementation (v2.59).** REFACTOR (TGT-330, found via a
 live JOB-004 improvement hunt): `D2TG::Store::RetryQueue`'s
 `has_failed_download` and `has_failed_transcription` duplicated the

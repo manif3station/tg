@@ -7712,3 +7712,43 @@ documented behavior.
 
 Conclusion: no new policy needed, no existing declaration needs
 updating. Pure review ticket, no code touched, no version bump.
+
+## TGT-332: cli/send.pl's --caption misread a dash-leading value as missing
+
+Found via a live JOB-003 hourly bug hunt, 2026-09-22. Root cause:
+`cli/send.pl`'s `--caption` flag was validated by
+`D2TG::Config::Flags::shift_flag_value`, which dies on any value matching
+`/^--?[A-Za-z]/` - a guard correct for `--bot`/`--db`/
+`--reply-to-message-id` (a token/id that looks like a flag is almost
+certainly a mistake) but wrong for `--caption`, which is free text and
+can legitimately start with `--` (e.g. a caption like "--dry-run flag
+explained"). Live-reproduced before any fix:
+`shift_flag_value(['--hello world'], '--caption')` died `requires a
+value` even though a real caption was given.
+
+Raised as Q-020 (a design decision on a shared helper affecting 4 flags,
+not the agent's to make unilaterally, matching the TGT-322 precedent for
+`--reply-to-message-id`) with two options: leave as-is and document the
+limitation, or give `--caption` its own permissive validation. Michael
+chose the latter.
+
+Fix: added `D2TG::Config::Flags::shift_flag_value_free_text($args,
+$flag_label)` - the same undef/empty guard as `shift_flag_value`, with
+the flag-shape check dropped entirely. `cli/send.pl`'s `--caption`
+branch now uses it; `--bot`/`--db`/`--reply-to-message-id` are
+unchanged. `shift_flag_value` itself was refactored (same pass, per the
+JOB-004 improvement hunt that fired immediately after) to delegate its
+own undef/empty guard to the new helper rather than duplicating it - a
+pure internal refactor, confirmed byte-identical behavior via the
+pre-existing `t/60-shared-flag-value-helper.t` suite passing unchanged.
+
+Test strategy: `t/332-caption-permissive-value.t` (6 assertions) - a
+dash-leading caption is now accepted; undef/empty still refuses; a
+negative-number-shaped value still passes (parity with the strict
+helper); the strict `shift_flag_value` is unchanged (regression guard).
+Full suite (243 files, 2975 tests) reran green after the fix. Perlsec:
+no new input reaches `system`/`exec`/SQL/shell interpolation - the
+relaxed value only ever reaches Telegram's `sendPhoto`/`sendDocument`
+`caption` parameter via `D2TG::Telegram`'s existing JSON-encoded HTTP
+body, exactly as any other caption already did; no new injection
+surface.

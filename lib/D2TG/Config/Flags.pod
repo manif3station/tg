@@ -40,6 +40,21 @@ C<--since>/C<--until> handling - one implementation instead of four,
 so a fifth call site (or a fifth future flag) gets this guard for free
 instead of needing its own copy.
 
+=head2 shift_flag_value_free_text($args_arrayref, $flag_label)
+
+TGT-332 (found via a live JOB-003 hourly bug hunt; Q-020 answered by
+Michael 2026-09-22): a sibling of L<shift_flag_value()|/shift_flag_value($args_arrayref, $flag_label)> for flags whose
+value is genuinely free text rather than a token/id - currently only
+C<cli/send.pl>'s C<--caption>. Shifts the next value off
+C<$args_arrayref> and dies with C<"$flag_label requires a value\n">
+unless it's defined and non-empty, exactly like C<shift_flag_value>'s
+own undef/empty guard - but deliberately omits the flag-shape check
+(rejecting a value starting with C<-> followed by a letter), since a
+caption that legitimately starts with C<--> (e.g. C<"--dry-run flag
+explained">) is real content, not a mistake, and must never be misread
+as a missing flag value the way C<--bot>/C<--db>/
+C<--reply-to-message-id> correctly are.
+
 =head2 extract_db_flag(@ARGV)
 
 Parses C<--db <alias>> / C<-d <alias>> out of a raw argument list
