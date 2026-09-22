@@ -7690,3 +7690,25 @@ name (a fixed set of 2 literal strings, never derived from untrusted
 input) and already-parameterized DBI bind values; no string eval, no
 shell/exec/system/backtick/piped-open patterns, no change to what
 reaches storage.
+
+## TGT-331: Tira upgrade-gate review (5.181 -> 5.184)
+
+Auto-raised by Tira's own upgrade gate, 2026-09-22, when this board's own
+Tira install upgraded from 5.181 to 5.184. Reviewed per this project's
+own established upgrade-gate precedent (TGT-137/274/283/323/329): ran
+`d2 tira.policy.undeclared` (returned empty - nothing newly undeclared)
+and read all 3 Changes entries between 5.181 and 5.184 (5.182 TKT-1084 -
+`--exempt-required`'s value was matched against a required item's
+descriptive text only, never its REQ id, now matched against either;
+5.183 TKT-1129 - `run_due_job` now resolves a bare command word beside
+the running perl interpreter's own bin/ before falling back to
+`$ENV{PATH}`, closing a live incident where the ambient PATH had drifted;
+5.184 TKT-646 - `policy.list` silently ignored every one of its own
+documented filter options, now filters correctly). Every entry is an
+internal Tira engine robustness fix - none introduce a new event type,
+command, or board-visible concept this board's own 53-policy set doesn't
+already cover, and none touch this skill's own code, dependencies, or
+documented behavior.
+
+Conclusion: no new policy needed, no existing declaration needs
+updating. Pure review ticket, no code touched, no version bump.
