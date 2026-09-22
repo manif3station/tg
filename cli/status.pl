@@ -9,6 +9,7 @@ use File::Spec;
 use D2TG::Config;
 use D2TG::Config::Flags;
 use D2TG::Lock;
+use D2TG::Poller::Safe;
 use D2TG::Transcribe;
 
 # TGT-111 (user-supplied feature-gap analysis, /tmp/missing2.md item 5):
@@ -87,6 +88,28 @@ else {
     print "heartbeat: ${heartbeat_age}s ago (ok)\n";
 }
 
+# TGT-335 (found via a live JOB-004 improvement hunt): a poller can
+# report "running" and "heartbeat: ok" while silently accumulating
+# stuck failed_downloads/failed_transcriptions rows the whole time (all
+# auto-retries exhausted after the 5-minute window, TGT-221/246) - this
+# was previously invisible from d2 tg.status entirely, discoverable only
+# via a separate d2 tg.unread call. Printed even when 0, so the absence
+# of a problem is as visible as its presence, matching cli/unread.pl's
+# own existing eval/classify/refuse shape for these same two accessors.
+my $store = D2TG::Poller::Safe::open_store_or_die(
+    skill_root    => $skill_root,
+    base_dir      => $base_dir,
+    admin_chat_id => D2TG::Config::chat_id(),
+);
+
+my @queued_downloads = eval { @{ $store->failed_downloads } };
+D2TG::Poller::Safe::die_store_error( $@, 'failed_downloads' ) if $@;
+print 'queued failed downloads: ' . scalar(@queued_downloads) . "\n";
+
+my @queued_transcriptions = eval { @{ $store->failed_transcriptions } };
+D2TG::Poller::Safe::die_store_error( $@, 'failed_transcriptions' ) if $@;
+print 'queued failed transcriptions: ' . scalar(@queued_transcriptions) . "\n";
+
 exit 0;
 
 =head1 NAME
@@ -112,12 +135,15 @@ command answers it directly: the installed C<VERSION>, and whether a
 live process currently holds the poller's own lock file
 (L<D2TG::Lock/is_held>).
 
-Read-only - touches no state, sends no network request, and critically
-never calls L<D2TG::Lock/acquire>: doing so to merely answer a status
-question would risk evicting a genuinely live poller, per this skill's
-own "last one wins" lock policy (TGT-084). C<is_held> only ever sends a
-harmless C<kill(0, $pid)> liveness probe (no real signal), and never
-touches the lock file itself.
+Sends no network request, and critically never calls
+L<D2TG::Lock/acquire>: doing so to merely answer a status question
+would risk evicting a genuinely live poller, per this skill's own "last
+one wins" lock policy (TGT-084). C<is_held> only ever sends a harmless
+C<kill(0, $pid)> liveness probe (no real signal), and never touches the
+lock file itself. (TGT-335: opening the message store to read the retry
+queues below follows the same on-demand-creation convention every other
+C<d2 tg.*> command already uses - no different from C<d2 tg.unread>'s
+own identical call.)
 
 Also reports the poller's own heartbeat age (TGT-116) - "alive" (pid
 exists) and "working" (still genuinely cycling through poll cycles) are
@@ -139,5 +165,15 @@ transcription's full retry ladder at its new, longer per-tier budget.
 C<--db>/C<-d> match every other C<d2 tg.*> command's own resolution
 (L<D2TG::Config/resolve_alias_dir>) - the same storage location the
 poller itself would use, so this reports on the right instance.
+
+C<queued failed downloads>/C<queued failed transcriptions> (TGT-335,
+found via a live JOB-004 improvement hunt) report
+L<D2TG::Store/failed_downloads>/L<D2TG::Store/failed_transcriptions>'s
+own counts - always printed, including C<0>, so the absence of a
+problem is as visible as its presence. A poller can report C<running>
+and C<heartbeat: ok> while silently accumulating rows whose auto-retry
+window has already expired (TGT-221/246's 5-minute window); before this
+ticket, discovering that required a separate C<d2 tg.unread> call that
+most callers checking status wouldn't think to also run.
 
 =cut

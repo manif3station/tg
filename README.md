@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.62).** IMPROVEMENT (TGT-335, found via a
+live JOB-004 improvement hunt): `d2 tg.status` reported poller
+liveness/heartbeat but nothing about queued
+`failed_downloads`/`failed_transcriptions` - a real degraded-but-alive
+state (auto-retry exhausted after the 5-minute window, TGT-221/246) was
+invisible without a separate `d2 tg.unread` call. `cli/status.pl` now
+also prints `queued failed downloads: N` and `queued failed
+transcriptions: N`, always shown (including `0`), mirroring
+`cli/unread.pl`'s own existing read pattern for these two queues.
+
 **Status: early implementation (v2.61).** IMPROVEMENT (TGT-333, found via a
 live JOB-004 improvement hunt): `D2TG::Transcribe::Retry::retry_failed_transcription`
 used to re-download and re-transcribe the same audio from scratch on

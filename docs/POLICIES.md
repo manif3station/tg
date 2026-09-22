@@ -7827,3 +7827,37 @@ wasn't updated in the same commit. Fixed: the `D2TG::Store` row's "now
 247 lines" corrected to "now 248 lines". No code touched, no version
 bump (matching TGT-315/319/321/323/325's own precedent for a
 same-version doc-only correction).
+
+## TGT-335: d2 tg.status didn't surface queued failed_downloads/failed_transcriptions counts
+
+Found via a live JOB-004 improvement hunt, 2026-09-22. `cli/status.pl`
+reported the poller's version, liveness, and heartbeat age - a good
+at-a-glance health check - but gave no indication that
+`failed_downloads`/`failed_transcriptions` had queued, unretryable rows
+(e.g. all auto-retries exhausted after the 5-minute window,
+TGT-221/246). A poller could report `running` and `heartbeat: ok` while
+silently accumulating stuck retry-queue rows the whole time; discovering
+that required a separate `d2 tg.unread` call most callers checking
+status wouldn't think to also run.
+
+Fix: `cli/status.pl` now also opens the message store (via
+`D2TG::Poller::Safe::open_store_or_die`, the same on-demand-creation
+convention every other `d2 tg.*` command already uses) and prints
+`queued failed downloads: <N>` and `queued failed transcriptions: <N>`,
+always shown including `0` - so the absence of a problem is as visible
+as its presence, mirroring `cli/unread.pl`'s own existing
+eval/classify/refuse shape for these same two accessors
+(`D2TG::Poller::Safe::die_store_error`).
+
+Test strategy: `t/335-status-queue-counts.t` (6 assertions) - both
+counts print as `0` against an empty queue (not omitted), and print the
+accurate count once one row of each kind is seeded. All pre-existing
+`status.pl`-related tests (`t/80-poller-status.t`,
+`t/121-status-usage-pod-parity.t`, `t/212-skills-md-status-threshold-
+accurate.t`, `t/50-status-line-version-match.t`) reran green unchanged.
+
+Perlsec: no new input reaches `system`/`exec`/`eval`/backticks/SQL
+interpolation - `failed_downloads`/`failed_transcriptions` are existing
+read-only accessors already used elsewhere (`cli/unread.pl`); this
+ticket only adds a second call site reading the same data, formatted as
+a plain integer count. No new attack surface.

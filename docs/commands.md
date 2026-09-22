@@ -748,6 +748,17 @@ itself, so that needs either a second always-running watchdog process or
 a Tira-scheduled job to do the restarting, an operational decision
 flagged as a follow-up rather than built unilaterally.
 
+TGT-335 (found via a live JOB-004 improvement hunt): also prints `queued
+failed downloads: <N>` and `queued failed transcriptions: <N>` (from
+`D2TG::Store::failed_downloads`/`failed_transcriptions`), always shown
+including `0` - a poller can report `running` and `heartbeat: ok` while
+silently accumulating rows whose auto-retry window has already expired
+(TGT-221/246's 5-minute window); before this, discovering that required
+a separate `d2 tg.unread` call. This opens the message store (via
+`D2TG::Poller::Safe::open_store_or_die`, the same on-demand-creation
+convention every other `d2 tg.*` command already uses) - the only part
+of this command that isn't purely reading already-existing state.
+
 ## `d2 tg.unread [--bot <token>] [--db <alias> | -d <alias>]`
 
 Lists every stored message (TGT-038) not yet marked read (TGT-046),
