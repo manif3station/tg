@@ -139,9 +139,13 @@ CRLF/boundary-containing value injecting extra multipart fields) and an
 extra C<reply_to_message_id> field is added to the body before the
 C<voice> field.
 
-=head2 send_photo($chat_id, $file_path, caption => $text, reply_to_message_id => $id)
+=head2 send_photo($chat_id, $file_path, caption => $text, reply_to_message_id => $id) / send_document($chat_id, $file_path, caption => $text, reply_to_message_id => $id)
 
-=head2 send_document($chat_id, $file_path, caption => $text, reply_to_message_id => $id)
+TGT-328 (found via a live JOB-005 doc-accuracy hunt): these two
+functions share one combined heading - they are documented together in
+the single paragraph below, and a podchecker warning ("empty section")
+correctly flagged the previous two-heading-in-a-row layout, since
+C<send_photo>'s own section had no body text of its own.
 
 TGT-103: push a local file to C<$chat_id> as a Telegram photo or
 document, via the shared L<_send_file()|/_send_file($method, $field_name, $chat_id, $file_path, %opts)> helper (same raw hand-built
@@ -150,7 +154,7 @@ are optional.
 
 =head2 _send_file($method, $field_name, $chat_id, $file_path, %opts)
 
-Internal helper backing L<send_photo()|/send_photo($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id)>/L<send_document()|/send_document($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id)>. TGT-125
+Internal helper backing L<send_photo()|/send_photo($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id) / send_document($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id)> and L<send_document()|/send_photo($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id) / send_document($chat_id, $file_path, caption =E<gt> $text, reply_to_message_id =E<gt> $id)>. TGT-125
 (found via a scheduled bug-hunt): the local file's basename is escaped
 and sanitized before being inserted into the multipart
 C<Content-Disposition> header's C<filename="...">> attribute - a

@@ -7587,3 +7587,49 @@ plain text values (no new string interpolation of untrusted input,
 both original call sites); no string eval, no shell/exec/system/
 backtick/piped-open patterns, no change to what reaches storage or the
 retry queue.
+
+## TGT-328: lib/D2TG/Telegram.pod's send_photo section was structurally empty
+
+Found via a live JOB-005 doc-accuracy hunt, 2026-09-22. Ran `podchecker`
+against every `lib/D2TG/*.pod` and `lib/D2TG/*/*.pod` file (part of this
+project's own "check all the Perl POD in PM and PL and .T files"
+doc-accuracy convention) and found a genuine warning: "empty section in
+previous paragraph at line 144 in file lib/D2TG/Telegram.pod".
+`Telegram.pod`'s `=head2 send_photo(...)` heading was immediately
+followed by another `=head2 send_document(...)` heading with no body
+text in between - the shared description paragraph a few lines below
+was only attached to `send_document`'s own heading, leaving
+`send_photo`'s section structurally empty. A reader running `perldoc
+D2TG::Telegram` or generating HTML docs from this file would see
+`send_document`'s combined description but nothing at all under
+`send_photo`'s own heading, even though it is a real, separately
+public method.
+
+Fix: merged the two headings into one combined `=head2` naming both
+signatures, since the paragraph beneath genuinely documents both
+functions together (matches `_send_file`'s own existing style of
+naming both callers in prose). Fixing this broke the file's own
+internal `L<>` links pointing at the old separate `send_photo()`/
+`send_document()` anchors (`_send_file`'s own POD section links to
+both) - discovered live via a second `podchecker` pass after the
+heading merge, which caught the exact "unresolved internal link"
+error immediately; updated both links to point at the new combined
+anchor text, then hit a third `podchecker` error (an unescaped `/` in
+the link's alternative text) before landing on a clean pass - three
+live `podchecker` runs in total, each one driving the next fix rather
+than being assumed correct.
+
+No code touched, no version bump - matching the TGT-319/321/325
+precedent for a doc/POD-only ticket.
+
+Test strategy: no automated test applies - a pure POD-structure fix has
+no code behavior to assert against TDD/BDD-style. Verification is
+`podchecker lib/D2TG/Telegram.pod` itself, run before (confirming the
+warning was genuinely present) and after (confirming a clean "pod
+syntax OK" with zero warnings), plus a full-suite run confirming no
+other file was affected (`Files=241, Tests=2968`, unchanged from
+before this ticket since no code was touched).
+
+perlsec.pl-style vulnerability-scan audit: no code touched at all -
+documentation/POD structure only. No untrusted-input surface, no
+shell/exec/eval, nothing to scan.
