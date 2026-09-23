@@ -80,6 +80,32 @@ my ( $since, $until );
                 exit 2;
             }
 
+            # TGT-337 (found via a live, user-requested adversarial bug
+            # hunt): the calendar-date check above only validates the
+            # DATE part of a full date+time value - the time-of-day
+            # component was never validated at all, so a syntactically
+            # well-formed but impossible value like
+            # 2026-01-01T99:99:99 reached messages_in_range's own
+            # lexicographic SQL comparison unvalidated, silently
+            # excluding every real message (the same misleading "No
+            # messages found." bug class TGT-209/TGT-302 already fixed
+            # for other malformed shapes). Unlike the date part, a
+            # live probe confirmed Time::Piece's own %H:%M:%S parsing
+            # genuinely DIES on an out-of-range hour/minute/second
+            # (24:00:00, 12:60:00, 12:00:60 all die) rather than
+            # silently rolling over the way the day/month component
+            # does - so a bare eval-wrapped round-trip of the full
+            # value is enough here, no string-comparison needed the
+            # way the date-only check above needs it.
+            if ( $value =~ /T(\d{2}:\d{2}:\d{2})$/ ) {
+                my $time_ok = eval { Time::Piece->strptime( $value, '%Y-%m-%dT%H:%M:%S' ) };
+                if ( !$time_ok ) {
+                    print STDERR "d2 tg.history: $arg value '$value' is not a "
+                      . "valid time of day\n";
+                    exit 2;
+                }
+            }
+
             if ( $arg eq '--since' ) { $since = $value }
             else                     { $until = $value }
         }

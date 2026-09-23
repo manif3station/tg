@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.64  2026-09-23
+      - BUGFIX (TGT-337, found via a live, user-requested adversarial
+        bug hunt): cli/history.pl's --since/--until validated date
+        shape and calendar validity (TGT-209/TGT-302) but never the
+        time-of-day component - a value like
+        2026-01-01T99:99:99 silently reached the SQL range query and
+        excluded real messages, the exact misleading "No messages
+        found." class those earlier fixes closed for other malformed
+        shapes. Now round-trips HH:MM:SS through Time::Piece too and
+        refuses a value it can't parse.
+
 2.63  2026-09-23
       - IMPROVEMENT (TGT-336, found via a live JOB-004 improvement hunt;
         Q-021 answered by Michael): cli/fetch.pl and cli/attachment.pl

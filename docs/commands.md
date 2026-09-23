@@ -1126,8 +1126,20 @@ scheduled bug-hunt): a value that doesn't match `YYYY-MM-DD` or
 expected format, instead of reaching `D2TG::Store::messages_in_range`'s
 own SQL comparison, where a value like `not-a-date` sorts
 lexicographically after every real timestamp and silently excludes
-every message. Any other unrecognized flag or leftover positional
-argument also exits 2 with a
+every message. `--since`/`--until` further validate the value is a real
+*calendar* date (TGT-302, found via a user-requested comprehensive
+bug/improvement sweep) - the shape check alone accepts a syntactically
+well-formed but nonexistent date like `2026-13-45` or `2026-02-30`,
+round-tripped through `Time::Piece` and compared back against the
+original to catch it - and, separately, that the time-of-day component
+(when given) is a real time (TGT-337, found via a live, user-requested
+adversarial bug hunt): the calendar check above only validated the date
+part, so a value like `2026-01-01T99:99:99` reached the same SQL
+comparison unvalidated; `HH:MM:SS` is now round-tripped through
+`Time::Piece` too (which genuinely dies on an out-of-range hour/minute/
+second, unlike the day/month component's silent-rollover behavior, so a
+bare eval-wrapped parse is enough here). Any other unrecognized flag or
+leftover positional argument also exits 2 with a
 `Usage:` message (TGT-122, found via a scheduled bug-hunt) - previously
 silently ignored, exiting 0 as if the (mistyped) invocation had
 succeeded - reproduced as `No messages found.` when nothing happened

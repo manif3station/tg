@@ -7965,3 +7965,34 @@ unchanged (`Files=246, Tests=2999`).
 
 Perlsec: no code touched at all - a `docs/commands.md` prose edit has
 no attack surface.
+
+## TGT-337
+
+Found via a live, user-requested adversarial bug hunt. `cli/history.pl`'s
+`--since`/`--until` validated date shape (TGT-209) and calendar validity
+(TGT-302) but never the time-of-day component at all - a syntactically
+well-formed but impossible value like `2026-01-01T99:99:99` reached
+`D2TG::Store::messages_in_range`'s own lexicographic SQL comparison
+unvalidated, silently excluding real messages. Live-reproduced against
+real stored data: a message recorded via `D2TG::Store->record_message`
+was excluded by `messages_in_range(since => '2026-01-01T99:99:99')`
+even though it should have matched, because `99:99:99` sorts
+lexicographically after every real time-of-day.
+
+A live probe of `Time::Piece::strptime` with `%H:%M:%S` found it
+behaves differently from its own day/month handling: an out-of-range
+hour/minute/second (`24:00:00`, `12:60:00`, `12:00:60`) genuinely
+*dies*, rather than silently rolling over the way `2026-02-30` becomes
+`2026-03-02`. So the fix is a plain eval-wrapped round-trip of the full
+value through `%Y-%m-%dT%H:%M:%S` when a time component is present - no
+string-comparison trick needed the way the date-only check requires.
+TDD: `t/337-history-time-of-day-invalid.t` (8 assertions) confirmed
+genuinely red beforehand (`Tests=8, Failed=6`) and green after. Full
+Docker suite reran green (`Files=247, Tests=3007`); `cli/history.pl` is
+a `cli/*.pl` script, exempt from the 100% lib/-scoped coverage gate per
+this project's own established convention.
+
+Perlsec: the new code only parses a caller-supplied string through
+`Time::Piece::strptime` inside an `eval` - no `system`/`exec`/backticks/
+SQL involved, and a parse failure is caught and refused cleanly, never
+propagated raw.
