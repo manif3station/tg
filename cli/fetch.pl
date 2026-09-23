@@ -62,8 +62,17 @@ print "$message->{summary}\n";
 # marked read for a fetch that didn't actually show anything. This is
 # the whole point of this command: fetching and marking read are one
 # action, not two - the agent never runs a separate mark-read step.
+# TGT-336 (Q-021 answered by Michael): a mark_read failure at this point
+# is different from a genuine fetch failure - the content above was
+# already successfully shown. Exits 3 (not the shared die_store_error's
+# 1) so a caller can tell "nothing was ever shown" apart from "shown,
+# only the trailing housekeeping write failed" without re-parsing STDERR.
 eval { $store->mark_read( $chat_id, $message_id, bot_key => $bot_key ) };
-D2TG::Poller::Safe::die_store_error( $@, 'mark_read' ) if $@;
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: mark_read failed - $reason\n";
+    exit 3;
+}
 
 exit 0;
 
@@ -113,6 +122,14 @@ call are C<eval>-wrapped and classified via
 C<D2TG::Poller::Safe::classify_store_error> - a locked/busy database
 at either used to be able to die raw; now it prints a clean
 C<STORE ERROR: ... failed - REASON> refusal instead.
+
+TGT-336 (Q-021 answered by Michael, found via a live JOB-004 improvement
+hunt): a C<mark_read> failure is reported with its own distinct exit
+code, C<3>, not the same C<1> a genuine "nothing recorded" failure uses
+- the content was already successfully shown by the time C<mark_read>
+runs, so a caller checking only the exit code can now tell "fetch
+genuinely failed, nothing shown" (still C<1>) apart from "content was
+shown, only the trailing read-marking write failed" (C<3>).
 
 This command intentionally does not handle photos/documents - those
 already have their own fetch step, C<cli/attachment.pl>, which gained

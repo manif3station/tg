@@ -834,7 +834,11 @@ unchanged.
 Marks the message read (TGT-311, explicit user-requested architecture
 change) as a side effect of a successful fetch - only once the bytes
 have actually been streamed, never on a refusal. Fetching and marking
-read are one action, not two.
+read are one action, not two. TGT-336 (Q-021 answered by Michael): a
+`mark_read` failure at this point - the attachment already shown -
+exits `3`, distinct from the genuine exit `1` "nothing recorded"
+refusal above, so a caller checking only the exit code can tell them
+apart without re-parsing STDERR.
 
 **Fetching is not permanently guaranteed** (TGT-134): a stored
 `local_path` never expires from the database, but the file itself can
@@ -897,6 +901,10 @@ single-bot sentinel.
 This command intentionally does not handle photos/documents - those
 already have their own fetch step, `d2 tg.attachment` (above), which
 gained this same mark-read-on-success behavior in the same ticket.
+TGT-336 (Q-021 answered by Michael): a `mark_read` failure once the
+content is already shown exits `3`, distinct from the genuine exit `1`
+"nothing recorded" refusal above - matching `d2 tg.attachment`'s own
+identical distinction.
 
 **Worked example**: a poll cycle reporting one text message prints
 something like this on stdout -

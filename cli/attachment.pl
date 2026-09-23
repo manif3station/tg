@@ -126,8 +126,17 @@ close $fh;
 # TGT-046 precedent). Fetching and marking read are one action, not
 # two - the agent never runs a separate mark-read step for a media
 # message either.
+# TGT-336 (Q-021 answered by Michael): a mark_read failure at this point
+# is different from a genuine fetch failure - the attachment above was
+# already successfully streamed. Exits 3 (not the shared die_store_error's
+# 1) so a caller can tell "nothing was ever shown" apart from "shown,
+# only the trailing housekeeping write failed" without re-parsing STDERR.
 eval { $store->mark_read( $chat_id, $message_id, bot_key => $bot_key ) };
-D2TG::Poller::Safe::die_store_error( $@, 'mark_read' ) if $@;
+if ($@) {
+    my $reason = D2TG::Poller::Safe::classify_store_error($@);
+    print STDERR "STORE ERROR: mark_read failed - $reason\n";
+    exit 3;
+}
 
 exit 0;
 
@@ -199,5 +208,14 @@ read via L<D2TG::Store/mark_read> - matching C<cli/fetch.pl>'s own
 identical "only after success" placement (itself matching
 C<D2TG::Reply::send_reply>'s TGT-046 precedent). Fetching an attachment
 and marking its message read are one action, not two.
+
+TGT-336 (Q-021 answered by Michael, found via a live JOB-004 improvement
+hunt): a C<mark_read> failure is reported with its own distinct exit
+code, C<3>, not the same C<1> a genuine "nothing recorded" failure uses
+- the attachment was already successfully streamed by the time
+C<mark_read> runs, so a caller checking only the exit code can now tell
+"fetch genuinely failed, nothing shown" (still C<1>) apart from
+"attachment was shown, only the trailing read-marking write failed"
+(C<3>), matching C<cli/fetch.pl>'s own identical distinction.
 
 =cut

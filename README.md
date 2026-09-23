@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.63).** IMPROVEMENT (TGT-336, found via a
+live JOB-004 improvement hunt; Q-021 answered by Michael): `cli/fetch.pl`
+and `cli/attachment.pl` both print content/an attachment successfully,
+then call `mark_read` - a `mark_read` failure used to exit 1, the same
+code used when nothing was ever shown at all. Both scripts now exit `3`
+for a `mark_read`-after-success failure, distinct from the genuine
+"nothing recorded" exit `1`, so a caller checking only the exit code can
+tell them apart.
+
 **Status: early implementation (v2.62).** IMPROVEMENT (TGT-335, found via a
 live JOB-004 improvement hunt): `d2 tg.status` reported poller
 liveness/heartbeat but nothing about queued

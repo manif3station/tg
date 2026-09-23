@@ -7861,3 +7861,58 @@ interpolation - `failed_downloads`/`failed_transcriptions` are existing
 read-only accessors already used elsewhere (`cli/unread.pl`); this
 ticket only adds a second call site reading the same data, formatted as
 a plain integer count. No new attack surface.
+
+## TGT-336: cli/fetch.pl and cli/attachment.pl conflated "nothing shown" with "shown, mark_read failed"
+
+Found via a live JOB-004 improvement hunt, 2026-09-22, while reading
+cli/fetch.pl during a JOB-003 pass. Both `cli/fetch.pl` and
+`cli/attachment.pl` print content/an attachment to stdout FIRST, then
+call `D2TG::Store::mark_read` - if `mark_read` then failed (a transient
+locked/busy database), both scripts exited `1`, the same code used when
+nothing was ever shown at all (the message/attachment genuinely wasn't
+recorded). A caller checking only the exit code couldn't tell "genuine
+fetch failure" apart from "content shown, only the trailing housekeeping
+write failed" - the same ambiguity class this project already solved
+elsewhere via a 3-value success signal
+(`D2TG::Download::retry_failed_download`/
+`D2TG::Transcribe::Retry::retry_failed_transcription`'s own
+`$still_queued`, TGT-244/247/248), just never applied to this pair of
+CLI commands.
+
+Raised as Q-021 (a CLI exit-code contract change affecting 2 scripts - a
+design decision, not the agent's to make unilaterally, matching
+TGT-322's own precedent) with two options: give the mark_read-after-
+success failure its own distinct exit code, or leave both scripts as-is.
+Michael chose the former - exit code `3`.
+
+Fix: both scripts now catch a `mark_read` failure separately from the
+shared `D2TG::Poller::Safe::die_store_error` helper (which always exits
+`1` and is used by many other call sites that must keep that default
+unchanged) - printing the identical `STORE ERROR: mark_read failed -
+REASON` line but calling `exit 3` instead. A genuine "nothing recorded"
+refusal (the earlier `get_message`/`get_attachment_path` lookup) is
+completely untouched and still exits `1`.
+
+Test strategy: `t/336-fetch-attachment-mark-read-failure-exit-code.t` (9
+assertions). Forcing only the trailing `mark_read` write to fail turned
+out to be non-trivial: a genuine concurrent-lock approach (holding a
+write transaction open from another process while the CLI runs) was
+tried first and rejected - `D2TG::Store::new` runs
+`D2TG::Store::Schema::ensure_schema`'s own `ALTER TABLE` statements on
+*every* connection (duplicate-tolerant, but still a real write attempt
+via SQLite's busy-timeout mechanism), so any lock held long enough to
+fail `mark_read` also failed the store's own opening schema migration
+first - live-reproduced and confirmed via a standalone probe script
+before abandoning the approach. The test instead installs a
+deterministic SQLite `BEFORE UPDATE OF read_at ON messages` trigger that
+unconditionally raises on exactly `mark_read`'s own statement (verified
+against `D2TG::Store::History::mark_read`'s literal SQL) - `SELECT`s
+(`get_message`/`get_attachment_path`) and the DDL migration (entirely
+different statements) are both completely unaffected, with no timing
+race at all. All pre-existing sibling tests (`t/311-cli-fetch.t`,
+`t/99-cli-attachment.t`, `t/101-cli-attachment-pruned.t`,
+`t/117-attachment-usage-pod-parity.t`) reran green unchanged.
+
+Perlsec: no new input reaches `system`/`exec`/`eval`/backticks/SQL -
+this is a pure exit-code/control-flow change around an already-existing,
+already-classified store-write failure path. No new attack surface.
