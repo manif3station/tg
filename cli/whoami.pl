@@ -8,13 +8,23 @@ use File::Spec;
 
 use D2TG::Config;
 use D2TG::Config::Flags;
+use D2TG::Reply::Args;
 
 my ( $db_alias, @rest );
 ( $db_alias, @rest ) = D2TG::Config::Flags::extract_db_flag_or_die(@ARGV);
 @ARGV = @rest;
 
+# TGT-340 (found via a live, user-requested adversarial improvement
+# hunt): every other d2 tg.* command that scopes an operation to a
+# specific bot already uses this same leading-position, eval-wrapped
+# extract_bot_flag_or_die convention - this command was the one
+# sanity-check command left without any way to ask about a bot other
+# than D2TG_TOKEN in a multi-bot install.
+my ( $bot_token, @after_bot ) = D2TG::Reply::Args::extract_bot_flag_or_die(@ARGV);
+@ARGV = @after_bot;
+
 if (@ARGV) {
-    print STDERR "Usage: d2 tg.whoami [--db <alias> | -d <alias>]\n";
+    print STDERR "Usage: d2 tg.whoami [--bot <token>] [--db <alias> | -d <alias>]\n";
     exit 2;
 }
 
@@ -29,7 +39,7 @@ my $attachments_dir = D2TG::Config::attachments_dir( default_root => $skill_root
 my $chat_id = D2TG::Config::chat_id();
 
 print "d2tg version: $version\n";
-print "token: " . D2TG::Config::masked_token( D2TG::Config::token() ) . "\n";
+print "token: " . D2TG::Config::masked_token( $bot_token // D2TG::Config::token() ) . "\n";
 print "chat_id: " . ( defined $chat_id && length $chat_id ? $chat_id : '(not set)' ) . "\n";
 print "storage: $state_db_path\n";
 print "attachments: $attachments_dir\n";
@@ -42,15 +52,25 @@ whoami - report which token/chat/storage a d2 tg.* invocation is actually config
 
 =head1 SYNOPSIS
 
-    d2 tg.whoami [--db <alias> | -d <alias>]
+    d2 tg.whoami [--bot <token>] [--db <alias> | -d <alias>]
 
 =head1 DESCRIPTION
 
 C<--db>/C<-d> is resolved via L<D2TG::Config::Flags/extract_db_flag> (TGT-124,
 found via a scheduled improvement-hunt fixing a hand-rolled duplicate
-loop), the same shared helper every other C<d2 tg.*> command uses -
-this command accepts no other flags, so the fix is a behavior-preserving
-consistency cleanup, not a change in what invocations it accepts.
+loop), the same shared helper every other C<d2 tg.*> command uses.
+
+C<--bot <token>> (TGT-340, found via a live, user-requested adversarial
+improvement hunt) reports that specific token's own masked value
+instead of C<D2TG_TOKEN>'s - matching L<D2TG::Reply::Args/extract_bot_flag>'s
+established leading-position convention, already used by
+C<cli/fetch.pl>/C<cli/attachment.pl>/C<cli/history.pl>/C<cli/unread.pl>/
+C<cli/approve.pl>/C<cli/retry-download.pl>/C<cli/retry-transcription.pl>.
+Before this, a multi-bot install (TGT-049) had no way to confirm a
+non-default bot's own token via this command - only ever
+C<D2TG_TOKEN>. C<chat_id> is unaffected either way, since it is a
+single global env var, not a per-bot value. Omitting C<--bot> is
+byte-for-byte unchanged from before this ticket.
 
 TGT-115 (user-supplied feature-gap analysis): with several projects on
 this host each running their own installed copy of this skill under

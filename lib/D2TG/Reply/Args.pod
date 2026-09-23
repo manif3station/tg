@@ -74,10 +74,10 @@ shifted off an empty list.
 
 =head2 extract_bot_flag_or_die(@args)
 
-TGT-236: centralizes the idiom that 9
+TGT-236: centralizes the idiom that 10
 C<cli/*.pl> scripts (C<history>, C<attachment>, C<unread>,
 C<retry-download>, C<retry-transcription>, C<approve>, C<send>,
-C<reply>, C<fetch> - TGT-311 added the 9th) each duplicated around L<extract_bot_flag()|/extract_bot_flag(@args)> - the exact
+C<reply>, C<fetch>, C<whoami> - TGT-340 added the 10th) each duplicated around L<extract_bot_flag()|/extract_bot_flag(@args)> - the exact
 duplication class that already
 caused TGT-068/074/231. A one-line forwarder onto the shared
 L<D2TG::OrDie/or_die> helper (TGT-269, found via a scheduled JOB-004

@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.65).** IMPROVEMENT (TGT-340, found via a
+live, user-requested adversarial improvement hunt): `cli/whoami.pl` was the
+one sanity-check command left without a `--bot <token>` flag - it always
+reported `D2TG_TOKEN`'s own masked value with no way to confirm a different
+configured bot's token in a multi-bot install. Now accepts `--bot <token>`,
+matching every sibling command's established leading-position convention;
+omitting it is unchanged.
+
 **Status: early implementation (v2.64).** BUGFIX (TGT-337, found via a live,
 user-requested adversarial bug hunt): `cli/history.pl`'s `--since`/`--until`
 validated date shape and calendar validity (TGT-209/TGT-302) but never the

@@ -7996,3 +7996,38 @@ Perlsec: the new code only parses a caller-supplied string through
 `Time::Piece::strptime` inside an `eval` - no `system`/`exec`/backticks/
 SQL involved, and a parse failure is caught and refused cleanly, never
 propagated raw.
+
+## TGT-340
+
+Found via a live, user-requested adversarial improvement hunt.
+`cli/whoami.pl` was the one sanity-check command left without a
+`--bot <token>` flag - nearly every other `d2 tg.*` command that can
+scope to a specific bot (`fetch`/`attachment`/`history`/`unread`/
+`approve`/`retry-download`/`retry-transcription`/`reply`/`send`)
+already had it via `D2TG::Reply::Args::extract_bot_flag_or_die`. In a
+multi-bot install (TGT-049) there was no way to use `whoami` to
+confirm a non-default bot's own token - only ever `D2TG_TOKEN`.
+
+Fixed by adding `--bot <token>` in the same established leading
+position; `chat_id` is unaffected either way (a single global env var,
+not per-bot). TDD: `t/340-whoami-bot-flag.t` (8 assertions) confirmed
+genuinely red beforehand (`Tests=8, Failed=3`) and green after, plus
+all 3 pre-existing sibling whoami test files (`t/86`, `t/125`, `t/201`
+- 43 tests total) reran green unchanged, including `t/125`'s own
+generic Usage/POD parity check that already covers `--bot`
+automatically. This change was itself the tenth caller of
+`extract_bot_flag_or_die` - `D2TG::Reply::Args.pod`'s own stated count
+(previously 9, TGT-311's own last update) and caller list, plus
+`docs/commands.md`'s two copies of the same sentence, were all updated
+in the same commit, caught live by `t/240-extract-bot-flag-pod-caller-count.t`'s
+own drift guard failing on the first full-suite run after the fix (a
+concrete, current-session example of exactly the doc-drift class that
+guard exists to prevent). Full Docker suite reran green
+(`Files=248, Tests=3018`); `cli/whoami.pl` is a `cli/*.pl` script,
+exempt from the 100% lib/-scoped coverage gate per this project's own
+established convention.
+
+Perlsec: the new code only threads an already-validated bot token
+(via the same `extract_bot_flag_or_die` every sibling command trusts)
+into `D2TG::Config::masked_token` - no `system`/`exec`/backticks/SQL
+involved, and the token itself is never printed unmasked.
