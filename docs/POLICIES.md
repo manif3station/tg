@@ -7938,3 +7938,30 @@ concurrent finding (this same session) that `docker-compose.testing.yml`
 was retired and `d2 docker compose` is the correct workflow going
 forward - already adopted here before this upgrade-gate card even
 fired.
+
+## TGT-339
+
+Found via a live, user-requested adversarial doc-accuracy hunt.
+`docs/commands.md`'s `## d2 tg.reply` section (heading synopsis, its
+parenthetical note, and a full paragraph describing
+`--reply-to-message-id`) still documented the pre-TGT-322 design:
+recognized only in the **trailing** position (the last two arguments).
+TGT-322 replaced that with **leading**-only recognition, and
+`cli/reply.pl`'s own embedded POD was correctly updated for it at the
+time - this separate `docs/commands.md` section was simply never
+touched in the same change.
+
+This was not cosmetic: TGT-322's own incident was a reply message
+legitimately ENDING with the literal words `--reply-to-message-id
+<word>` being silently corrupted under the old trailing design - a
+caller trusting this stale doc instead of the poller's own
+correctly-leading `REPLY WITH` template would reproduce exactly that
+corruption today. Fixed by rewriting the heading, parenthetical, and
+paragraph to match `cli/reply.pl`'s own already-correct wording
+(leading position, full TGT-322 rationale). No code changed - pure
+documentation-text fix, matching TGT-334's own no-TDD/no-coverage-gate
+precedent for prose-only tickets. Full Docker suite reran green
+unchanged (`Files=246, Tests=2999`).
+
+Perlsec: no code touched at all - a `docs/commands.md` prose edit has
+no attack surface.
