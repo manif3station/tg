@@ -7916,3 +7916,25 @@ race at all. All pre-existing sibling tests (`t/311-cli-fetch.t`,
 Perlsec: no new input reaches `system`/`exec`/`eval`/backticks/SQL -
 this is a pure exit-code/control-flow change around an already-existing,
 already-classified store-write failure path. No new attack surface.
+
+## TGT-338
+
+Auto-generated Tira upgrade-gate review card (5.184 -> 5.191), not a
+tg-skill code change - carries no `docs/commands.md`/`SKILLS.md`/POD
+update of its own, matching this project's established "pure
+review/documentation tickets get no code-facing doc update beyond
+their own POLICIES.md narrative" precedent (TGT-283/TGT-137/TGT-334).
+
+Reviewed the full 5.184 -> 5.191 Changes text (`TKT-1143`: a cron
+day-of-month/weekday OR-logic fix; `TKT-1136`: `tools/gate-run`/
+`tools/dev-run` migrated off the retired workspace
+`docker-compose.testing.yml` onto `d2 docker compose` per-tool images;
+`TKT-1148`: a `gate-run` worktree checkout fix) against
+`d2 tira.policy.undeclared`, which returned empty - none of the three
+changes introduce a new Tira-side behavior this board's own declared
+policy set needs to declare, decline, or update. `TKT-1136` is notable
+context only: it independently confirms this project's own separate,
+concurrent finding (this same session) that `docker-compose.testing.yml`
+was retired and `d2 docker compose` is the correct workflow going
+forward - already adopted here before this upgrade-gate card even
+fired.
