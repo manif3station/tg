@@ -407,13 +407,12 @@ tg.text-only-replies`, `d2 tg.unread`, `d2 tg.status`) gives for the
 same class of double-invalid-input. Single-invalid-input behavior is
 unaffected.
 
-## `d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] <chat_id> <text...> [--reply-to-message-id <id>]`
+## `d2 tg.reply [--db <alias> | -d <alias>] [--bot <token>] [--voice-only] [--reply-to-message-id <id>] <chat_id> <text...>`
 
-(`--reply-to-message-id`, when given, must be the last two arguments -
-see below; `--db`/`-d`, `--bot`, and `--voice-only` are the opposite -
-recognized only in the *leading* position, before `chat_id`, for the
-same collision-avoidance reason, and in any order relative to each
-other)
+(`--reply-to-message-id`, when given, must appear in the *leading*
+position - see below; `--db`/`-d`, `--bot`, and `--voice-only` are
+recognized the same way, before `chat_id`, for the same
+collision-avoidance reason, and in any order relative to each other)
 
 The poller's own `REPLY WITH` recovery-command template
 (`D2TG::Poller::Format::print_reply_template`) prints `--bot` in this same leading position
@@ -489,17 +488,27 @@ TGT-027) — a non-numeric first argument exits 2 with a `Usage` message
 on STDERR, before any Telegram call is attempted.
 
 `--reply-to-message-id <id>` (TGT-040) is optional and is recognized
-only in the **trailing** position - the last two arguments, matching
-exactly how the `REPLY WITH` template always prints it (TGT-042:
-recognizing it anywhere would make free reply text ambiguous with the
-flag itself, whenever that text is passed as multiple unquoted shell
-words containing the literal token `--reply-to-message-id`). When given,
-both the voice and text sends carry Telegram's own `reply_to_message_id`,
-so the reply threads natively under the original message in Telegram's
-UI instead of arriving as a fresh, unthreaded message. The poller's
-`REPLY WITH` template already fills this in with the inbound message's
-own `message_id` when one is known - copy the template as printed and it
-just works. Omitting the flag is unchanged from before TGT-040.
+only in the **leading** position - immediately before `chat_id`,
+matching exactly how the `REPLY WITH` template always prints it.
+TGT-042 originally made it trailing-only instead (the last two
+arguments), to avoid a whole-list scan colliding with free reply text
+passed as multiple unquoted shell words - but TGT-322 (found via a live
+JOB-003 hourly bug hunt) found that trailing-only still left a real
+gap: a reply message legitimately ENDING with the literal words
+`--reply-to-message-id <word>` was silently corrupted, the same
+ambiguity class TGT-042 meant to close. Raised as a question rather
+than reversed unilaterally, since TGT-042's trailing-only design was
+itself a deliberate, reasoned choice - Michael's answer moved it to
+leading-only instead, the same structural fix TGT-227 already proved
+for `--bot`: a leading flag never scans into the free-text region at
+all, so it can never collide with reply text no matter what that text
+contains. When given, both the voice and text sends carry Telegram's
+own `reply_to_message_id`, so the reply threads natively under the
+original message in Telegram's UI instead of arriving as a fresh,
+unthreaded message. The poller's `REPLY WITH` template already fills
+this in with the inbound message's own `message_id` when one is known -
+copy the template as printed and it just works. Omitting the flag is
+unchanged from before TGT-040.
 
 When `--reply-to-message-id` is given, that message is also marked
 **read** (TGT-046) once the reply has actually been sent successfully -
