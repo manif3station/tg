@@ -8081,3 +8081,42 @@ validates the canonical Telegram chat-id shape) and raw `@ARGV` tokens
 against each other via string equality - no `system`/`exec`/backticks/
 SQL involved, and the refusal message embeds only chat_id values,
 never a bot token.
+
+## TGT-342
+
+Found via a live, scheduled JOB-003 hourly bug hunt, while stress-testing
+TGT-341's own fresh diff per this project's "diff-first" convention.
+`lib/D2TG/Reply/Args.pm` carries a second, separate hardcoded caller
+count from `t/240`'s own guarded POD count: a plain inline comment
+above `extract_bot_flag`'s own sub (TGT-265's original text) states
+`extract_bot_flag_or_die` is "already called by 8 cli/*.pl scripts
+beyond reply.pl". `t/240-extract-bot-flag-pod-caller-count.t` already
+exists specifically to catch this drift class (it was itself born from
+TGT-240, an earlier instance of the exact same stale-count problem in
+the POD), but its checks only ever read `D2TG/Reply/Args.pod`'s own
+`=head2` section - it never looked at this separate comment in the
+`.pm` file next to it. TGT-268 (adding `send.pl`'s unconditional call)
+and TGT-340 (adding `whoami.pl`) each added a real caller afterward,
+and neither ticket's own change touched this comment, so it silently
+drifted from 8 to the real, current 9 (10 total callers including
+`reply.pl` itself, confirmed live via `grep -c extract_bot_flag_or_die
+cli/*.pl`).
+
+Board-searched first (TGT-240/TGT-265, the only related tickets) -
+neither had fixed this; TGT-265 is the ticket that originally wrote the
+stale comment, TGT-240 is the guard that never covered it. Fixed by
+extending the existing `t/240` file with a new assertion (rather than a
+new test file, matching its own established one-guard-per-drift-class
+shape) that extracts the comment's stated number via regex and compares
+it against the real caller count minus `reply.pl` itself, then
+correcting the comment text from 8 to 9.
+
+TDD: the extended `t/240` assertion confirmed genuinely red beforehand
+(`got: '8', expected: '9'`) and green after. No functional code changed
+- a code-comment text fix plus a test extension, matching TGT-338/339's
+own no-version-bump precedent for tickets with zero behavior change.
+Full Docker suite reran green unchanged (`Files=249, Tests=3028`).
+
+Perlsec: no runtime code touched at all - a comment-text edit and a
+regex-based test assertion reading `Args.pm`'s own already-trusted
+source file have no attack surface.

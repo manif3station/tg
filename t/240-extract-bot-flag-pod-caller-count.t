@@ -55,4 +55,28 @@ for my $file (@real_callers) {
     like( $pod_section, qr/C<\Q$basename\E>/, "the POD's own caller list names $file" );
 }
 
+# TGT-342 (found via a scheduled JOB-003 hourly bug hunt): the POD's own
+# count is guarded above, but D2TG::Reply::Args.pm carries a second,
+# separate hardcoded count in a plain inline comment right above
+# extract_bot_flag's own sub (TGT-265's original comment, "already
+# called by N cli/*.pl scripts beyond reply.pl") - that number is
+# NOT the POD's number (it deliberately excludes reply.pl itself,
+# since reply.pl is the file the comment lives next to), and nothing
+# was checking it, so it silently went stale across TGT-268/TGT-340
+# each adding a caller. Guarded the same way as the POD above.
+my $pm_file = File::Spec->catfile( $lib_dir, 'D2TG', 'Reply', 'Args.pm' );
+open my $pm_fh, '<', $pm_file or die $!;
+local $/;
+my $pm_text = <$pm_fh>;
+close $pm_fh;
+
+my ($inline_comment_count) = $pm_text =~ /already called.*?by (\d+) cli\/\*\.pl scripts beyond reply\.pl/s;
+my $real_callers_beyond_reply = scalar( grep { $_ ne 'reply.pl' } @real_callers );
+is(
+    $inline_comment_count,
+    $real_callers_beyond_reply,
+    "Args.pm's own inline comment states the same count ($inline_comment_count) as the real number of callers "
+      . "beyond reply.pl ($real_callers_beyond_reply)"
+);
+
 done_testing();

@@ -26,8 +26,10 @@ sub _extract_leading_flag_value {
 # were an organizational mismatch in D2TG::Reply.pm - CLI argv-parsing
 # is a distinct concern from send_reply/resend_voice's network/
 # store-write concern, and extract_bot_flag_or_die is already called
-# by 8 cli/*.pl scripts beyond reply.pl, so it isn't really
-# reply-specific logic either. Extracted here, mirroring
+# by 9 cli/*.pl scripts beyond reply.pl (TGT-342: this count is now
+# checked by t/240 alongside its own POD count, after TGT-268/TGT-340
+# each silently added a caller here with nothing catching it), so it
+# isn't really reply-specific logic either. Extracted here, mirroring
 # D2TG::Store::RetryQueue/D2TG::Config::Paths's own precedent. Full
 # documentation lives in D2TG/Reply/Args.pod (REQ-028: POD in a
 # separate file).
