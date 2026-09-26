@@ -410,6 +410,39 @@ if ( !@pairs ) {
     exit 1;
 }
 
+# TGT-341 (found via a live, scheduled JOB-003 hourly bug hunt): the
+# guard above only fires when EVERY group has zero bots - a MIXED
+# config (one --chat_id group with a real bot, another with none, e.g.
+# a copy-paste mistake forgetting --bot after a --chat_id) passed
+# silently: @pairs was non-empty overall (the well-formed group still
+# contributed entries), so the zero-bot group became an unpolled,
+# unadmin-seeded "phantom" - visible only by carefully reading the
+# multi-bot startup banner's own "chat_id NNN: 0 bot(s) ()" line
+# further below, never refused.
+#
+# Scoped to EXPLICIT CLI --chat_id flags only, not env-folded ones: a
+# bare D2TG_CHAT_ID with no D2TG_TOKEN alongside separate CLI --chat_id/
+# --bot groups is itself a real, already-tested, deliberately-tolerated
+# shape (t/126's own regression coverage) - D2TG_CHAT_ID there names
+# the admin/owner chat_id, independent of which bot(s) actually poll,
+# and env-folding it with no token is expected to produce exactly this
+# same zero-bot group without being an operator mistake. Only a chat_id
+# the operator typed with their own --chat_id flag is worth refusing
+# for having no matching --bot.
+my %explicit_chat_id;
+for my $i ( 0 .. $#original_argv - 1 ) {
+    $explicit_chat_id{ $original_argv[ $i + 1 ] } = 1 if $original_argv[$i] eq '--chat_id';
+}
+
+for my $group (@$groups) {
+    if ( !@{ $group->{bots} } && $explicit_chat_id{ $group->{chat_id} } ) {
+        print STDERR "chat_id $group->{chat_id} has zero --bot tokens configured while at least one other "
+          . "--chat_id group does - refusing to start (a --chat_id with no --bot never gets polled or "
+          . "admin-seeded, which usually means a --bot was forgotten or misplaced).\n";
+        exit 1;
+    }
+}
+
 if ($single_bot_mode) {
     print "d2tg poller starting up (token: "
         . D2TG::Config::masked_token( $groups->[0]{bots}[0] )

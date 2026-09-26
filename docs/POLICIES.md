@@ -8031,3 +8031,53 @@ Perlsec: the new code only threads an already-validated bot token
 (via the same `extract_bot_flag_or_die` every sibling command trusts)
 into `D2TG::Config::masked_token` - no `system`/`exec`/backticks/SQL
 involved, and the token itself is never printed unmasked.
+
+## TGT-341
+
+Found via a live, scheduled JOB-003 hourly bug hunt. `cli/poller.pl`'s
+own "No bot tokens configured" refusal only fired when *every*
+`--chat_id` group had zero `--bot` tokens - a mixed config (one group
+with a real bot, another with none, typically a `--bot` forgotten or
+misplaced after a `--chat_id`) passed silently: the zero-bot group
+contributed zero entries to `@pairs` (never polled, never
+admin-seeded) while the well-formed group kept `@pairs` non-empty
+overall, so the existing `if (!@pairs)` guard never fired. Live-
+reproduced: `D2TG::Config::Flags::bot_groups(argv => ['--chat_id',
+'111', '--chat_id', '222', '--bot', 'TOKEN'])` returns a group for
+chat_id 111 with `bots => []` and no error at all - the gap was only
+ever visible by reading the multi-bot startup banner's own `0 bot(s)`
+count line, never refused.
+
+Board-searched first (14 related tickets reviewed - TGT-049/069/185/
+213/215/219/229/232/234/245/264/268/286/340) before filing; none
+covered this specific mixed-group case. Fixed by refusing at startup,
+naming the specific chat_id, whenever a group the operator declared
+with an *explicit* CLI `--chat_id` flag has no matching `--bot`. The
+first fix attempt (a blanket per-group check with no such scoping)
+broke `t/126-poller-cli-groups-env-chat-id-validation.t`'s own tested
+regression coverage: a bare `D2TG_CHAT_ID` env var with no
+`D2TG_TOKEN` alongside separately-declared CLI groups is itself a
+legitimate, already-supported shape (the env var there names the
+admin/owner chat_id independently of which bot(s) actually poll, per
+TGT-049's own env-folding design) - env-folding it produces the exact
+same zero-bots shape without being an operator mistake. Narrowed the
+guard to only act on chat_ids that appear as an explicit `--chat_id`
+token in the raw `@original_argv` (captured before any env-folding),
+closing the gap without regressing the tested env-fold behavior.
+
+TDD: `t/341-zero-bot-group-refused.t` (9 assertions) confirmed
+genuinely red beforehand (the poller hangs trying to reach Telegram
+rather than refusing, since the guard didn't exist yet) and green
+after, including a dedicated regression assertion that the pre-existing
+all-empty-groups refusal still fires with its own original wording.
+Full Docker suite reran green (`Files=249, Tests=3027`), including
+`t/126` itself now passing unchanged; `cli/poller.pl` is a `cli/*.pl`
+script, exempt from the 100% lib/-scoped coverage gate per this
+project's own established convention.
+
+Perlsec: the new code only compares already-validated chat_id strings
+(from `D2TG::Config::Flags::bot_groups`'s own output, which already
+validates the canonical Telegram chat-id shape) and raw `@ARGV` tokens
+against each other via string equality - no `system`/`exec`/backticks/
+SQL involved, and the refusal message embeds only chat_id values,
+never a bot token.

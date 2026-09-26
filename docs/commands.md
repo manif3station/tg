@@ -368,6 +368,26 @@ times out, transcription automatically retries at the next faster tier
 (`medium` → `small` → `base`) instead of failing outright - only a
 timeout at `base` itself produces a final `TRANSCRIBE ERROR`.
 
+At startup, a `--chat_id` group with no matching `--bot` refuses rather
+than silently starting: if every declared group has zero bots, the
+message names that outright (`No bot tokens configured (a --chat_id
+group with no --bot, and D2TG_TOKEN not set)`). TGT-341 (found via a
+live, scheduled JOB-003 hourly bug hunt) closed a narrower gap in the
+same guard: a *mixed* config (one explicit `--chat_id` group with a
+real `--bot`, another explicit `--chat_id` group with none - typically
+a `--bot` forgotten or misplaced) used to pass this check silently,
+since the well-formed group alone kept the overall pair list non-empty
+- the zero-bot group became an unpolled, unadmin-seeded "phantom",
+visible only by reading the multi-bot startup banner's own `0 bot(s)`
+count line-by-line. Now refuses at startup too, naming the specific
+chat_id, whenever an *explicit* `--chat_id` CLI flag has no matching
+`--bot`. Scoped to explicit CLI flags only - a bare `D2TG_CHAT_ID` env
+var with no `D2TG_TOKEN` alongside separately-declared CLI groups is
+itself a legitimate, already-supported shape (the env var there names
+the admin/owner chat_id independently of which bot(s) actually poll,
+per TGT-049's own env-folding design) and must keep starting up
+unaffected.
+
 ## `d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
