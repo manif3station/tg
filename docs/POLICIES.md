@@ -8230,3 +8230,27 @@ structure (the same structure every other branch already trusts);
 already-hardened `record_message_and_track_offset`/`_run_non_fatal`/
 download machinery unchanged, just reusing it per-part instead of
 once; no `system`/`exec`/backticks/SQL anywhere in the new code.
+
+## TGT-344
+
+Found via a scheduled JOB-004 improvement hunt, reviewing TGT-343's own
+fresh diff. `handle_media_group_update`'s combined summary/reply line
+reads `chat_id`/sender only from the group's first member, assuming
+every member shares one `chat_id` - the same class of assumption
+`partition_media_groups`'s own comment already states explicitly for
+its lone-group case, but this one was never written down anywhere.
+Live-tested: a defensive/malformed group whose members carried
+differing `chat_id` values silently misattributed later parts to the
+first part's own chat in the summary/reply line - not a reachable
+defect, since Telegram's real Bot API guarantees `media_group_id` is
+scoped per-chat and never spans two chats, the exact same protocol
+guarantee the lone-group case already relies on.
+
+Documentation-only fix (matching TGT-334/338/339's own no-TDD/
+no-version-bump precedent for prose-only tickets): added an explicit
+comment stating this assumption to both `D2TG::Poller::MediaGroup`'s
+own docblock and its POD. Full suite reran green unchanged
+(`Files=252, Tests=3072`), confirming no behavior was touched.
+
+Perlsec: no code touched at all - a comment/POD-only addition has no
+attack surface.
