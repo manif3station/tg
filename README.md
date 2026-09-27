@@ -1,5 +1,12 @@
 # tg
 
+**Status: early implementation (v2.68).** IMPROVEMENT (TGT-346, found via a
+scheduled JOB-004 improvement hunt): the grouped `NEW TG MEDIA ALBUM` line
+(TGT-343) never surfaced any album part's own caption, even though the
+single-item announce always includes it - Telegram typically attaches a
+caption to only one part of a real album. The first non-empty caption found
+among the album's parts is now surfaced directly in the announce line.
+
 **Status: early implementation (v2.67).** IMPROVEMENT (TGT-343, found via a
 scheduled JOB-004 improvement hunt): a Telegram album (2+ photos/documents
 sharing one `media_group_id`) used to surface as N separate `NEW TG MEDIA`

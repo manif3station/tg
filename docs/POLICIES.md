@@ -8283,3 +8283,38 @@ comfortably under the 500-line-per-module cap (260/442/112 lines).
 
 Perlsec: pure extraction of already-trusted formatting logic - no new
 input handling, no `system`/`exec`/backticks/SQL anywhere.
+
+## TGT-346
+
+Found via a scheduled JOB-004 improvement hunt, reviewing TGT-343's own
+fresh `MediaGroup.pm`. `handle_media_group_update`'s combined `NEW TG
+MEDIA ALBUM` line never surfaced any collected part's own caption, even
+though the single-item (non-grouped) media announce always includes
+one via its `caption_note` text. Telegram typically attaches a caption
+to only one part of a real album, so a captioned album previously
+became invisible in the live stdout signal the bridge-reading agent
+actually watches - discoverable only by separately running `d2
+tg.attachment`/`tg.fetch` on each part by hand. Not a data-loss bug
+(the caption was always correctly stored via
+`record_message_and_track_offset`'s own summary text for whichever
+part carried it, retrievable via `d2 tg.history`), but a real
+usability gap in the one channel this project's whole reply-trigger-
+flow architecture depends on.
+
+Fixed by scanning the collected parts for the first non-empty
+`caption_note` (already captured per-item, just never read back out)
+and appending it to the album line - matching the same first-member-
+wins simplicity already used for `chat_id`/sender in the same
+function. `t/348-album-caption-surfaced.t` proves both the positive
+case (a caption surfaces) and the negative case (no caption text
+appears at all when no part carries one, avoiding a bare trailing " -
+caption: " with nothing after it).
+
+Full Docker suite reran green (`Files=254, Tests=3078`),
+`D2TG::Poller::MediaGroup.pm` still at 100% stmt+sub coverage, 122
+lines - comfortably under the 500-line cap.
+
+Perlsec: reads an already-sanitized field (`caption_note` is built via
+`D2TG::Poller::Format::sanitize_for_stdout` at the point it's first
+constructed in `handle_plain_update`, unchanged by this ticket) - no
+new input handling.

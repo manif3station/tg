@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.68  2026-09-27
+      - IMPROVEMENT (TGT-346, found via a scheduled JOB-004 improvement
+        hunt): the grouped NEW TG MEDIA ALBUM announce line (TGT-343)
+        never surfaced any album part's own caption, even though the
+        single-item announce always includes it - Telegram typically
+        attaches a caption to only one part of a real album, so a
+        captioned album previously became invisible in the poller's
+        own live stdout signal until a part's attachment was fetched
+        by hand. The first non-empty caption found among the album's
+        parts is now surfaced directly in the announce line.
+
 2.67  2026-09-27
       - IMPROVEMENT (TGT-343, found via a scheduled JOB-004 improvement
         hunt): a Telegram album (2+ photos/documents sharing one

@@ -410,6 +410,14 @@ happens to carry a `media_group_id` (Telegram's real Bot API never
 sends a genuine 1-part album) is announced as a normal standalone
 message, not a 1-item "album".
 
+If any part of the album carries a caption (TGT-346, found via a
+scheduled JOB-004 improvement hunt - Telegram typically attaches a
+caption to only one part of a real album), the first non-empty one
+found is surfaced directly in the album line: `NEW TG MEDIA ALBUM
+[999] ada: 3 x photo - caption: look at this! (msgs #200, #201,
+#202)`. Multiple distinct captions across different parts is an
+unusual case and only the first found is shown.
+
 ## `d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
