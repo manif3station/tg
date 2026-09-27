@@ -8254,3 +8254,32 @@ own docblock and its POD. Full suite reran green unchanged
 
 Perlsec: no code touched at all - a comment/POD-only addition has no
 attack surface.
+
+## TGT-345
+
+Found via a scheduled JOB-004 improvement hunt, reviewing TGT-343's own
+fresh diff. The exact 2-call chain `display_name` then
+`format_forwarded_sender` was duplicated in
+`D2TG::Poller::Dispatch::handle_plain_update` (pre-existing) and
+`D2TG::Poller::MediaGroup::handle_media_group_update` (added by
+TGT-343) - matching this project's own established "found it twice,
+extract it" convention. `handle_edited_message`'s own bare
+`display_name` call (no `format_forwarded_sender` chaining) is a
+different, narrower shape and was deliberately left untouched.
+
+Fixed by adding `D2TG::Poller::Format::compute_sender($chat_id,
+$message)`, a thin wrapper calling both functions in the same order
+both duplicated call sites already did, and updating both call sites
+to use it instead. Pure refactor - `t/347-compute-sender-helper.t`
+asserts the new helper's output matches the manual two-call chain
+exactly, and the full pre-existing sender/forwarded-sender test
+coverage (`t/106` etc.) continues to pass unchanged, confirming no
+observable behavior changed anywhere.
+
+Full Docker suite reran green (`Files=253, Tests=3074`),
+`D2TG::Poller::Format.pm`, `D2TG::Poller::Dispatch.pm`, and
+`D2TG::Poller::MediaGroup.pm` all at 100% stmt+sub coverage, all three
+comfortably under the 500-line-per-module cap (260/442/112 lines).
+
+Perlsec: pure extraction of already-trusted formatting logic - no new
+input handling, no `system`/`exec`/backticks/SQL anywhere.

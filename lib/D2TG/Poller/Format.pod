@@ -94,6 +94,17 @@ if there is none.
 Appends C<" (forwarded by $sender)"> when C<$forward_origin> names an
 original sender, otherwise returns C<$sender> unchanged.
 
+=head2 compute_sender($chat_id, $message)
+
+TGT-345 (found via a scheduled JOB-004 improvement hunt): a thin
+wrapper chaining L</display_name($chat_id, $username)> then
+L</format_forwarded_sender($sender, $forward_origin)> - the exact
+2-call shape C<D2TG::Poller::Dispatch::handle_plain_update> and
+C<D2TG::Poller::MediaGroup::handle_media_group_update> each duplicated.
+C<handle_edited_message>'s own bare C<display_name> call (no
+forwarded-sender chaining) is a different, narrower shape and still
+calls C<display_name> directly instead of this helper.
+
 =head2 media_kind($message)
 
 Returns C<'photo'>/C<'document'>/C<'voice'>/C<'video'>, or C<undef> if
