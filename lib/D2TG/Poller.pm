@@ -6,6 +6,7 @@ use POSIX qw(strftime);
 use D2TG::Poller::Format;
 use D2TG::Poller::Safe;
 use D2TG::Poller::Dispatch;
+use D2TG::Poller::MediaGroup;
 
 sub run_once {
     my ( $telegram, $offset, $store, %opts ) = @_;
@@ -49,7 +50,7 @@ sub run_once {
     # dispatched once, at the position of its first-encountered member;
     # every later member of the same group is then skipped here (it was
     # already processed as part of that one dispatch).
-    my ( $groups, undef ) = D2TG::Poller::Dispatch::partition_media_groups($updates);
+    my ( $groups, undef ) = D2TG::Poller::MediaGroup::partition_media_groups($updates);
     my %group_by_id = map { $_->[0]{message}{media_group_id} => $_ } @$groups;
     my %group_handled;
 
@@ -69,7 +70,7 @@ sub run_once {
         my $media_group_id = $update->{message}{media_group_id};
         if ( defined $media_group_id && $group_by_id{$media_group_id} ) {
             next if $group_handled{$media_group_id}++;
-            D2TG::Poller::Dispatch::handle_media_group_update(
+            D2TG::Poller::MediaGroup::handle_media_group_update(
                 $group_by_id{$media_group_id}, \$offset_cap, $telegram, $store, $bot_token, $download_media
             );
             next;

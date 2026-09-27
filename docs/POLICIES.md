@@ -8153,7 +8153,7 @@ happens in practice.
 
 Implementation, in three genuinely tested increments:
 
-1. `D2TG::Poller::Dispatch::partition_media_groups` - a pure function
+1. `D2TG::Poller::MediaGroup::partition_media_groups` - a pure function
    partitioning a `getUpdates` batch into media_group_id clusters
    (order preserved) vs standalone updates. TDD caught and fixed a
    real bug during its own development: a lone update carrying a
@@ -8185,7 +8185,7 @@ Implementation, in three genuinely tested increments:
    (`t/345-record-media-and-announce-helper.t`) exercises both the
    group and non-group branches directly, since nothing else calls it
    with the group path yet.
-3. `D2TG::Poller::Dispatch::handle_media_group_update` and
+3. `D2TG::Poller::MediaGroup::handle_media_group_update` and
    `D2TG::Poller::run_once`'s own dispatch loop - wired together so a
    group is looked up and dispatched exactly once, at the position of
    its first-encountered member, while `run_once` still walks
@@ -8196,12 +8196,12 @@ Implementation, in three genuinely tested increments:
    update_id order") even in a contrived/defensive input shape, not
    just in the real-Telegram case where an album's parts are already
    consecutive. `handle_media_group_update` calls the now-group-aware
-   `handle_plain_update` once per part (reusing every bit of its
-   access-control/dedup/download/store logic unchanged) and only then
-   prints one combined `NEW TG MEDIA ALBUM` line (naming every
-   message_id), one `GET ATTACHMENT WITH` per part, and one shared
-   reply template. A genuine end-to-end test through the real
-   `run_once` entrypoint
+   `D2TG::Poller::Dispatch::handle_plain_update` once per part (reusing
+   every bit of its access-control/dedup/download/store logic
+   unchanged) and only then prints one combined `NEW TG MEDIA ALBUM`
+   line (naming every message_id), one `GET ATTACHMENT WITH` per part,
+   and one shared reply template. A genuine end-to-end test through
+   the real `run_once` entrypoint
    (`t/346-album-grouping-end-to-end.t`) proves the full acceptance
    criteria with a fake 3-photo album: exactly one grouped announce,
    zero individual announces, all 3 parts individually downloaded and
@@ -8209,10 +8209,19 @@ Implementation, in three genuinely tested increments:
    Bot API) confirmed to still behave as an ordinary standalone
    message, not a 1-item album.
 
+`partition_media_groups`/`handle_media_group_update` were first
+written directly inside `D2TG::Poller::Dispatch`, then moved out into
+a new `D2TG::Poller::MediaGroup` module (own `.pod` file, per REQ-028)
+once landing them there crossed this project's own 500-line-per-module
+cap (found at 531 lines during the `qa`-stage audit) - matching the
+exact reasoning that already split `D2TG::Poller::Safe`/
+`D2TG::Poller::Format` out of `D2TG::Poller.pm` itself (TGT-259/276).
+
 Full Docker suite reran green after each increment (`Files=252,
-Tests=3051` final), `D2TG::Poller.pm` and
-`D2TG::Poller::Dispatch.pm` both at 100% stmt+sub coverage (this
-project's own gate scope).
+Tests=3072` final), `D2TG::Poller.pm`, `D2TG::Poller::Dispatch.pm`, and
+the new `D2TG::Poller::MediaGroup.pm` all at 100% stmt+sub coverage
+(this project's own gate scope), and all three modules comfortably
+under the 500-line cap (107/444/100 lines respectively).
 
 Perlsec: no new external input handling - `partition_media_groups`
 only reads fields already present on Telegram's own delivered update

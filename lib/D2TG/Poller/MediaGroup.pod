@@ -1,0 +1,83 @@
+=head1 NAME
+
+D2TG::Poller::MediaGroup - group a Telegram album into one stdout event
+
+=head1 SYNOPSIS
+
+    my ( $groups, $standalone ) = D2TG::Poller::MediaGroup::partition_media_groups($updates);
+
+    D2TG::Poller::MediaGroup::handle_media_group_update(
+        $group, \$offset_cap, $telegram, $store, $bot_token, $download_media
+    );
+
+=head1 DESCRIPTION
+
+TGT-343 (found via a scheduled JOB-004 improvement hunt): a Telegram
+album (2+ photos/documents sent together, sharing one
+C<message.media_group_id>) was not handled anywhere in this codebase -
+each part surfaced as its own independent C<NEW TG MEDIA> line and its
+own C<REPLY WITH> template, N separate stdout events for one logical
+message. Extracted into its own module (rather than living inside
+C<D2TG::Poller::Dispatch>, where it was first written) once landing it
+there pushed that module over this project's own 500-line-per-module
+cap - matching the same reasoning that already split
+C<D2TG::Poller::Safe>/C<D2TG::Poller::Format> out of
+C<D2TG::Poller.pm> itself (see C<D2TG::Poller::Dispatch>'s own POD).
+
+Grouping happens within a single C<getUpdates> batch only, never
+across poll cycles: Telegram assembles and delivers every part of an
+album together before a bot's own poll would ever see the first one,
+so a normal poll interval already receives the whole album in one
+batch - no cross-cycle buffering, timeout, or restart-orphan-state
+complexity is needed to cover the real case. An album split across two
+separate poll cycles (only possible with an unusually fast poll
+interval, faster than Telegram's own internal album-assembly delay) is
+an accepted, deliberate limitation - it still surfaces as two events in
+that case, rather than adding indefinite cross-cycle state to cover
+something that essentially never happens in practice.
+
+=head1 FUNCTIONS
+
+=head2 partition_media_groups($updates)
+
+A pure function partitioning a C<getUpdates> batch (C<$updates>, an
+arrayref of raw Telegram update hashes) into two arrayrefs: C<$groups>
+(an arrayref of arrayrefs, each inner arrayref holding every update
+sharing one C<media_group_id>, in their original relative order) and
+C<$standalone> (every other update, in its original relative order,
+including a lone update that happens to carry a C<media_group_id> with
+no sibling parts - deliberately still standalone, not a 1-item
+"group", since Telegram's real Bot API never sends a genuine 1-part
+album).
+
+Makes zero changes to C<D2TG::Poller::Dispatch::handle_plain_update>'s
+own already-hardened access-control/dedup/offset-tracking logic - it
+only reads C<< $update->{message}{media_group_id} >>, a field already
+present on every update this codebase already trusts.
+
+=head2 handle_media_group_update($group, $offset_cap_ref, $telegram, $store, $bot_token, $download_media)
+
+Called once per group formed by L</partition_media_groups($updates)>
+(C<$group> is one of that function's C<$groups> entries - an arrayref
+of 2+ raw updates sharing one C<media_group_id>). Runs
+C<D2TG::Poller::Dispatch::handle_plain_update> on every member exactly
+as a standalone update would be processed, passing its own
+C<group_collect_ref> parameter so access control, dedup, download,
+storage, and offset-tracking are entirely unchanged and fully reused -
+only each member's own individual stdout announce is suppressed and
+collected instead. Once every member has been processed, prints ONE
+combined C<NEW TG MEDIA ALBUM> line (naming the count, media kind, and
+every collected C<message_id>), one C<GET ATTACHMENT WITH> line per
+part (each part is still individually fetchable by its own
+C<message_id>), and one shared C<REPLY WITH> reply template - instead
+of N separate announces and N separate reply templates.
+
+C<$offset_cap_ref> must be the same shared scalar reference the
+caller's own C<run_once> loop uses for every other update in the same
+batch (not a fresh one created per group) - TGT-178's own
+first-failed-update_id invariant ("the first FAILED update_id in
+iteration order is also the earliest, since Telegram delivers in
+increasing update_id order") only holds if every update in a batch,
+grouped or standalone, shares one running offset-cap tracker.
+
+=cut
