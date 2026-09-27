@@ -225,6 +225,21 @@ sub format_forwarded_sender {
     return sanitize_for_stdout($origin_name) . " (forwarded by $sender)";
 }
 
+# TGT-345 (found via a scheduled JOB-004 improvement hunt, reviewing
+# TGT-343's own fresh diff): D2TG::Poller::Dispatch::handle_plain_update
+# and D2TG::Poller::MediaGroup::handle_media_group_update each
+# duplicated this exact 2-call chain - display_name then
+# format_forwarded_sender - matching this project's own "found it
+# twice, extract it" convention. handle_edited_message's own bare
+# display_name call (no forward_origin chaining) is a different,
+# narrower shape and deliberately not folded into this helper.
+sub compute_sender {
+    my ( $chat_id, $message ) = @_;
+
+    my $sender = display_name( $chat_id, $message->{from}{username} );
+    return format_forwarded_sender( $sender, $message->{forward_origin} );
+}
+
 sub media_kind {
     my ($message) = @_;
 

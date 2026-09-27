@@ -184,9 +184,7 @@ sub handle_plain_update {
     return unless ( defined $text && length $text ) || $media_kind;
 
     my $chat_id = $message->{chat}{id};
-    my $sender  = D2TG::Poller::Format::display_name( $chat_id, $message->{from}{username} );
-
-    $sender = D2TG::Poller::Format::format_forwarded_sender( $sender, $message->{forward_origin} );
+    my $sender  = D2TG::Poller::Format::compute_sender( $chat_id, $message );
 
     my $ts = D2TG::Poller::Format::timestamp_prefix($message);
 

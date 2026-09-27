@@ -92,8 +92,7 @@ sub handle_media_group_update {
 
     my $first_message = $group->[0]{message};
     my $chat_id        = $first_message->{chat}{id};
-    my $sender         = D2TG::Poller::Format::display_name( $chat_id, $first_message->{from}{username} );
-    $sender = D2TG::Poller::Format::format_forwarded_sender( $sender, $first_message->{forward_origin} );
+    my $sender         = D2TG::Poller::Format::compute_sender( $chat_id, $first_message );
     my $ts = D2TG::Poller::Format::timestamp_prefix($first_message);
 
     my $count      = scalar(@collected);
