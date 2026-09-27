@@ -100,7 +100,17 @@ sub handle_media_group_update {
     my $msg_ids    = join( ', ', map { "#$_->{message_id}" } grep { defined $_->{message_id} } @collected );
     my $msg_note   = length($msg_ids) ? " (msgs $msg_ids)" : '';
 
-    print "$ts NEW TG MEDIA ALBUM [$chat_id] $sender: $count x $media_kind$msg_note\n";
+    # TGT-346 (found via a scheduled JOB-004 improvement hunt): Telegram
+    # typically attaches a caption to only one part of a real album -
+    # surface the first non-empty caption_note found among the
+    # collected parts, matching the same first-member-wins simplicity
+    # already used above for chat_id/sender. caption_note is already
+    # pre-formatted with its own leading " - caption: <text>" prefix
+    # (or empty string), same shape the single-item announce uses.
+    my ($caption_note) = grep { length } map { $_->{caption_note} // '' } @collected;
+    $caption_note //= '';
+
+    print "$ts NEW TG MEDIA ALBUM [$chat_id] $sender: $count x $media_kind$caption_note$msg_note\n";
     for my $item (@collected) {
         D2TG::Poller::Format::print_attachment_template( $item->{chat_id}, $item->{message_id} ) if defined $item->{message_id};
     }
