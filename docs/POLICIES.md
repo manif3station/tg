@@ -8318,3 +8318,48 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 `D2TG::Poller::Format::sanitize_for_stdout` at the point it's first
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
+
+## TGT-348
+
+Upgrade-gate review of the Tira platform's 5.221 -> 5.230 Changes text
+(`tira.policy.undeclared` run before declaring, returned one
+undeclared rule: `required-unsatisfied`). All 9 entries reviewed:
+5.230/5.229/5.227/5.226/5.223/5.222 are internal Tira engine
+bugfixes/refactors/doc-fixes (concurrency mitigation, DST-safe
+timestamp comparisons, `--help` accuracy, `record_list`
+sum/count/refs_only edge cases) with zero board-observable effect on
+this project. 5.225 (TKT-636) documents existing `required_item_update`
+re-proof behavior, informational only. 5.224 (TKT-1168) is Tira's own
+internal review of its own dev board, not applicable here.
+
+5.228 (TKT-643) introduced `required-unsatisfied` itself - a rule that
+sweeps for a required item still unmet in a record's own CURRENT
+column (working or resting alike), unlike the narrower
+`required-action-stranded` which only watches columns already left
+behind. Declared it (`POL-087`), and it immediately surfaced 4 real,
+previously-invisible gaps on this board: `TGT-137`/`315`/`319`/`338`
+(four earlier upgrade-gate review cards resting in `done` carrying an
+unmet `done`-column required-action template item added to the board
+after each card had already shipped, and never satisfied since `done`
+is terminal) - matching this project's own established "revisit every
+rule surfaces real gaps" precedent (TGT-283/284/285's own findings).
+
+Fixed all four with honest, case-by-case proof. Self-caught and
+corrected a mistake made mid-fix: each card's own `REQ-NNN` numbering
+is shaped by that card's individual history (a card that passed
+through extra columns, or had extra required items added later,
+carries different IDs at the same logical position) - a proof written
+for one card's `REQ-051` was silently wrong when copy-applied to a
+different card's differently-shaped `REQ-051`. Caught by re-reading
+each flagged card's own `required_items` individually rather than
+trusting the first card's shape to generalize, and corrected 3 of the
+4 cards' mismatched proofs with an explicit "Correction:" prefix
+rather than silently overwriting the mistake - the same honesty
+discipline this project's own gate log already depends on.
+
+Conclusion: `required-unsatisfied` is the only new declaration needed
+for this upgrade; no other entry requires a board-side change.
+
+Perlsec: no tg-skill code touched at all - a board-policy declaration
+and required-action bookkeeping on the Tira board itself, not this
+project's own Perl code.
