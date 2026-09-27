@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.67).** IMPROVEMENT (TGT-343, found via a
+scheduled JOB-004 improvement hunt): a Telegram album (2+ photos/documents
+sharing one `media_group_id`) used to surface as N separate `NEW TG MEDIA`
+lines and N separate `REPLY WITH` templates, one per part. The poller now
+groups every part sharing a `media_group_id` within one `getUpdates` batch
+into a single `NEW TG MEDIA ALBUM` line (naming every message_id) plus one
+shared reply template, while still individually downloading and storing
+each part. Grouping happens within a single batch only, not across poll
+cycles, since Telegram always delivers an album's parts together.
+
 **Status: early implementation (v2.66).** BUGFIX (TGT-341, found via a live,
 scheduled JOB-003 hourly bug hunt): `cli/poller.pl`'s own "No bot tokens
 configured" refusal only fired when EVERY `--chat_id` group had zero `--bot`

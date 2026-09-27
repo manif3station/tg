@@ -8120,3 +8120,104 @@ Full Docker suite reran green unchanged (`Files=249, Tests=3028`).
 Perlsec: no runtime code touched at all - a comment-text edit and a
 regex-based test assertion reading `Args.pm`'s own already-trusted
 source file have no attack surface.
+
+## TGT-343
+
+Found via a scheduled JOB-004 improvement hunt. A Telegram album (2+
+photos/documents sent together, sharing one `message.media_group_id`)
+was not handled anywhere in the codebase (`grep -rn media_group_id
+lib/ cli/` returned nothing) - each part surfaced as its own
+independent `NEW TG MEDIA` line and its own `REPLY WITH` template, N
+separate stdout events for what a human sees as one album. Not a
+defect (nothing was lost or corrupted - every part was still
+downloaded and stored correctly), but a real, previously-unconsidered
+noise gap for the agent-reads-the-bridge design this project's own
+architecture depends on (a 3-photo album meant 3 separate bridge
+events and 3 separate reply commands for one logical message).
+
+Board-searched first - no existing ticket named `media_group_id` or
+"album" anywhere.
+
+Design, refined during drafting: group within a single `getUpdates`
+batch only, never across poll cycles. Telegram assembles and delivers
+every part of an album together before a bot's own poll would ever see
+the first one, so a normal poll interval already receives the whole
+album in one batch - no cross-cycle buffering, timeout, or
+restart-orphan-state complexity is needed to cover the real case. An
+album split across two separate poll cycles (only possible with an
+unusually fast poll interval, faster than Telegram's own internal
+album-assembly delay) is an accepted, explicitly documented limitation
+- still surfaces as two events in that case, rather than adding
+indefinite cross-cycle state to cover something that essentially never
+happens in practice.
+
+Implementation, in three genuinely tested increments:
+
+1. `D2TG::Poller::Dispatch::partition_media_groups` - a pure function
+   partitioning a `getUpdates` batch into media_group_id clusters
+   (order preserved) vs standalone updates. TDD caught and fixed a
+   real bug during its own development: a lone update carrying a
+   media_group_id, interleaved with real standalone updates, was
+   getting appended to the end of the standalone list instead of
+   staying in its original position - fixed with a single-pass,
+   position-preserving rewrite (`t/344-media-group-partition.t`).
+2. `D2TG::Poller::Dispatch::_record_media_and_announce` - a shared
+   helper extracted from `handle_plain_update`'s downloaded-media and
+   fallback-media branches, which each duplicated the
+   `record_message_and_track_offset` call site in a slightly different
+   shape. This extraction was forced by a real self-caught regression:
+   a first attempt threading an optional `group_collect_ref` param
+   directly into both branches (to suppress the individual announce in
+   group mode) worked functionally but duplicated that call site a
+   second time in each branch - caught by
+   `t/181-record-message-offset-tracking-dedup.t`'s own structural
+   regression guard, which exists specifically to enforce this
+   project's "found it twice, extract it" convention
+   (TGT-167/170/171/172/177/181/279/310/313/314/317/318/320/342) for
+   this exact call site. Reverted that first attempt cleanly (verified
+   against `git diff HEAD`, full suite green) rather than leave a
+   test-guard-violating change in the tree, then re-implemented via
+   the shared helper and updated `t/181`'s own anchors to match the new
+   3-call-site shape (down from 4). `handle_plain_update` gained one
+   new optional trailing parameter, `group_collect_ref`, undef by
+   every pre-existing caller - default behavior is byte-for-byte
+   unchanged; a direct unit test
+   (`t/345-record-media-and-announce-helper.t`) exercises both the
+   group and non-group branches directly, since nothing else calls it
+   with the group path yet.
+3. `D2TG::Poller::Dispatch::handle_media_group_update` and
+   `D2TG::Poller::run_once`'s own dispatch loop - wired together so a
+   group is looked up and dispatched exactly once, at the position of
+   its first-encountered member, while `run_once` still walks
+   `@$updates` in its own original order rather than the separately-
+   ordered `$groups`/`$standalone` lists. This preserves TGT-178's own
+   `offset_cap` invariant ("the first FAILED update_id in iteration
+   order is also the earliest, since Telegram delivers in increasing
+   update_id order") even in a contrived/defensive input shape, not
+   just in the real-Telegram case where an album's parts are already
+   consecutive. `handle_media_group_update` calls the now-group-aware
+   `handle_plain_update` once per part (reusing every bit of its
+   access-control/dedup/download/store logic unchanged) and only then
+   prints one combined `NEW TG MEDIA ALBUM` line (naming every
+   message_id), one `GET ATTACHMENT WITH` per part, and one shared
+   reply template. A genuine end-to-end test through the real
+   `run_once` entrypoint
+   (`t/346-album-grouping-end-to-end.t`) proves the full acceptance
+   criteria with a fake 3-photo album: exactly one grouped announce,
+   zero individual announces, all 3 parts individually downloaded and
+   stored, and a lone `media_group_id` (never sent by Telegram's real
+   Bot API) confirmed to still behave as an ordinary standalone
+   message, not a 1-item album.
+
+Full Docker suite reran green after each increment (`Files=252,
+Tests=3051` final), `D2TG::Poller.pm` and
+`D2TG::Poller::Dispatch.pm` both at 100% stmt+sub coverage (this
+project's own gate scope).
+
+Perlsec: no new external input handling - `partition_media_groups`
+only reads fields already present on Telegram's own delivered update
+structure (the same structure every other branch already trusts);
+`_record_media_and_announce`/`handle_media_group_update` call the same
+already-hardened `record_message_and_track_offset`/`_run_non_fatal`/
+download machinery unchanged, just reusing it per-part instead of
+once; no `system`/`exec`/backticks/SQL anywhere in the new code.

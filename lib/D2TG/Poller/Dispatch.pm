@@ -7,6 +7,49 @@ use D2TG::Poller::Safe;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
+# TGT-343 (found via a scheduled JOB-004 improvement hunt): a Telegram
+# album is delivered as separate updates that all share the same
+# message.media_group_id - Telegram groups every part together before
+# delivery, so a bot polling at any normal interval already receives
+# all of them in the same getUpdates batch. This pure partition step
+# is the first increment toward grouping an album into one stdout
+# event instead of N - it makes zero changes to handle_plain_update's
+# own already-hardened access-control/dedup/offset-tracking logic,
+# which a later ticket increment will thread through per-group instead
+# of per-update.
+#
+# A lone update carrying a media_group_id is deliberately still
+# standalone (not a 1-item "group") - Telegram's real Bot API never
+# sends a genuine 1-part album, and treating a defensive/malformed
+# single-part case as standalone keeps this helper's output shape
+# simple: a "group" always means 2+ parts to actually combine.
+sub partition_media_groups {
+    my ($updates) = @_;
+
+    my %by_group;
+    for my $update (@$updates) {
+        my $media_group_id = $update->{message}{media_group_id};
+        push @{ $by_group{$media_group_id} }, $update if defined $media_group_id;
+    }
+
+    my @groups;
+    my @standalone;
+    my %group_emitted;
+
+    for my $update (@$updates) {
+        my $media_group_id = $update->{message}{media_group_id};
+
+        if ( defined $media_group_id && @{ $by_group{$media_group_id} } > 1 ) {
+            push @groups, $by_group{$media_group_id} unless $group_emitted{$media_group_id}++;
+        }
+        else {
+            push @standalone, $update;
+        }
+    }
+
+    return ( \@groups, \@standalone );
+}
+
 # TGT-313 (found via a JOB-004 improvement hunt, reviewing TGT-312's own
 # freshly-shipped diff): handle_plain_update's text branch and
 # voice-success branch used to duplicate this exact defined($message_id)
@@ -29,6 +72,45 @@ sub _announce_and_record {
     }
     else {
         print "$ts $label [$chat_id] $sender: $safe_content$reply_ctx\n";
+        D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
+    }
+    return;
+}
+
+# TGT-343 (found via a scheduled JOB-004 improvement hunt, extending
+# TGT-313's own "found it twice, extract it" precedent one branch
+# further): handle_plain_update's downloaded-media and fallback-media
+# branches each duplicated this record_message_and_track_offset call
+# site in slightly different shapes (one passing local_path, one not).
+# Both branches now call this one helper instead - the ternary below
+# reproduces each branch's own exact prior argument list unchanged.
+#
+# group_collect_ref is optional and undef by every existing caller
+# today: when absent, behavior is byte-for-byte identical to before
+# this ticket (the announce prints exactly as it always did). When
+# present (only true once a future handle_media_group_update starts
+# passing it, one call per album part), the individual stdout announce
+# is suppressed and a summary of this part is pushed onto it instead -
+# the download/store/offset-tracking above is unaffected either way.
+sub _record_media_and_announce {
+    my (%args) = @_;
+    my ( $ts, $chat_id, $sender, $msg_note, $reply_ctx, $message_id, $media_kind, $caption_note, $store, $offset_cap_ref, $update_id, $bot_token, $local_path, $group_collect_ref )
+      = @args{qw(ts chat_id sender msg_note reply_ctx message_id media_kind caption_note store offset_cap_ref update_id bot_token local_path group_collect_ref)};
+
+    if ( $store && defined $message_id ) {
+        D2TG::Poller::Safe::record_message_and_track_offset(
+            $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note",
+            ( defined $local_path ? ( local_path => $local_path ) : () ),
+            bot_key => $bot_token,
+        );
+    }
+
+    if ($group_collect_ref) {
+        push @$group_collect_ref, { chat_id => $chat_id, message_id => $message_id, media_kind => $media_kind, caption_note => $caption_note };
+    }
+    else {
+        print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
+        D2TG::Poller::Format::print_attachment_template( $chat_id, $message_id ) if defined $message_id && defined $local_path;
         D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
     }
     return;
@@ -136,7 +218,7 @@ sub handle_edited_message {
 }
 
 sub handle_plain_update {
-    my ( $update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, $transcribe_voice, $download_media ) = @_;
+    my ( $update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, $transcribe_voice, $download_media, $group_collect_ref ) = @_;
 
     my $message = $update->{message} or return;
     my $text       = $message->{text};
@@ -309,12 +391,22 @@ sub handle_plain_update {
 
             if ($ok) {
                 my $local_path = $result_or_error;
-                print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
-                D2TG::Poller::Format::print_attachment_template( $chat_id, $message_id ) if defined $message_id;
-                D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-                if ( $store && defined $message_id ) {
-                    D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", local_path => $local_path, bot_key => $bot_token );
-                }
+                _record_media_and_announce(
+                    ts             => $ts,
+                    chat_id        => $chat_id,
+                    sender         => $sender,
+                    msg_note       => $msg_note,
+                    reply_ctx      => $reply_ctx,
+                    message_id     => $message_id,
+                    media_kind     => $media_kind,
+                    caption_note   => $caption_note,
+                    store          => $store,
+                    offset_cap_ref => $offset_cap_ref,
+                    update_id      => $update_id,
+                    bot_token      => $bot_token,
+                    local_path     => $local_path,
+                    group_collect_ref => $group_collect_ref,
+                );
             }
             elsif ( $store && defined $message_id && defined $file_id ) {
                 _queue_failed_and_report(
@@ -341,13 +433,66 @@ sub handle_plain_update {
         }
     }
     else {
-        print "$ts NEW TG MEDIA [$chat_id] $sender: $media_kind$caption_note$msg_note$reply_ctx\n";
-        D2TG::Poller::Format::print_reply_template( $chat_id, $message_id, $bot_token );
-
-        if ( $store && defined $message_id ) {
-            D2TG::Poller::Safe::record_message_and_track_offset( $store, $offset_cap_ref, $update_id, $chat_id, $message_id, $sender, "$media_kind$caption_note", bot_key => $bot_token );
-        }
+        _record_media_and_announce(
+            ts             => $ts,
+            chat_id        => $chat_id,
+            sender         => $sender,
+            msg_note       => $msg_note,
+            reply_ctx      => $reply_ctx,
+            message_id     => $message_id,
+            media_kind     => $media_kind,
+            caption_note   => $caption_note,
+            store          => $store,
+            offset_cap_ref => $offset_cap_ref,
+            update_id      => $update_id,
+            bot_token      => $bot_token,
+            group_collect_ref => $group_collect_ref,
+        );
     }
+
+    return;
+}
+
+# TGT-343 (found via a scheduled JOB-004 improvement hunt): called once
+# per media_group_id group formed by partition_media_groups (a real
+# Telegram album - 2+ photos/documents sent together sharing one
+# media_group_id). Runs handle_plain_update on every member exactly as
+# a standalone update would be, so access control, dedup, download,
+# storage and offset-tracking are unchanged and fully reused - only
+# passes group_collect_ref so each member's own individual stdout
+# announce is suppressed, then prints ONE combined NEW TG MEDIA ALBUM
+# line (naming every message_id collected) plus one GET ATTACHMENT WITH
+# per part plus one shared reply template, instead of N separate
+# announces.
+sub handle_media_group_update {
+    my ( $group, $offset_cap_ref, $telegram, $store, $bot_token, $download_media ) = @_;
+
+    return unless @$group;
+
+    my @collected;
+    for my $update (@$group) {
+        my $update_id = $update->{update_id};
+        handle_plain_update( $update, $update_id, $offset_cap_ref, $telegram, $store, $bot_token, undef, $download_media, \@collected );
+    }
+
+    return unless @collected;
+
+    my $first_message = $group->[0]{message};
+    my $chat_id        = $first_message->{chat}{id};
+    my $sender         = D2TG::Poller::Format::display_name( $chat_id, $first_message->{from}{username} );
+    $sender = D2TG::Poller::Format::format_forwarded_sender( $sender, $first_message->{forward_origin} );
+    my $ts = D2TG::Poller::Format::timestamp_prefix($first_message);
+
+    my $count      = scalar(@collected);
+    my $media_kind = $collected[0]{media_kind};
+    my $msg_ids    = join( ', ', map { "#$_->{message_id}" } grep { defined $_->{message_id} } @collected );
+    my $msg_note   = length($msg_ids) ? " (msgs $msg_ids)" : '';
+
+    print "$ts NEW TG MEDIA ALBUM [$chat_id] $sender: $count x $media_kind$msg_note\n";
+    for my $item (@collected) {
+        D2TG::Poller::Format::print_attachment_template( $item->{chat_id}, $item->{message_id} ) if defined $item->{message_id};
+    }
+    D2TG::Poller::Format::print_reply_template( $chat_id, $collected[0]{message_id}, $bot_token );
 
     return;
 }

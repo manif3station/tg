@@ -47,7 +47,15 @@ my $call_site_count = () = $source =~ /D2TG::Poller::Safe::record_message_and_tr
 # helper, downloaded media, fallback media) - the sub definition itself
 # is still not matched by this pattern (no trailing open-paren
 # immediately after in the same form).
-is( $call_site_count, 4, 'the new helper is called from exactly 4 places in source (plain text and transcribed voice now share one call site via _announce_and_record, TGT-313)' );
+#
+# TGT-343 (found via a scheduled JOB-004 improvement hunt, extending
+# TGT-313's own "found it twice, extract it" precedent one branch
+# further): the downloaded-media and fallback-media branches' own call
+# sites were likewise consolidated into a single shared
+# _record_media_and_announce helper, dropping this from 4 to 3 (edited,
+# the shared _announce_and_record helper, the shared
+# _record_media_and_announce helper).
+is( $call_site_count, 3, 'the new helper is called from exactly 3 places in source (plain text/transcribed voice share one call site via _announce_and_record TGT-313; downloaded/fallback media share one call site via _record_media_and_announce TGT-343)' );
 
 # Codex QA-stage review finding: a bare count/regex check alone can
 # pass even if a call moved out of its intended branch, was dropped
@@ -100,8 +108,11 @@ is( $call_site_count, 4, 'the new helper is called from exactly 4 places in sour
 my %expected_near = (
     'edited text branch (has_text)' => qr/\$has_text \)\s*\{\s*\n\s*D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\$offset_cap_ref,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_text,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
     'shared _announce_and_record helper (plain text and transcribed voice branches)' => qr/sub _announce_and_record.*?D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\$offset_cap_ref,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*\$safe_content,\s*bot_key\s*=>\s*\$bot_token\s*\)/s,
-    'downloaded media branch (local_path)' => qr/D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\$offset_cap_ref,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*local_path\s*=>\s*\$local_path,\s*bot_key\s*=>\s*\$bot_token\s*\)/,
-    'fallback media branch'         => qr/D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\$offset_cap_ref,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*bot_key\s*=>\s*\$bot_token\s*\)\s*;\s*\n\s*\}\s*\n\s*\}/,
+    # TGT-343: the downloaded-media and fallback-media branches now
+    # share this one helper's own call site instead of each duplicating
+    # it - the ternary reproduces each branch's own exact prior
+    # argument list (local_path only for the downloaded-media branch).
+    'shared _record_media_and_announce helper (downloaded and fallback media branches)' => qr/sub _record_media_and_announce.*?D2TG::Poller::Safe::record_message_and_track_offset\(\s*\$store,\s*\$offset_cap_ref,\s*\$update_id,\s*\$chat_id,\s*\$message_id,\s*\$sender,\s*"\$media_kind\$caption_note",\s*\(\s*defined\s*\$local_path\s*\?\s*\(\s*local_path\s*=>\s*\$local_path\s*\)\s*:\s*\(\)\s*\),\s*bot_key\s*=>\s*\$bot_token,\s*\)/s,
 );
 
 for my $label ( sort keys %expected_near ) {
@@ -120,6 +131,15 @@ my %expected_helper_call_near = (
       qr/if \( defined \$text && length \$text \) \{.*?_announce_and_record\(\s*ts\s*=>\s*\$ts,\s*chat_id\s*=>\s*\$chat_id,\s*sender\s*=>\s*\$sender,\s*msg_note\s*=>\s*\$msg_note,\s*reply_ctx\s*=>\s*\$reply_ctx,\s*message_id\s*=>\s*\$message_id,\s*label\s*=>\s*'NEW TG',\s*safe_content\s*=>\s*\$safe_text,/s,
     'transcribed voice branch calls the helper with label NEW TG VOICE, content $safe_transcript' =>
       qr/transcribing\.\.\..*?_announce_and_record\(\s*ts\s*=>\s*\$ts,\s*chat_id\s*=>\s*\$chat_id,\s*sender\s*=>\s*\$sender,\s*msg_note\s*=>\s*\$msg_note,\s*reply_ctx\s*=>\s*\$reply_ctx,\s*message_id\s*=>\s*\$message_id,\s*label\s*=>\s*'NEW TG VOICE',\s*safe_content\s*=>\s*\$safe_transcript,/s,
+    # TGT-343: same discipline extended to the two media branches now
+    # sharing _record_media_and_announce - anchor each branch's own
+    # call by its distinguishing surrounding text and confirm it passes
+    # local_path (downloaded branch) or omits it entirely (fallback
+    # branch), not just that some call to the helper exists somewhere.
+    'downloaded media branch calls the helper with local_path => $local_path' =>
+      qr/if \(\$ok\) \{\s*\n\s*my \$local_path = \$result_or_error;\s*\n\s*_record_media_and_announce\(.*?local_path\s*=>\s*\$local_path,/s,
+    'fallback media branch calls the helper with no local_path key at all' =>
+      qr/\}\s*\n\s*else \{\s*\n\s*_record_media_and_announce\(\s*ts\s*=>\s*\$ts,\s*chat_id\s*=>\s*\$chat_id,\s*sender\s*=>\s*\$sender,\s*msg_note\s*=>\s*\$msg_note,\s*reply_ctx\s*=>\s*\$reply_ctx,\s*message_id\s*=>\s*\$message_id,\s*media_kind\s*=>\s*\$media_kind,\s*caption_note\s*=>\s*\$caption_note,\s*store\s*=>\s*\$store,\s*offset_cap_ref\s*=>\s*\$offset_cap_ref,\s*update_id\s*=>\s*\$update_id,\s*bot_token\s*=>\s*\$bot_token,\s*group_collect_ref\s*=>\s*\$group_collect_ref,\s*\)/s,
 );
 
 for my $label ( sort keys %expected_helper_call_near ) {

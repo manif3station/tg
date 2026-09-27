@@ -30,6 +30,29 @@ sub run_once {
     # same batch) next cycle.
     my $offset_cap;
 
+    # TGT-343 (found via a scheduled JOB-004 improvement hunt): a
+    # Telegram album (2+ photos/documents sharing one media_group_id)
+    # is grouped by partition_media_groups and dispatched once per
+    # group via handle_media_group_update, instead of once per part -
+    # see that function's own comment. Reactions/edited messages never
+    # carry media_group_id (partition_media_groups leaves them
+    # standalone unchanged) so their handling below is untouched.
+    #
+    # Iteration below still walks @$updates in its own original order
+    # (never the separately-ordered $groups/$standalone lists) - a real
+    # album's parts are always consecutive/near-consecutive update_ids
+    # in practice, but preserving the ORIGINAL per-update_id order here
+    # regardless is what keeps TGT-178's own offset_cap invariant
+    # ("the first FAILED update_id in iteration order is also the
+    # earliest, since Telegram delivers in increasing update_id order")
+    # true even in a contrived/defensive input shape. A group is
+    # dispatched once, at the position of its first-encountered member;
+    # every later member of the same group is then skipped here (it was
+    # already processed as part of that one dispatch).
+    my ( $groups, undef ) = D2TG::Poller::Dispatch::partition_media_groups($updates);
+    my %group_by_id = map { $_->[0]{message}{media_group_id} => $_ } @$groups;
+    my %group_handled;
+
     for my $update (@$updates) {
         my $update_id = $update->{update_id};
 
@@ -40,6 +63,15 @@ sub run_once {
 
         if ( my $edited = $update->{edited_message} ) {
             D2TG::Poller::Dispatch::handle_edited_message( $edited, $update_id, \$offset_cap, $store, $bot_token );
+            next;
+        }
+
+        my $media_group_id = $update->{message}{media_group_id};
+        if ( defined $media_group_id && $group_by_id{$media_group_id} ) {
+            next if $group_handled{$media_group_id}++;
+            D2TG::Poller::Dispatch::handle_media_group_update(
+                $group_by_id{$media_group_id}, \$offset_cap, $telegram, $store, $bot_token, $download_media
+            );
             next;
         }
 

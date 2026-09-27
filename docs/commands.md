@@ -388,6 +388,28 @@ the admin/owner chat_id independently of which bot(s) actually poll,
 per TGT-049's own env-folding design) and must keep starting up
 unaffected.
 
+A Telegram album (2+ photos/documents sent together, sharing one
+`media_group_id`) is announced as a single grouped line instead of one
+per part (TGT-343, found via a scheduled JOB-004 improvement hunt):
+
+```
+[2026-09-27 02:00:00] NEW TG MEDIA ALBUM [999] ada: 3 x photo (msgs #200, #201, #202)
+GET ATTACHMENT WITH: d2 tg.attachment 999 200
+GET ATTACHMENT WITH: d2 tg.attachment 999 201
+GET ATTACHMENT WITH: d2 tg.attachment 999 202
+REPLY WITH: d2 tg.reply 999 "..."
+```
+
+Every part is still individually downloaded and stored (each has its
+own `GET ATTACHMENT WITH` line) - only the announce and the reply
+template are combined into one. Grouping happens within a single
+`getUpdates` batch only, not across poll cycles: Telegram delivers all
+of an album's parts together before a bot would ever see the first one,
+so no cross-cycle buffering/timeout state is needed. A lone update that
+happens to carry a `media_group_id` (Telegram's real Bot API never
+sends a genuine 1-part album) is announced as a normal standalone
+message, not a 1-item "album".
+
 ## `d2 tg.approve [--bot <token>] <chat_id> [--db <alias> | -d <alias>]`
 
 Moves `chat_id` from pending into the allow-list. Prints `Approved N`
