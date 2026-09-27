@@ -64,6 +64,19 @@ sub partition_media_groups {
 # NEW TG MEDIA ALBUM line (naming every message_id collected) plus one
 # GET ATTACHMENT WITH per part plus one shared reply template, instead
 # of N separate announces.
+#
+# TGT-344 (found via a scheduled JOB-004 improvement hunt, reviewing
+# TGT-343's own fresh diff): the combined announce/reply line below
+# reads chat_id/sender only from the group's FIRST member - this
+# assumes every member of a group shares one chat_id, the same way
+# partition_media_groups's own comment already states its lone-group
+# assumption explicitly. Live-tested: a defensive/malformed group
+# whose members carried different chat_id values would silently
+# misattribute later parts to the first part's chat in the summary/
+# reply line - not a reachable defect, since Telegram's real Bot API
+# guarantees media_group_id is scoped per-chat and never spans two
+# chats, the same protocol guarantee the lone-group case already
+# relies on.
 sub handle_media_group_update {
     my ( $group, $offset_cap_ref, $telegram, $store, $bot_token, $download_media ) = @_;
 

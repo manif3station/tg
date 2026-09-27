@@ -72,6 +72,17 @@ part (each part is still individually fetchable by its own
 C<message_id>), and one shared C<REPLY WITH> reply template - instead
 of N separate announces and N separate reply templates.
 
+TGT-344: the combined announce/reply line reads C<chat_id>/sender only
+from the group's first member, assuming every member of a group shares
+one C<chat_id> - the same class of assumption
+L</partition_media_groups($updates)> already states explicitly for its
+own lone-group case. This holds because Telegram's real Bot API
+guarantees C<media_group_id> is scoped per-chat and never spans two
+chats; a group whose members carried differing C<chat_id> values (only
+possible via a malformed/defensive input, never a real Telegram
+delivery) would silently misattribute later parts to the first part's
+own chat in the summary/reply line.
+
 C<$offset_cap_ref> must be the same shared scalar reference the
 caller's own C<run_once> loop uses for every other update in the same
 batch (not a fresh one created per group) - TGT-178's own
