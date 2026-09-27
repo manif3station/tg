@@ -8319,6 +8319,18 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-349
+
+Upgrade-gate review of the Tira platform's 5.230 -> 5.232 Changes text
+(`tira.policy.undeclared` run before declaring, returned `[]` - nothing
+undeclared). Both entries reviewed: TKT-1177 (an internal, unresolved
+investigation into Tira's own docker-compose flakiness in its dev/test
+environment) and TKT-1176 (a wording fix inside Tira's own `SKILLS.md`,
+not this project's) - neither has any board-observable effect on this
+project. No new policy declaration needed, no code change on this
+project's side. review-only, matching the TGT-137/256/283/315/319/338/
+347/348 upgrade-gate precedent.
+
 ## TGT-348
 
 Upgrade-gate review of the Tira platform's 5.221 -> 5.230 Changes text
