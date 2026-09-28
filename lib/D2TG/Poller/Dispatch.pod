@@ -90,6 +90,16 @@ how many times Telegram resends it, but does not protect across a
 poller restart, since nothing is persisted - the accepted tradeoff of
 not adding a new table.
 
+TGT-352 (found via a scheduled JOB-004 improvement hunt, reviewing
+TGT-350's own fresh diff): C<$seen_reactions> gained no eviction path
+when introduced - one entry per distinct C<(chat_id, message_id,
+bot_token)> ever seen accumulated for the life of a long-running poller
+process, unbounded. Capped at C<MAX_REACTION_STATE_ENTRIES> (1000): once
+reached, the whole hash is cleared before the next entry is recorded - a
+simple wrap-around, not a persisted table (Q-022's own tradeoff still
+holds) - at most one extra duplicate announce right after a wrap, versus
+genuinely unbounded growth otherwise.
+
 =head2 handle_edited_message($edited, $update_id, $offset_cap_ref, $store, $bot_token)
 
 TGT-169 (live Telegram question, msg #246, Michael: "is the

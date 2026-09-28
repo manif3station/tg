@@ -8319,6 +8319,23 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-352
+
+Improvement (found via a scheduled JOB-004 improvement hunt, reviewing
+TGT-350's own fresh diff, per the standing "stress-test the code that
+just shipped" rule): the new in-process reaction-dedup hash TGT-350
+introduced had no eviction path - unbounded growth for the life of a
+long-running poller process, unlike every other long-lived state this
+project maintains (`prune_vault`'s byte cap, `prune_history`'s
+retention-day sweep). Filed as a fast-follow ticket (TGT-350 was still
+in `pending-push`, not yet pushed), then picked up immediately per the
+always-be-working rule since nothing else was in flight. Capped at
+`MAX_REACTION_STATE_ENTRIES` (1000) via a simple wrap-around - the
+whole hash clears before the next entry is recorded once reached, not
+a new persisted table (Q-022's own tradeoff still holds). 100%
+statement + subroutine coverage confirmed on the touched module; full
+suite (256 files, 3086 tests) passes clean.
+
 ## TGT-350
 
 Bugfix (found via a scheduled JOB-003 hourly bug hunt, live-reproduced

@@ -1,5 +1,13 @@
 # tg
 
+**Status: early implementation (v2.70).** IMPROVEMENT (TGT-352, found via a
+scheduled JOB-004 improvement hunt, reviewing TGT-350's own fresh diff): the
+new in-process reaction-dedup hash (2.69) had no eviction path - one entry
+per distinct (chat_id, message_id, bot_token) reaction ever seen accumulated
+for the life of a long-running poller process, unbounded. Capped at 1000
+entries via a simple wrap-around - not a new persisted table, matching this
+same feature's own Q-022 tradeoff.
+
 **Status: early implementation (v2.69).** BUGFIX (TGT-350, found via a
 scheduled JOB-003 hourly bug hunt, live-reproduced): `handle_message_reaction`
 had no redelivery-dedup guard at all, unlike every sibling update-type
