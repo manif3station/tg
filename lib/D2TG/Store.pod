@@ -43,6 +43,20 @@ STDERR (which can embed the real database file path) before whatever
 classified refusal the calling code went on to print - exactly the
 class of leak TGT-133/183/186/195/293/311 all exist to prevent.
 
+The C<DBI-E<gt>connect> call also sets C<sqlite_unicode =E<gt> 1>
+(TGT-357, found via a scheduled JOB-003 hourly bug hunt, live-reproduced):
+without it, C<DBD::SQLite>'s documented behavior corrupts a non-BMP
+character (C<U+10000> and above - the range essentially all emoji live
+in) on round-trip through a TEXT column, confirmed live with a message
+summary containing a real emoji. C<get_offset> (below) now also
+explicitly coerces its own fetched C<meta.value> to a number (C<+ 0>) -
+a genuine regression this same fix surfaced: C<meta.value> is a generic
+TEXT column, and the pre-fix code's "looks numeric to JSON::PP" behavior
+turned out to depend on an implicit, coincidental dualvar side effect of
+C<DBD::SQLite>'s pre-C<sqlite_unicode> string handling, not on anything
+this code itself guaranteed - explicit coercion is correct regardless of
+that connection-level setting.
+
 Every connection sets C<PRAGMA busy_timeout = 5000> and
 C<PRAGMA journal_mode = WAL> immediately after connecting (TGT-129,
 found via an ad-hoc bug-hunt): C<DBD::SQLite>'s default busy timeout is

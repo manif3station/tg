@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.72).** BUGFIX (TGT-357, found via a
+scheduled JOB-003 hourly bug hunt, live-reproduced): `D2TG::Store`'s
+`DBI->connect` had no `sqlite_unicode` flag - a message summary
+containing a non-BMP character (a real emoji) was corrupted on
+round-trip through `record_message`/`get_message`, silently defeating
+`handle_edited_message`'s own redelivery-dedup comparison for any such
+message. Fixed by adding `sqlite_unicode => 1`; `get_offset` was also
+fixed in the same ticket to explicitly coerce its own value to a
+number, closing a regression this same fix surfaced.
+
 **Status: early implementation (v2.71).** BUGFIX (TGT-354, found via a
 scheduled JOB-003 hourly bug hunt, live-reproduced against the real
 gtts-cli binary): `D2TG::TTS::synthesize`'s gtts-cli invocation used to

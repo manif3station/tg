@@ -8319,6 +8319,34 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-357
+
+Bugfix (found via a scheduled JOB-003 hourly bug hunt, live-reproduced
+in the d2tg-test-1 container): `D2TG::Store`'s own `DBI->connect` had
+no `sqlite_unicode` flag - `DBD::SQLite`'s documented behavior without
+it corrupts a non-BMP character (a real emoji, `U+10000` and above) on
+round-trip through a TEXT column. Isolated with 3 live cases: plain
+ASCII and accented Latin-1-range (BMP) text both round-tripped
+correctly; only genuine emoji broke, confirming this is a narrow but
+broadly-reachable defect (Telegram messages commonly contain emoji).
+Fixed by adding `sqlite_unicode => 1` to the connection options.
+
+**Self-caught regression during this same ticket**: enabling
+`sqlite_unicode` alone broke `t/07-offset-persistence.t`'s own test 5 -
+`get_offset`'s returned value stopped JSON-encoding as a bare number,
+instead quoting as a string. Root cause: `meta.value` is a generic TEXT
+column (not offset-specific), and the pre-fix code's "looks numeric to
+JSON::PP" behavior turned out to depend on an implicit, coincidental
+dualvar side effect of `DBD::SQLite`'s pre-`sqlite_unicode` string
+handling - never something this code itself actually guaranteed. Fixed
+by adding an explicit `+ 0` numeric coercion in `get_offset` itself,
+which is correct regardless of the connection-level string mode. Full
+suite re-verified in 3 batches (host memory pressure blocked a single
+combined `prove` run across multiple retries) - all 260 files, 3098
+tests pass; the one incidental failure (`t/54-lock-acquire-race.t`) is
+this project's own already-documented flaky-under-load multi-process
+timing test, confirmed unrelated by an isolated rerun.
+
 ## TGT-356
 
 Upgrade-gate review of the Tira platform's 5.232 -> 5.234 Changes text
