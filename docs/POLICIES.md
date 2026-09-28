@@ -8319,6 +8319,18 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-356
+
+Upgrade-gate review of the Tira platform's 5.232 -> 5.234 Changes text
+(`tira.policy.undeclared` run before declaring, returned `[]` - nothing
+undeclared). Both entries reviewed: TKT-1184 (5.233) adds
+`PERL_LOCAL_LIB_ROOT/bin` as an additional job-command resolution check
+inside Tira's own scheduler - internal to Tira, purely additive, no
+board-observable effect. TKT-1185 (5.234) is a doc-prose-only correction
+to Tira's own `docs/JOBS.md`. No new policy declaration needed, no code
+change on this project's side - review-only, matching the
+TGT-137/256/283/315/319/338/347/348/349 upgrade-gate precedent.
+
 ## TGT-354
 
 Bugfix (found via a scheduled JOB-003 hourly bug hunt) - live-reproduced
