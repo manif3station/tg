@@ -8319,6 +8319,15 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-351
+
+Doc-accuracy fix (found via a scheduled JOB-005 doc-accuracy hunt):
+`docs/commands.md`'s own `D2TG::Poller::Dispatch` row claimed "444 lines",
+set at TGT-343 time, but had drifted 2 lines stale since - corrected
+against a fresh `wc -l` (442). Same drift class TGT-325 already fixed for
+`D2TG::Store`'s own line-count claim; pure documentation correction, no
+code/behavior change, no version bump (matches TGT-325's own precedent).
+
 ## TGT-349
 
 Upgrade-gate review of the Tira platform's 5.230 -> 5.232 Changes text
