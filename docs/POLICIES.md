@@ -8319,6 +8319,24 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-354
+
+Bugfix (found via a scheduled JOB-003 hourly bug hunt) - live-reproduced
+against the real C<gtts-cli> binary (external tool fact-check on host,
+since it isn't installed in the perl-test container; this project's own
+code was never exercised outside Docker). C<D2TG::TTS::synthesize>'s
+gtts-cli invocation passed the reply text as a raw positional argument
+with no protection from gtts-cli's own Click-based option parser - a
+reply text starting with a dash (a negative temperature, a percentage)
+made gtts-cli refuse with "No such option: -1", exit 2, breaking voice
+synthesis for ordinary text, not just adversarial input. Fixed by
+placing `--output PATH` before a literal `--` immediately preceding the
+text - confirmed live both that this exact order works and that the
+reverse order (`--` before `--output`) breaks differently (Click then
+treats `--output` itself as a second positional argument). No version
+bump precedent question here - this is a real behavior fix, bumped
+2.70->2.71 per this project's own established convention.
+
 ## TGT-352
 
 Improvement (found via a scheduled JOB-004 improvement hunt, reviewing

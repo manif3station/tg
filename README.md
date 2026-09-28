@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.71).** BUGFIX (TGT-354, found via a
+scheduled JOB-003 hourly bug hunt, live-reproduced against the real
+gtts-cli binary): `D2TG::TTS::synthesize`'s gtts-cli invocation used to
+pass the reply text as a raw positional argument with no protection from
+gtts-cli's own Click-based option parser - text starting with a dash (a
+negative number, a percentage) made gtts-cli refuse with "No such
+option", breaking voice synthesis. Fixed by placing `--output PATH`
+before a literal `--` immediately preceding the text.
+
 **Status: early implementation (v2.70).** IMPROVEMENT (TGT-352, found via a
 scheduled JOB-004 improvement hunt, reviewing TGT-350's own fresh diff): the
 new in-process reaction-dedup hash (2.69) had no eviction path - one entry

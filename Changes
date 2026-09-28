@@ -1,5 +1,16 @@
 Revision history for the tg skill
 
+2.71  2026-09-28
+      - BUGFIX (TGT-354, found via a scheduled JOB-003 hourly bug hunt,
+        live-reproduced against the real gtts-cli binary): D2TG::TTS::
+        synthesize's gtts-cli invocation used to pass the reply text as
+        a raw positional argument with no protection from gtts-cli's
+        own Click-based option parser - text starting with a dash (a
+        negative number, a percentage) made gtts-cli refuse with "No
+        such option", breaking voice synthesis. Fixed by placing
+        --output PATH before a literal -- immediately preceding the
+        text.
+
 2.70  2026-09-28
       - IMPROVEMENT (TGT-352, found via a scheduled JOB-004 improvement
         hunt, reviewing TGT-350's own fresh diff): the new in-process

@@ -34,6 +34,17 @@ subprocesses. A thrown error from C<runner> (e.g. C<_run>'s own timeout
 death) is treated the same as a non-zero exit status: temp files are
 cleaned up and the error re-thrown.
 
+TGT-354 (found via a scheduled JOB-003 hourly bug hunt, live-reproduced
+against the real C<gtts-cli> binary): the C<gtts-cli> invocation places
+C<--output PATH> B<before> a literal C<-->, which sits immediately
+before C<$text> - protecting any reply text that happens to start with
+a dash (a negative number, a percentage) from being misparsed by
+C<gtts-cli>'s own Click-based option parser as an unrecognized flag
+(confirmed live: C<gtts-cli -1 degrees --output x> dies "No such
+option: -1", exit 2). C<--> must come B<after> C<--output>, not before
+it - confirmed live that the reverse order also breaks it, differently
+(Click then treats C<--output> itself as a second positional argument).
+
 =head2 synthesize_to_file($text, out => $path, runner => \&coderef, renamer => \&coderef)
 
 TGT-106 (user-supplied feature-gap analysis): C<synthesize> itself is
