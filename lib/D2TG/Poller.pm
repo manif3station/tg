@@ -14,6 +14,7 @@ sub run_once {
     my $transcribe_voice = $opts{transcribe_voice};
     my $download_media   = $opts{download_media};
     my $bot_token        = $opts{bot_token};
+    my $reaction_state   = $opts{reaction_state};
 
     my ( $updates, $next_offset ) = $telegram->get_updates( offset => $offset );
 
@@ -58,7 +59,7 @@ sub run_once {
         my $update_id = $update->{update_id};
 
         if ( my $reaction = $update->{message_reaction} ) {
-            D2TG::Poller::Dispatch::handle_message_reaction( $reaction, $store, $bot_token );
+            D2TG::Poller::Dispatch::handle_message_reaction( $reaction, $store, $bot_token, $reaction_state );
             next;
         }
 

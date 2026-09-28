@@ -103,7 +103,7 @@ sub _queue_failed_and_report {
 }
 
 sub handle_message_reaction {
-    my ( $reaction, $store, $bot_token ) = @_;
+    my ( $reaction, $store, $bot_token, $seen_reactions ) = @_;
     my $chat_id = $reaction->{chat}{id};
 
     if ($store) {
@@ -128,6 +128,34 @@ sub handle_message_reaction {
     my %new_by_key =
       map { D2TG::Poller::Format::reaction_key($_) => D2TG::Poller::Format::reaction_label($_) }
       @{ $reaction->{new_reaction} // [] };
+
+    # TGT-350 (Q-022, Michael's own decision: a lighter in-process-only
+    # fix, no new persisted D2TG::Store table): $seen_reactions is an
+    # optional caller-owned hashref, undef by every pre-existing caller
+    # so default behavior (no dedup at all) is byte-for-byte unchanged
+    # unless a caller opts in - matching this project's own established
+    # optional-trailing-param convention (group_collect_ref, etc). When
+    # provided, it's a plain in-memory hash living only as long as the
+    # calling process (cli/poller.pl builds one per bot/chat pair,
+    # outside its own poll loop, so it survives across poll cycles but
+    # resets on a poller restart) - NOT a persisted store table. Keyed
+    # by (chat_id, message_id, bot_token), value is the current
+    # new_reaction state's own signature (sorted keys, since that fully
+    # represents "what Telegram says the reaction state is now" -
+    # old_reaction is just that same value one update ago). An
+    # unchanged signature means Telegram redelivered a reaction update
+    # this process already announced - skip re-printing either loop
+    # below. This bounds a same-process redelivery to at most one
+    # announce regardless of how many times Telegram resends it, but -
+    # same as every other in-memory-only guard in this codebase - does
+    # NOT protect across a poller restart, since nothing is persisted;
+    # accepted as the explicit tradeoff of not adding a new table.
+    if ($seen_reactions) {
+        my $dedup_key = join( ':', $chat_id, $message_id // '', $bot_token // '' );
+        my $signature = join( ',', sort keys %new_by_key );
+        return if defined $seen_reactions->{$dedup_key} && $seen_reactions->{$dedup_key} eq $signature;
+        $seen_reactions->{$dedup_key} = $signature;
+    }
 
     for my $key ( sort grep { !$old_by_key{$_} } keys %new_by_key ) {
         print "NEW TG REACTION [$chat_id] $sender: "

@@ -393,9 +393,16 @@ for my $group (@$groups) {
     for my $token ( @{ $group->{bots} } ) {
         my $bot_key = $single_bot_mode ? undef : $token;
         push @pairs, {
-            telegram => D2TG::Telegram->new( token => $token ),
-            bot_key  => $bot_key,
-            offset   => $store->get_offset($bot_key),
+            telegram       => D2TG::Telegram->new( token => $token ),
+            bot_key        => $bot_key,
+            offset         => $store->get_offset($bot_key),
+
+            # TGT-350 (Q-022): one in-process reaction-dedup hash per
+            # bot/chat pair, built once here (outside the poll loop
+            # below) so it survives across poll cycles for the life of
+            # this process - resets on a poller restart, by design (no
+            # new persisted D2TG::Store table).
+            reaction_state => {},
         };
     }
 }
@@ -505,6 +512,7 @@ until ($shutting_down) {
             transcribe_voice => $transcribe_voice,
             download_media   => $download_media,
             bot_token        => $pair->{bot_key},
+            reaction_state   => $pair->{reaction_state},
         );
         $pair->{offset} = $new_offset
           if defined $new_offset
