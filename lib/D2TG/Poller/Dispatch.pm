@@ -7,6 +7,18 @@ use D2TG::Poller::Safe;
 
 use constant TELEGRAM_GETFILE_MAX_BYTES => 20 * 1024 * 1024;
 
+# TGT-352 (found via a scheduled JOB-004 improvement hunt, reviewing
+# TGT-350's own fresh diff): $seen_reactions (handle_message_reaction's
+# own optional, caller-owned, in-process-only hashref, TGT-350) gained
+# no eviction path when introduced - one entry per distinct (chat_id,
+# message_id, bot_token) reaction ever seen accumulates for the life of
+# the poller process, unbounded. A simple wrap-around cap, not a new
+# persisted table (Q-022's own explicit tradeoff still holds): once the
+# hash reaches this many entries, it is cleared before the next entry
+# is recorded - at most one extra duplicate announce right after a
+# wrap, versus genuinely unbounded growth otherwise.
+use constant MAX_REACTION_STATE_ENTRIES => 1000;
+
 # TGT-313 (found via a JOB-004 improvement hunt, reviewing TGT-312's own
 # freshly-shipped diff): handle_plain_update's text branch and
 # voice-success branch used to duplicate this exact defined($message_id)
@@ -154,6 +166,12 @@ sub handle_message_reaction {
         my $dedup_key = join( ':', $chat_id, $message_id // '', $bot_token // '' );
         my $signature = join( ',', sort keys %new_by_key );
         return if defined $seen_reactions->{$dedup_key} && $seen_reactions->{$dedup_key} eq $signature;
+
+        # TGT-352: a simple wrap-around cap - see this constant's own
+        # comment. Checked before recording the NEW entry below, so the
+        # cap is never exceeded even by the entry that triggers it.
+        %$seen_reactions = () if keys %$seen_reactions >= MAX_REACTION_STATE_ENTRIES;
+
         $seen_reactions->{$dedup_key} = $signature;
     }
 
