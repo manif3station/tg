@@ -28,7 +28,17 @@ sub synthesize {
     my ( $ogg_fh, $ogg_path ) = tempfile( SUFFIX => '.ogg', UNLINK => 0 );
     close $ogg_fh;
 
-    my $gtts_rc = eval { $runner->( 'gtts-cli', $text, '--output', $mp3_path ) };
+    # TGT-354 (found via a scheduled JOB-003 hourly bug hunt,
+    # live-reproduced against the real gtts-cli binary): $text used to
+    # sit right after 'gtts-cli' with no '--' separator protecting it -
+    # a reply text starting with a dash (a negative number, a
+    # percentage) made gtts-cli's own Click-based parser refuse it as
+    # an unrecognized option ("Error: No such option: -1"), exit 2.
+    # '--output' must come BEFORE the '--' separator, not after -
+    # confirmed live that reversing this order ALSO breaks it,
+    # differently: Click then treats --output itself as a second
+    # positional argument and refuses "unexpected extra arguments".
+    my $gtts_rc = eval { $runner->( 'gtts-cli', '--output', $mp3_path, '--', $text ) };
     if ( my $err = $@ ) {
         unlink $mp3_path, $ogg_path;
         die $err;
