@@ -43,13 +43,7 @@ sub request {
 
 package main;
 
-sub http_response {
-    my (%args) = @_;
-    my $res = HTTP::Response->new( $args{code} // 200, $args{message} // 'OK' );
-    $res->header( 'Content-Type' => 'application/json; charset=utf-8' );
-    $res->content( $args{content} ) if defined $args{content};
-    return $res;
-}
+use Fake::HttpResponse qw(http_response);
 
 my $known_boundary = 'D2TGBoundary' . join( '', map { sprintf( '%04x', int( rand(65536) ) ) } 1 .. 8 ) . time;
 

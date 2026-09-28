@@ -13,13 +13,7 @@ require Fake::Telegram;
 require Fake::Store;
 require Fake::UA;
 
-sub http_response {
-    my (%args) = @_;
-    my $res = HTTP::Response->new( $args{code} // 200, $args{message} // 'OK' );
-    $res->header( 'Content-Type' => 'application/json; charset=utf-8' );
-    $res->content( $args{content} ) if defined $args{content};
-    return $res;
-}
+use Fake::HttpResponse qw(http_response);
 
 use Test::Capture qw(capture_stdout);
 

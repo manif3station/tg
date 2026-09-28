@@ -18,13 +18,7 @@ require D2TG::Telegram;
 # outbound-media primitive at all. send_photo/send_document mirror
 # send_voice's own multipart pattern exactly.
 
-sub http_response {
-    my (%args) = @_;
-    my $res = HTTP::Response->new( $args{code} // 200, $args{message} // 'OK' );
-    $res->header( 'Content-Type' => 'application/json; charset=utf-8' );
-    $res->content( $args{content} ) if defined $args{content};
-    return $res;
-}
+use Fake::HttpResponse qw(http_response);
 
 {
     my ( $fh, $path ) = tempfile( SUFFIX => '.jpg' );

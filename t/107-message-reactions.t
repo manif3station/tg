@@ -21,13 +21,7 @@ use Fake::UA;
 # reaction-change type) never reached the poller regardless of whether
 # a user reacted - not a platform limitation, a missing request param.
 
-sub http_response {
-    my (%args) = @_;
-    my $res = HTTP::Response->new( $args{code} // 200, $args{message} // 'OK' );
-    $res->header( 'Content-Type' => 'application/json; charset=utf-8' );
-    $res->content( $args{content} ) if defined $args{content};
-    return $res;
-}
+use Fake::HttpResponse qw(http_response);
 
 {
     my $ua = Fake::UA->new(
