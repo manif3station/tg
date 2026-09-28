@@ -20,17 +20,7 @@ package main;
 # failure now also prints a visible STDOUT event naming the recovery
 # command, matching NEW TG MEDIA's own visibility.
 
-sub capture_std {
-    my ($code) = @_;
-    my ( $out, $err ) = ( '', '' );
-    open my $out_fh, '>', \$out or die $!;
-    my $old_out = select $out_fh;
-    local *STDERR;
-    open STDERR, '>', \$err or die $!;
-    $code->();
-    select $old_out;
-    return ( $out, $err );
-}
+use Test::Capture qw(capture_std);
 
 {
     my $tg = Fake::Telegram->new(

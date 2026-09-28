@@ -10,16 +10,7 @@ require Fake::Telegram;
 
 package main;
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     my $tg = D2TG::Telegram->new( token => 'test-token' );

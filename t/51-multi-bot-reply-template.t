@@ -14,16 +14,7 @@ require Fake::Store;
 is( D2TG::Telegram->new( token => 'sometoken123' )->token, 'sometoken123',
     'D2TG::Telegram->token returns the constructing token' );
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 # --- multi-bot mode: REPLY WITH names the bot that received the message,
 # --- but only its masked form (TGT-086 - the real token must never

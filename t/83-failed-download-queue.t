@@ -49,17 +49,7 @@ sub get {
 
 package main;
 
-sub capture_std {
-    my ($code) = @_;
-    my ( $out, $err ) = ( '', '' );
-    open my $out_fh, '>', \$out or die $!;
-    my $old_out = select $out_fh;
-    local *STDERR;
-    open STDERR, '>', \$err or die $!;
-    $code->();
-    select $old_out;
-    return ( $out, $err );
-}
+use Test::Capture qw(capture_std);
 
 # TGT-104 (user-supplied feature-gap analysis, /tmp/missing.md): the old
 # ~/skills/tg blueprint kept a small on-disk queue recording which

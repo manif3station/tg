@@ -21,16 +21,7 @@ sub http_response {
     return $res;
 }
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 # --- D2TG::Poller: message_id surfaced in content line and REPLY WITH template ---
 {

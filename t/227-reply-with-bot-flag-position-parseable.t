@@ -24,16 +24,7 @@ require D2TG::Reply::Args;
 # convention cli/approve.pl/cli/retry-download.pl already use) - no
 # parser changes needed.
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     my $tg = Fake_Telegram_stub();

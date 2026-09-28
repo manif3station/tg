@@ -9,16 +9,7 @@ require D2TG::Poller;
 require Fake::Telegram;
 require Fake::Store;
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 my $known_date = 1_700_000_000;    # a fixed, known Unix epoch second
 my $expected_ts = strftime( '%Y-%m-%d %H:%M:%S', localtime($known_date) );

@@ -18,16 +18,7 @@ require Fake::Store;
 # an edited message got announced but left the monitoring agent with
 # no ready-to-run reply command, unlike every other event type.
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     # A text edit must get a REPLY WITH line, same as an ordinary message.

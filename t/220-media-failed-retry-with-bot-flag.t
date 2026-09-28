@@ -23,17 +23,7 @@ package main;
 # whenever $bot_token is defined, matching D2TG::Poller::Format::print_reply_template's own
 # already-established convention exactly.
 
-sub capture_std {
-    my ($code) = @_;
-    my ( $out, $err ) = ( '', '' );
-    open my $out_fh, '>', \$out or die $!;
-    my $old_out = select $out_fh;
-    local *STDERR;
-    open STDERR, '>', \$err or die $!;
-    $code->();
-    select $old_out;
-    return ( $out, $err );
-}
+use Test::Capture qw(capture_std);
 
 {
     # Multi-bot case: bot_token is defined, so RETRY WITH must include

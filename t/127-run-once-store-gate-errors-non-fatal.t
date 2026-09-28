@@ -18,16 +18,7 @@ require Fake::Telegram;
 # the entire batch (including already-printed updates) gets redelivered
 # and reprinted on the next poll cycle.
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 package Fake::Store::DyingIsAllowed;
 

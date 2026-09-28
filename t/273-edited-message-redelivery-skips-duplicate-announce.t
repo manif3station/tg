@@ -25,16 +25,7 @@ require Fake::Store;
 # identical means this exact edit was already recorded (a redelivery);
 # different means a genuinely new edit (or the very first edit).
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     # Redelivery: the store already has this exact edited text

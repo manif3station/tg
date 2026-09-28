@@ -12,16 +12,7 @@ require Fake::Telegram;
 # instead of the raw Telegram username, falling back to the username
 # when D2TG_OWNER isn't set or the sender isn't the owner.
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     local $ENV{D2TG_CHAT_ID} = '398296603';

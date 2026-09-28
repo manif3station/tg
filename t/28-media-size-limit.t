@@ -10,17 +10,7 @@ require Fake::Store;
 
 package main;
 
-sub capture_std {
-    my ($code) = @_;
-    my ( $out, $err ) = ( '', '' );
-    open my $out_fh, '>', \$out or die $!;
-    my $old_out = select $out_fh;
-    local *STDERR;
-    open STDERR, '>', \$err or die $!;
-    $code->();
-    select $old_out;
-    return ( $out, $err );
-}
+use Test::Capture qw(capture_std);
 
 {
     my $too_big = 21 * 1024 * 1024;    # 21MB, over Telegram's 20MB getFile limit

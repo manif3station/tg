@@ -23,17 +23,7 @@ sub get_message { return undef }
 
 package main;
 
-sub capture_std {
-    my ($code) = @_;
-    my ( $out, $err ) = ( '', '' );
-    open my $out_fh, '>', \$out or die $!;
-    my $old_out = select $out_fh;
-    local *STDERR;
-    open STDERR, '>', \$err or die $!;
-    $code->();
-    select $old_out;
-    return ( $out, $err );
-}
+use Test::Capture qw(capture_std);
 
 # TGT-132: run_once's own record_message calls (text/voice/media/
 # fallback) weren't eval-wrapped like the sibling record_failed_download

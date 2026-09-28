@@ -16,16 +16,7 @@ require Fake::Store;
 # allow-listed sender edits a message the bot already received -
 # genuinely detectable, unlike deletion (no such update exists at all).
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 {
     # An allow-listed sender edits a message - a distinct NEW TG EDIT

@@ -10,16 +10,7 @@ require Fake::Store;
 
 package main;
 
-sub capture_stdout {
-    my ($code) = @_;
-    my $out = '';
-    open my $fh, '>', \$out or die $!;
-    my $old = select $fh;
-    $code->();
-    select $old;
-    close $fh;
-    return $out;
-}
+use Test::Capture qw(capture_stdout);
 
 # TGT-312 (a TGT-311 regression, found via a JOB-003 hourly bug hunt,
 # reproduced live in the perl-test container): TGT-311 removed the
