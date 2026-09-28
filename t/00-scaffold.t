@@ -17,6 +17,6 @@ for my $file (qw(README.md Changes LICENSE .env)) {
 open my $fh, '<', File::Spec->catfile( $root, '.env' ) or die $!;
 my $env = do { local $/; <$fh> };
 close $fh;
-like( $env, qr/^VERSION=2\.68$/m, '.env carries VERSION=2.68' );
+like( $env, qr/^VERSION=2\.69$/m, '.env carries VERSION=2.69' );
 
 done_testing();

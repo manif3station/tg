@@ -32,7 +32,7 @@ has no loop of its own).
 
 =head1 FUNCTIONS
 
-=head2 handle_message_reaction($reaction, $store, $bot_token)
+=head2 handle_message_reaction($reaction, $store, $bot_token, $seen_reactions)
 
 TGT-143 (live Telegram question, msg #176, Michael: "the user can give
 a like or mark a message with emoji, is that something can be
@@ -66,6 +66,29 @@ present in C<old_reaction> but not C<new_reaction> prints
 C<REACTION REMOVED [chat_id] sender: <label> on message <id>>.
 Anonymous aggregate reaction counts (C<message_reaction_count>) are out
 of scope.
+
+TGT-350 (found via a scheduled JOB-003 hourly bug hunt, live-reproduced:
+identical reaction data redelivered twice reprinted the same
+C<NEW TG REACTION> line twice, with zero suppression - unlike every
+sibling handler in this module, which already guards against this exact
+redelivery class). C<$seen_reactions> is an optional, caller-owned
+hashref - undef by every pre-existing caller, so default behavior (no
+dedup at all) is unchanged unless a caller opts in, matching this
+module's own established optional-trailing-param convention
+(C<group_collect_ref>, above). Q-022 (Michael's own decision): a
+lighter, in-process-only fix rather than a new persisted C<D2TG::Store>
+table - C<cli/poller.pl> builds one hashref per bot/chat pair, outside
+its own poll loop, so it survives across poll cycles for the life of
+that process but resets on a poller restart. Keyed by C<chat_id>,
+C<message_id>, and C<bot_token>; the value is the current
+C<new_reaction> state's own signature (sorted keys - C<old_reaction> is
+just that same value one update ago, so it needs no separate tracking).
+An unchanged signature means Telegram redelivered a reaction this
+process already announced - both print loops above are skipped. This
+bounds a same-process redelivery to at most one announce regardless of
+how many times Telegram resends it, but does not protect across a
+poller restart, since nothing is persisted - the accepted tradeoff of
+not adding a new table.
 
 =head2 handle_edited_message($edited, $update_id, $offset_cap_ref, $store, $bot_token)
 

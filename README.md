@@ -1,5 +1,15 @@
 # tg
 
+**Status: early implementation (v2.69).** BUGFIX (TGT-350, found via a
+scheduled JOB-003 hourly bug hunt, live-reproduced): `handle_message_reaction`
+had no redelivery-dedup guard at all, unlike every sibling update-type
+handler - a Telegram redelivery of the same reaction update reprinted the
+identical `NEW TG REACTION`/`REACTION REMOVED` line every time, unbounded.
+Fixed with a lighter, in-process-only dedup hash (Michael's own Q-022
+decision, not a new persisted store table) - `cli/poller.pl` now builds one
+such hash per bot/chat pair, surviving across poll cycles for that process's
+life but resetting on a poller restart, by design.
+
 **Status: early implementation (v2.68).** IMPROVEMENT (TGT-346, found via a
 scheduled JOB-004 improvement hunt): the grouped `NEW TG MEDIA ALBUM` line
 (TGT-343) never surfaced any album part's own caption, even though the

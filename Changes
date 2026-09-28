@@ -1,5 +1,17 @@
 Revision history for the tg skill
 
+2.69  2026-09-28
+      - BUGFIX (TGT-350, found via a scheduled JOB-003 hourly bug hunt,
+        live-reproduced): handle_message_reaction had no redelivery-dedup
+        guard at all, unlike every sibling update-type handler in this
+        poller - a Telegram redelivery of the same reaction update
+        reprinted the identical NEW TG REACTION/REACTION REMOVED line
+        every time, unbounded. Q-022 (Michael's own decision): fixed with
+        a lighter, in-process-only dedup hash rather than a new persisted
+        D2TG::Store table - cli/poller.pl now builds one such hash per
+        bot/chat pair, surviving across poll cycles for that process's
+        life (resets on a poller restart, by design).
+
 2.68  2026-09-27
       - IMPROVEMENT (TGT-346, found via a scheduled JOB-004 improvement
         hunt): the grouped NEW TG MEDIA ALBUM announce line (TGT-343)

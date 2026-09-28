@@ -8319,6 +8319,26 @@ Perlsec: reads an already-sanitized field (`caption_note` is built via
 constructed in `handle_plain_update`, unchanged by this ticket) - no
 new input handling.
 
+## TGT-350
+
+Bugfix (found via a scheduled JOB-003 hourly bug hunt, live-reproduced
+in the d2tg-test-1 container): `handle_message_reaction` had no
+redelivery-dedup guard at all - identical reaction data delivered twice
+reprinted the same `NEW TG REACTION` line twice, unbounded, unlike
+every sibling handler in `D2TG::Poller::Dispatch`. Raised Q-022 on the
+card (with voice note + options, per this project's own standing rule)
+rather than unilaterally choosing between a new persisted
+`D2TG::Store` table (full dedup) or a lighter in-process-only fix -
+Michael chose the lighter fix. Implemented: `handle_message_reaction`
+gained an optional trailing `$seen_reactions` hashref (undef by every
+pre-existing caller, unchanged default behavior), `cli/poller.pl`
+builds one per bot/chat pair outside its own poll loop so it survives
+across poll cycles for that process's life, resetting only on a poller
+restart - the accepted tradeoff of not adding a new table. Verified
+100% statement + subroutine coverage on both touched modules
+(`D2TG::Poller`, `D2TG::Poller::Dispatch`) after the fix; full suite
+(255 files, 3083 tests) passes clean.
+
 ## TGT-351
 
 Doc-accuracy fix (found via a scheduled JOB-005 doc-accuracy hunt):
