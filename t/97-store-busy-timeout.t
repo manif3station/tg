@@ -2,18 +2,13 @@ use strict;
 use warnings;
 use Test::More;
 use FindBin qw($Bin);
-use lib "$Bin/../lib";
+use lib "$Bin/../lib", "$Bin/lib";
 use File::Temp qw(tempfile);
 use Time::HiRes qw(time);
 
 require D2TG::Store;
 
-sub fresh_db_path {
-    my ( $fh, $path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
-    close $fh;
-    unlink $path;
-    return $path;
-}
+use Test::FreshDb qw(fresh_db_path);
 
 {
     my $db    = fresh_db_path();

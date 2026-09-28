@@ -20,10 +20,7 @@ require D2TG::Transcribe::Retry;
 # download_file on a future retry) - this mirrors that for transcription,
 # the single most expensive step in this whole pipeline.
 
-sub fresh_db_path {
-    my $dir = tempdir( CLEANUP => 1 );
-    return File::Spec->catfile( $dir, 'store.sqlite' );
-}
+use Test::FreshDb qw(fresh_db_path);
 
 package Fake::Store::DyingRecordMessage;
 our @ISA = ('D2TG::Store');

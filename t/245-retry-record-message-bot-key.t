@@ -24,10 +24,7 @@ require D2TG::Transcribe::Retry;
 # silently recorded under D2TG::Store::DEFAULT_BOT_KEY instead of the
 # bot that actually received it.
 
-sub fresh_db_path {
-    my $dir = tempdir( CLEANUP => 1 );
-    return File::Spec->catfile( $dir, 'store.sqlite' );
-}
+use Test::FreshDb qw(fresh_db_path);
 
 package Fake::DownloadTelegram;
 

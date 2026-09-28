@@ -25,10 +25,7 @@ require D2TG::Transcribe::Retry;
 # printed an unconditional "RETRY OK [...]: <transcript>" with exit 0
 # even though nothing was ever written to D2TG::Store's message history.
 
-sub fresh_db_path {
-    my $dir = tempdir( CLEANUP => 1 );
-    return File::Spec->catfile( $dir, 'store.sqlite' );
-}
+use Test::FreshDb qw(fresh_db_path);
 
 package Fake::DownloadTelegram;
 

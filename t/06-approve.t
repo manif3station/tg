@@ -11,12 +11,7 @@ use Test::MandatoryDb qw(setup_mandatory_db_env);
 require D2TG::Store;
 require D2TG::Config;
 
-sub fresh_db_path {
-    my ( $fh, $path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
-    close $fh;
-    unlink $path;
-    return $path;
-}
+use Test::FreshDb qw(fresh_db_path);
 
 {
     my $db = fresh_db_path();

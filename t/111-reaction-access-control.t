@@ -19,12 +19,7 @@ use Fake::Telegram;
 # unapproved party interact with the bot in a way every other inbound
 # path in this codebase explicitly designs against.
 
-sub fresh_db_path {
-    my ( $fh, $path ) = tempfile( SUFFIX => '.sqlite', UNLINK => 1 );
-    close $fh;
-    unlink $path;
-    return $path;
-}
+use Test::FreshDb qw(fresh_db_path);
 
 sub _run_and_capture {
     my ( $update, $store, $bot_token ) = @_;

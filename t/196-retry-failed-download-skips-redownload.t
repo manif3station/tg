@@ -20,10 +20,7 @@ require D2TG::Download;
 # and skips download_file entirely, retrying only the still-failing
 # record_message write.
 
-sub fresh_db_path {
-    my $dir = tempdir( CLEANUP => 1 );
-    return File::Spec->catfile( $dir, 'store.sqlite' );
-}
+use Test::FreshDb qw(fresh_db_path);
 
 package Fake::DownloadTelegram;
 

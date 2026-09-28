@@ -26,10 +26,7 @@ require D2TG::Transcribe::Retry;
 # unqualified RETRY OK and exit 0 even though the row is still sitting
 # in failed_downloads/failed_transcriptions.
 
-sub fresh_db_path {
-    my $dir = tempdir( CLEANUP => 1 );
-    return File::Spec->catfile( $dir, 'store.sqlite' );
-}
+use Test::FreshDb qw(fresh_db_path);
 
 package Fake::DownloadTelegram;
 
