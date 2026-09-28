@@ -41,9 +41,15 @@ sub new {
     # to STDERR - exactly the class of leak TGT-133/183/186/195/293/311
     # all exist to prevent, all of which assumed RaiseError alone was
     # sufficient.
+    # TGT-357 (found via a scheduled JOB-003 hourly bug hunt,
+    # live-reproduced): without sqlite_unicode, DBD::SQLite's documented
+    # behavior corrupts a non-BMP character (U+10000 and above - the
+    # range essentially all emoji live in) on round-trip through a TEXT
+    # column - confirmed live, ASCII and accented Latin-1-range (BMP)
+    # text were both unaffected, only genuine emoji broke.
     my $dbh = DBI->connect(
         "dbi:SQLite:dbname=$db_path", '', '',
-        { RaiseError => 1, PrintError => 0, AutoCommit => 1, sqlite_use_immediate_transaction => 1 }
+        { RaiseError => 1, PrintError => 0, AutoCommit => 1, sqlite_use_immediate_transaction => 1, sqlite_unicode => 1 }
     );
 
     # TGT-129: without these, DBD::SQLite's default busy timeout is 0 -
@@ -134,7 +140,16 @@ sub get_offset {
         'SELECT value FROM meta WHERE key = ?', undef, _offset_meta_key($bot_key),
     );
 
-    return defined $value ? $value : undef;
+    # TGT-357 (found while fixing that ticket's own sqlite_unicode
+    # addition): meta.value is a generic TEXT column (shared by every
+    # key this table stores, not offset-only), so this string always
+    # needed an explicit numeric coercion to guarantee JSON::PP encodes
+    # it unquoted - it happened to work before only because DBD::SQLite's
+    # pre-sqlite_unicode default string mode coincidentally left a
+    # numeric-looking dualvar on the fetched scalar; sqlite_unicode's
+    # correctly-UTF8-flagged string loses that coincidental hint.
+    # Explicit is more robust than implicit either way.
+    return defined $value ? $value + 0 : undef;
 }
 
 sub set_offset {
