@@ -97,4 +97,37 @@ require D2TG::Transcribe;
     is( scalar(@whisper_calls), 1, 'an explicit model is never automatically retried after an OOM kill' );
 }
 
+{
+    # TGT-362 (found via Codex's own adversarial review of TGT-359):
+    # the retry regex matched /timed out|killed by signal/ anywhere in
+    # $error - an unrelated failure whose message merely contains one of
+    # those phrases as a substring (e.g. embedded in an interpolated
+    # file path) would trigger an unwanted retry instead of surfacing
+    # the real error. The regex must be anchored to _run's own known
+    # die-message prefix, not a bare substring search.
+    my @whisper_calls;
+    my $runner = sub {
+        push @whisper_calls, [@_];
+        die "D2TG::Transcribe::transcribe: whisper did not produce the expected output /tmp/some/path/with timed out in it.txt: No such file or directory\n";
+    };
+
+    my $tempdir    = File::Temp::tempdir( CLEANUP => 1 );
+    my $audio_path = File::Spec->catfile( $tempdir, 'voice.ogg' );
+    open my $fh, '>', $audio_path or die $!;
+    close $fh;
+
+    eval {
+        D2TG::Transcribe::transcribe(
+            $audio_path,
+            runner      => $runner,
+            duration_fn => sub { return 150; },
+        );
+    };
+
+    like( $@, qr/did not produce the expected output/,
+        'an unrelated error that merely contains "timed out" as a substring propagates unchanged' );
+    is( scalar(@whisper_calls), 1,
+        'an unrelated error containing "timed out" as a substring does NOT trigger a retry' );
+}
+
 done_testing();

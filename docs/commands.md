@@ -376,7 +376,12 @@ model still times out **or its subprocess is killed by signal** (e.g.
 the host's OOM killer), transcription automatically retries at the next
 faster tier (`medium` → `small` → `base`) instead of failing outright -
 only a timeout/kill at `base` itself produces a final `TRANSCRIBE
-ERROR`.
+ERROR`. This retry trigger is anchored to the transcription module's own
+known failure-message prefix (TGT-362, a Codex adversarial-review
+finding), not a bare substring search - an unrelated failure whose
+message happens to contain the words "timed out" or "killed by signal"
+(for example, embedded in an audio file path) does not trigger a
+spurious retry.
 
 At startup, a `--chat_id` group with no matching `--bot` refuses rather
 than silently starting: if every declared group has zero bots, the

@@ -8580,3 +8580,37 @@ into this card's own fields and TGT-361 discarded as a duplicate.
 
 Perlsec: no tg-skill code touched at all - a board-policy review, not
 this project's own Perl code.
+
+## TGT-362: transcribe()'s retry regex matched an unrelated error as a substring
+
+Found via a JOB-004 improvement hunt reviewing TGT-359's own fresh diff
+- specifically, a finding from Codex's own adversarial code review
+during TGT-359's QA stage, recorded there but deliberately not fixed in
+that ticket (a pre-existing pattern, not new exposure that diff
+introduced).
+
+`transcribe()`'s retry-on-failure condition was `$error =~ /timed out|
+killed by signal/` - a bare substring match against the full error
+text, not anchored to `_run`'s own known die-message prefix
+(`D2TG::Transcribe::_run: command ...`). An unrelated failure whose
+message (or, more concerning, whose interpolated audio file path)
+happened to contain either phrase would trigger an unwanted retry at a
+different model tier instead of surfacing the real underlying error.
+This characteristic predates TGT-359 - the original `/timed out/`-only
+regex had the identical unanchored-substring shape; TGT-359 only
+widened the exposure by adding a second phrase.
+
+Fix: anchored the regex to `/^D2TG::Transcribe::_run: command (?:timed
+out|was killed by signal)/`, so only this module's own well-formed
+failure messages trigger a retry.
+
+Test strategy: new block in `t/359-transcribe-oom-signal-retry.t`
+asserting a die message that merely contains "timed out" as a substring
+(embedded in an interpolated path, matching the real-world concern)
+does NOT trigger a retry - confirmed genuinely red against the pre-fix
+code (2 whisper calls instead of the expected 1), confirmed green after
+the fix. Full suite re-run clean (262 files, 3114 tests). No `.pm` line
+count or POD change - the fix is a single regex edit.
+
+Perlsec: no new external input or shell interpolation - the anchored
+regex only matches this module's own internally-generated die messages.

@@ -1,5 +1,14 @@
 # tg
 
+**Status: early implementation (v2.74).** BUGFIX (TGT-362, found via a
+JOB-004 improvement hunt reviewing TGT-359's own fresh diff via Codex's
+adversarial code review): `transcribe()`'s retry-on-failure condition
+matched a bare substring anywhere in the error text - an unrelated
+failure whose message happened to contain "timed out" or "killed by
+signal" (most concerning, an embedded audio file path) would trigger an
+unwanted retry at a different model tier instead of surfacing the real
+error. Anchored to `_run`'s own known die-message prefix instead.
+
 **Status: early implementation (v2.73).** BUGFIX+IMPROVEMENT (TGT-359, live
 user-requested bug hunt: real gTTS voice notes at 1/4/8/15 minutes run
 end-to-end through the production transcription pipeline, comparing

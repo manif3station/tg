@@ -245,8 +245,13 @@ sub transcribe {
             # subprocess killed by signal (e.g. an OOM kill) gets the
             # same treatment - it's a different failure signature from a
             # timeout, but the right response is identical: step down
-            # to a lighter tier rather than dying.
-            if ( !$explicit_model && $error =~ /timed out|killed by signal/ ) {
+            # to a lighter tier rather than dying. TGT-362 (a Codex
+            # adversarial-review finding on TGT-359): anchored to _run's
+            # own known die-message prefix, not a bare substring search -
+            # an unrelated failure whose message (or interpolated audio
+            # file path) happens to contain either phrase must not
+            # trigger a retry it doesn't actually call for.
+            if ( !$explicit_model && $error =~ /^D2TG::Transcribe::_run: command (?:timed out|was killed by signal)/ ) {
                 my $next = _next_tier($model);
                 if ( defined $next ) {
                     $model = $next;
