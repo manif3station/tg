@@ -1,5 +1,11 @@
 # tg
 
+**Status: early implementation (v2.75).** DOCFIX (TGT-363, found via a
+JOB-005 doc-accuracy hunt): docs/commands.md's `D2TG::Transcribe`
+module-reference row claimed the module was "311 lines" - stale since
+TGT-359 and TGT-362's own additions. Corrected to the real current
+count (352).
+
 **Status: early implementation (v2.74).** BUGFIX (TGT-362, found via a
 JOB-004 improvement hunt reviewing TGT-359's own fresh diff via Codex's
 adversarial code review): `transcribe()`'s retry-on-failure condition

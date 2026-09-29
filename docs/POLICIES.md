@@ -8614,3 +8614,24 @@ count or POD change - the fix is a single regex edit.
 
 Perlsec: no new external input or shell interpolation - the anchored
 regex only matches this module's own internally-generated die messages.
+
+## TGT-363: docs/commands.md's D2TG::Transcribe line-count claim was stale
+
+Found via a JOB-005 doc-accuracy hunt. `docs/commands.md`'s
+`D2TG::Transcribe` module-reference table row claimed "This module is
+now 311 lines" - a figure recorded at TGT-263, since drifted upward by
+TGT-359's and TGT-362's own additions to `select_model()`/`_run()`/
+`transcribe()`'s comments and code. Real count via `wc -l`, confirmed
+immediately before editing (since the number had already moved twice
+during this ticket's own lifetime - 311 at filing, 347 when drafted,
+352 by implementation time): 352. Same drift class as TGT-325/TGT-351's
+own prior findings - counts in prose are the usual drift this job
+hunts for.
+
+Fix: corrected the claim to 352, attributing the growth to TGT-359/362.
+Pure documentation correction - no code touched, matching TGT-325/351's
+own precedent, though this project's own qa-gate required actions still
+call for a Changes/README entry and version bump regardless of a doc-only
+change's size, so v2.75 records it the same way any other ticket would.
+
+Perlsec: no code touched at all - a markdown prose correction only.
