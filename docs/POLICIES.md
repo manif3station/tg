@@ -8550,3 +8550,33 @@ diff (confirmed via `git diff`), not new debt.
 Perlsec: subprocess exit-status handling only - no new external input,
 no shell interpolation, `cmd => [@cmd]` is still passed to `exec(LIST)`
 via `D2TG::Subprocess::fork_in_own_process_group` exactly as before.
+
+## TGT-360
+
+Upgrade-gate review of the Tira platform's 5.234 -> 5.236 Changes text
+(`tira.policy.undeclared` run before and after declaring, returned `[]`
+both times - nothing undeclared). All 6 entries reviewed (a Codex
+adversarial-review finding on this section's first draft: it originally
+miscounted this as 5, missing that 5.236 alone bundles four separate
+tickets): 5.234 (TKT-1185) is a doc-only correction to Tira's own
+internal `JOBS.md`. 5.235 (TKT-1190) improves unknown-field die messages
+across several CLI call sites with a "- valid fields: ..." hint - the
+error text itself is user-visible, but no CLI semantic/behavior change
+(same refusal, same exit path, just a clearer message). 5.236 bundles
+TKT-1189 (`tira.police.outstanding`'s ledger rows now carry `detail`/
+`message` text, additive-only per Tira's own Q-199 payload-stability
+commitment - may make future violation diagnosis on this board easier,
+no action required), TKT-1191/1192 (internal test-coverage/gate-suite
+fixes, zero engine/CLI behavior change), and TKT-1193 (a doc-only fix to
+Tira's own `SKILLS.md`/`docs/commands.md` `--sum` format list). None
+require a new policy declaration or any change to this board's own
+state - review-only, matching the TGT-137/256/283/315/319/338/347/348/349
+precedent.
+
+A duplicate card, TGT-361, was independently filed for this same
+upgrade before this one (TGT-360, the board's own auto-generated
+upgrade-gate card) was found - TGT-361's completed review was folded
+into this card's own fields and TGT-361 discarded as a duplicate.
+
+Perlsec: no tg-skill code touched at all - a board-policy review, not
+this project's own Perl code.
