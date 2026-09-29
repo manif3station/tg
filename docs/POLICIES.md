@@ -8600,9 +8600,9 @@ This characteristic predates TGT-359 - the original `/timed out/`-only
 regex had the identical unanchored-substring shape; TGT-359 only
 widened the exposure by adding a second phrase.
 
-Fix: anchored the regex to `/^D2TG::Transcribe::_run: command (?:timed
-out|was killed by signal)/`, so only this module's own well-formed
-failure messages trigger a retry.
+Fix: anchored the regex to
+`/^D2TG::Transcribe::_run: command (?:timed out|was killed by signal)/`,
+so only this module's own well-formed failure messages trigger a retry.
 
 Test strategy: new block in `t/359-transcribe-oom-signal-retry.t`
 asserting a die message that merely contains "timed out" as a substring
