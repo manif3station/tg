@@ -17,14 +17,22 @@ require D2TG::Transcribe;
 # real time on his host, so a 30s clip legitimately took ~168s of wall
 # time before ever completing. A genuinely short, parsed duration now
 # gets the fastest tier ('base') straight away.
+#
+# TGT-359: a live bug-hunt investigation (real gTTS+whisper clips at
+# 1/4/8/15 minutes) found 'medium' was both slower (~7.84x realtime
+# measured, vs. the ~5.6x estimate above) and far more memory-hungry
+# (~4.7GB resident vs. ~900MB) than 'small' - and it was OOM-killed 5/5
+# attempts transcribing a real 4-minute clip on that host, never once
+# completing. 'medium' is no longer auto-selected for any genuinely-parsed
+# positive duration; the whole 61-900s range now routes to 'small'.
 
 for my $case (
     [ 1,   'base' ],
     [ 30,  'base' ],
     [ 60,  'base' ],
-    [ 61,  'medium' ],
-    [ 299, 'medium' ],
-    [ 300, 'medium' ],
+    [ 61,  'small' ],
+    [ 299, 'small' ],
+    [ 300, 'small' ],
     [ 301, 'small' ],
     [ 900, 'small' ],
     [ 901, 'base' ],

@@ -17,8 +17,8 @@ require D2TG::Transcribe;
 
 for my $case (
     [ 0,    'medium' ],
-    [ 299,  'medium' ],
-    [ 300,  'medium' ],
+    [ 299,  'small' ],
+    [ 300,  'small' ],
     [ 301,  'small' ],
     [ 899,  'small' ],
     [ 900,  'small' ],
@@ -162,6 +162,14 @@ for my $case (
     # guarantee comes from automatically retrying at a faster model tier
     # when the current one times out, not just guessing a duration
     # threshold.
+    #
+    # TGT-359: medium is no longer auto-selected for any genuinely-parsed
+    # positive duration (a live investigation found it both slower and far
+    # more memory-fragile than 'small' across the whole 60-900s range it
+    # used to share with medium below 300s) - it now only surfaces via the
+    # failed/unparsed-duration fallback (duration_fn returning 0/undef).
+    # This test still exercises the medium->small retry-on-timeout step,
+    # just starting from that fallback path instead of a genuine 200s clip.
     my @whisper_calls;
 
     my $tempdir = File::Temp::tempdir( CLEANUP => 1 );
@@ -189,7 +197,7 @@ for my $case (
                 close $out_fh;
                 return 0;
             },
-            duration_fn => sub { return 200; },    # would normally pick 'medium'
+            duration_fn => sub { return 0; },    # failed/unparsed probe still picks 'medium'
         );
     };
 
@@ -204,7 +212,10 @@ for my $case (
 
 {
     # Every tier times out, including base - transcribe() finally dies
-    # with one clear error instead of retrying forever.
+    # with one clear error instead of retrying forever. Starts from the
+    # failed/unparsed-duration fallback (TGT-359: 'medium' is no longer
+    # reachable via a genuinely-parsed positive duration) so all 3 tiers
+    # in @MODEL_TIERS are still exercised.
     my @whisper_calls;
     my $runner = sub {
         push @whisper_calls, [@_];
@@ -220,7 +231,7 @@ for my $case (
         D2TG::Transcribe::transcribe(
             $audio_path,
             runner      => $runner,
-            duration_fn => sub { return 200; },
+            duration_fn => sub { return 0; },
         );
     };
 

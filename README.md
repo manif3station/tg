@@ -1,5 +1,23 @@
 # tg
 
+**Status: early implementation (v2.73).** BUGFIX+IMPROVEMENT (TGT-359, live
+user-requested bug hunt: real gTTS voice notes at 1/4/8/15 minutes run
+end-to-end through the production transcription pipeline, comparing
+transcripts against their known source text): `medium`, the Whisper tier
+`select_model` used to auto-select for any genuinely-parsed duration in
+61-300s, was OOM-killed on 5/5 attempts transcribing a real 4-minute clip
+and never once completed, while `small` (used for 301-900s) ran reliably
+at 0.91x-1.24x real time with ~900MB resident vs. `medium`'s measured
+~4.7GB. `medium` is no longer auto-selected for any parsed positive
+duration - the whole 61-900s range now routes to `small`; it remains
+reachable only via the existing failed/unparsed-duration fallback or an
+explicit model. Separately, `_run()` used to return a false-success exit
+code for a subprocess killed by signal (e.g. an OOM kill) instead of
+detecting it - `transcribe()`'s automatic retry-at-next-tier now also
+triggers on a signal-killed subprocess, not just a timeout, for an
+*automatically-selected* model; an explicitly-passed model is still
+never auto-retried, matching the existing timeout behavior.
+
 **Status: early implementation (v2.72).** BUGFIX (TGT-357, found via a
 scheduled JOB-003 hourly bug hunt, live-reproduced): `D2TG::Store`'s
 `DBI->connect` had no `sqlite_unicode` flag - a message summary

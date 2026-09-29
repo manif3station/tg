@@ -19,14 +19,18 @@ our @MODEL_TIERS = qw(medium small base);
 # TGT-140: $TIMEOUT alone stayed flat even after select_model started
 # tiering the model by duration - a clip picked as the fastest tier
 # could still legitimately run past 300s at real per-host throughput
-# (measured: medium ran at ~5.6x real time, so a 102.48s clip took
-# 571s). _scaled_timeout turns the same duration signal select_model
-# already computes into a per-attempt budget instead: proportional to
-# duration with a safety multiplier well above the worst measured
-# throughput, floored at $TIMEOUT itself (a Codex review finding: a
-# hard-coded floor would silently ignore a caller-configured $TIMEOUT,
-# so the floor is always whatever $TIMEOUT currently is, not a separate
-# constant) and capped at a sane ceiling (never unbounded).
+# (measured at the time: medium ran at ~5.6x real time, so a 102.48s
+# clip took 571s - TGT-359's later live measurement on the same class of
+# host found medium closer to ~7.84x realtime and ~4.7GB resident,
+# meaningfully worse than this original estimate, which is part of why
+# TGT-359 retired medium from automatic selection entirely). _scaled_timeout
+# turns the same duration signal select_model already computes into a
+# per-attempt budget instead: proportional to duration with a safety
+# multiplier well above the worst measured throughput, floored at
+# $TIMEOUT itself (a Codex review finding: a hard-coded floor would
+# silently ignore a caller-configured $TIMEOUT, so the floor is always
+# whatever $TIMEOUT currently is, not a separate constant) and capped at
+# a sane ceiling (never unbounded).
 our $TIMEOUT_MULTIPLIER = 8;
 our $TIMEOUT_CEILING    = 3600;
 
@@ -87,8 +91,20 @@ sub select_model {
     my $parsed = _looks_like_duration($duration);
     $duration = $parsed ? $duration : 0;
 
+    # TGT-359 (live bug-hunt investigation, real gTTS+whisper clips at
+    # 1/4/8/15 minutes): 'medium' measured ~7.84x realtime and ~4.7GB
+    # resident - slower AND far more memory-hungry than 'small'
+    # (0.91x-1.24x realtime, ~900MB resident, measured on the same host
+    # over the same 8/15-minute clips), and was OOM-killed 5/5 attempts
+    # transcribing a real 4-minute clip, never once completing. 'medium'
+    # is no longer auto-selected for any genuinely-parsed positive
+    # duration - the whole 61-900s range it used to split with 'small'
+    # now routes entirely to 'small'. It remains reachable only via the
+    # failed/unparsed-duration fallback below ($duration <= 0, the same
+    # "unknown duration" sentinel described above) or an explicit
+    # caller-passed model - never via a confirmed-positive duration.
     return 'base'   if $parsed && $duration > 0 && $duration <= 60;
-    return 'medium' if $duration <= 300;
+    return 'medium' if $duration <= 0;
     return 'small'  if $duration <= 900;
     return 'base';
 }
@@ -225,8 +241,12 @@ sub transcribe {
             # explicitly-passed one, TGT-100 follow-up: per-host
             # throughput varies too much for a duration guess alone to
             # guarantee correctness) automatically retries at the next
-            # faster tier instead of failing outright.
-            if ( !$explicit_model && $error =~ /timed out/ ) {
+            # faster tier instead of failing outright. TGT-359: a
+            # subprocess killed by signal (e.g. an OOM kill) gets the
+            # same treatment - it's a different failure signature from a
+            # timeout, but the right response is identical: step down
+            # to a lighter tier rather than dying.
+            if ( !$explicit_model && $error =~ /timed out|killed by signal/ ) {
                 my $next = _next_tier($model);
                 if ( defined $next ) {
                     $model = $next;
@@ -261,6 +281,22 @@ sub _run {
     while (1) {
         my $reaped = waitpid( $pid, WNOHANG );
         if ( $reaped == $pid ) {
+            # TGT-359: "$? >> 8" only carries a meaningful value for a
+            # process that exited normally - a process terminated by an
+            # uncaught signal (e.g. the host OOM killer sending SIGKILL
+            # directly to whisper, entirely outside this function's own
+            # TERM/KILL escalation below) leaves those bits 0, which
+            # this code used to return as-is: a killed subprocess looked
+            # exactly like a *successful* one to transcribe(), which
+            # then failed later with a far less clear "did not produce
+            # the expected output" error instead of retrying at a
+            # lighter tier the way a genuine timeout already does.
+            # Detected live: 'medium' tier OOM-killed 5/5 attempts on a
+            # real 4-minute clip and never once completed.
+            my $signal = $? & 127;
+            if ($signal) {
+                die "D2TG::Transcribe::_run: command was killed by signal $signal (possibly OOM)\n";
+            }
             return $? >> 8;
         }
 

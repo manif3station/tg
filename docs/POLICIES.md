@@ -8479,3 +8479,74 @@ for this upgrade; no other entry requires a board-side change.
 Perlsec: no tg-skill code touched at all - a board-policy declaration
 and required-action bookkeeping on the Tira board itself, not this
 project's own Perl code.
+
+## TGT-359: 'medium' Whisper tier retired from auto-selection; transcribe() retries on an OOM-killed subprocess too
+
+A live bug-hunt investigation (user request, verbatim: "Bug hunt for
+voice transcription. From 1 minute voice to 15 minutes and see if the
+transcription run correctly... Check for accuracy and speed.
+Optimization is the main goal") generated real gTTS voice notes at
+1/4/8/15 minutes and ran each through the actual production
+`D2TG::Transcribe::transcribe` pipeline (real `whisper`/`gtts-cli`, no
+mocks), comparing each transcript against its known source script via
+word-error-rate.
+
+Findings: WER stayed flat and low (0.99%-1.36%) across every duration
+that completed - no pipeline-level accuracy bug. But the `medium` tier
+(TGT-251's own `select_model`, auto-selected for any genuinely-parsed
+duration in 60-300s) was OOM-killed on 5/5 independent attempts
+transcribing a real 4-minute (250.7s) clip on this host, never once
+completing, while `small` (used for the 300-900s range) ran reliably at
+0.91x-1.24x real time. A calibration clip separately measured `medium`
+at ~7.84x real time and ~4.7GB resident - both worse than TGT-251/
+TGT-100's own ~5.6x estimate and far above `small`'s/`base`'s ~900MB.
+
+Root cause of the OOM-kill going unretried, found while implementing the
+fix: `_run()`'s waitpid-reap branch returned `$? >> 8` unconditionally -
+which is 0 (not the killed process's real signal) for a subprocess
+terminated by an uncaught signal, since the exit-status bits are only
+meaningful after a normal exit. A SIGKILLed whisper therefore looked
+like a *successful* run to `transcribe()`, which then failed later with
+a far less clear "whisper did not produce the expected output" error
+instead of retrying at a lighter tier the way a genuine timeout already
+did.
+
+Fix (two parts, `lib/D2TG/Transcribe.pm`):
+1. `select_model()`: `medium` is no longer returned for any
+   genuinely-parsed positive duration - the whole 61-900s range it used
+   to split with `small` (61-300 medium, 301-900 small) now routes
+   entirely to `small`. `medium` remains reachable only via the existing
+   failed/unparsed-duration fallback (`$duration <= 0` - the same
+   "unknown duration" sentinel TGT-251 already carved out) or an
+   explicit caller-passed model.
+2. `_run()` now checks `$? & 127` after reaping the child; a nonzero
+   signal dies with a clear `"command was killed by signal N (possibly
+   OOM)"` message instead of silently returning a false-success exit
+   code. `transcribe()`'s retry-on-failure condition was extended from
+   `/timed out/` to `/timed out|killed by signal/`, so an
+   automatically-selected model that gets OOM-killed now steps down to
+   the next tier in `@MODEL_TIERS`, exactly like a timeout already does
+   - an explicitly-passed model is still never auto-retried, matching
+   the existing timeout invariant.
+
+Test strategy: updated `t/74-transcribe-dynamic-model.t` and
+`t/251-transcribe-fast-tier-short-clips.t`'s tier-boundary expectations
+(61/299/300 now `small`, not `medium`; the unparsed/failed-probe
+invariant - `select_model(0)`/`(undef)`/`('garbage')` all still `medium`
+- deliberately unchanged, matching TGT-320's own regression coverage).
+New `t/359-transcribe-oom-signal-retry.t`: `_run()` dies with a
+`killed by signal 9` message for a subprocess that self-SIGKILLs (a real
+`perl -e 'kill 9, $$'` child, not a mock); `transcribe()` retries
+small->base on a signal-killed auto-selected model and returns the
+successful retry's transcript; an explicit model still dies on a signal
+kill without retrying. All 3 files confirmed genuinely red against
+pre-fix code, then green after the fix (45 assertions total). Full
+suite re-run clean (262 files, 3112 tests, no regressions). Branch/
+condition coverage on the new/changed code is 100%; the file's two
+pre-existing sub-100% branch/cond spots (`$explicit_model ||
+select_model(...)` and `$args{runner} || \&_run`) are untouched by this
+diff (confirmed via `git diff`), not new debt.
+
+Perlsec: subprocess exit-status handling only - no new external input,
+no shell interpolation, `cmd => [@cmd]` is still passed to `exec(LIST)`
+via `D2TG::Subprocess::fork_in_own_process_group` exactly as before.
